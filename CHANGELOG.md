@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.0](https://github.com/alexdjachenko/phpResticAdmin/compare/v0.0.2...v0.1.0) (2026-08-07)
+
+
+### Features
+
+* **phase2:** authentication, repository list, and connectivity check ([f675357](https://github.com/alexdjachenko/phpResticAdmin/commit/f6753573a3aeb367835797ccf5d19154c91441c0))
+
+
+### Bug Fixes
+
+* **tests:** use var_export instead of addslashes for password hash in AuthenticatorTest ([92d7c1c](https://github.com/alexdjachenko/phpResticAdmin/commit/92d7c1c012b0cfbe95949a27f5adf03ad68f41eb))
+
 ## [0.0.2](https://github.com/alexdjachenko/phpResticAdmin/compare/v0.0.1...v0.0.2) (2026-08-07)
 
 
