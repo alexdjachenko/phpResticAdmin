@@ -3,7 +3,7 @@
   "release-type": "simple",
   "bump-minor-pre-major": true,
   "include-v-in-tag": true,
-  "extra-files": ["phpresticadmin/version.txt"],
+  "extra-files": ["version.txt"],
   "packages": {
     ".": {}
   }

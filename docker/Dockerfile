@@ -1,13 +1,21 @@
 FROM php:8.1-apache
 
-RUN apt-get update && apt-get install -y --no-install-recommends restic && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    restic \
+    git \
+    unzip \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+
+COPY composer.json /var/www/
+
+RUN cd /var/www && composer install --no-dev --no-progress
 
 COPY htdocs/ /var/www/html/
 COPY src/ /var/www/src/
-COPY vendor/ /var/www/vendor/
 COPY templates/ /var/www/templates/
 COPY data/ /var/www/data/
-COPY composer.json /var/www/
 
 RUN a2enmod rewrite
 COPY docker/apache-config.conf /etc/apache2/sites-available/000-default.conf
