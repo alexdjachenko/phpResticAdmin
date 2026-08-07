@@ -1,0 +1,141 @@
+<?php
+
+namespace App\Tests\Unit\Auth;
+
+use App\Auth\Authenticator;
+use App\Core\Session;
+use App\Storage\ConfigStorage;
+use PHPUnit\Framework\TestCase;
+
+class AuthenticatorTest extends TestCase
+{
+    private string $tmpDir;
+    private Session $session;
+    private ConfigStorage $configStorage;
+
+    protected function setUp(): void
+    {
+        $this->tmpDir = sys_get_temp_dir() . '/phpresticadmin_auth_test_' . uniqid();
+        mkdir($this->tmpDir, 0777, true);
+
+        $passwordHash = password_hash('secret123', PASSWORD_DEFAULT);
+        file_put_contents(
+            $this->tmpDir . '/users.php',
+            '<?php return ["admin" => ["password" => "' . addslashes($passwordHash) . '"]];'
+        );
+        file_put_contents(
+            $this->tmpDir . '/settings.php',
+            '<?php return ["guest_user" => null, "tmp_dir" => "/tmp", "log_dir" => "/var/log", "timezone" => "UTC"];'
+        );
+
+        $this->session = new Session();
+        // Start session in CLI mode for testing
+        if (session_status() === PHP_SESSION_NONE) {
+            @session_start();
+        }
+        $this->session->set('_test', true);
+
+        $this->configStorage = new ConfigStorage($this->tmpDir);
+    }
+
+    protected function tearDown(): void
+    {
+        $this->session->destroy();
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_destroy();
+        }
+        $this->removeDir($this->tmpDir);
+    }
+
+    public function testResolveReturnsNullWhenNoAuthAndNoGuest(): void
+    {
+        $auth = new Authenticator($this->configStorage, $this->session);
+        $this->assertNull($auth->resolve());
+    }
+
+    public function testResolveReturnsGuestUserWhenConfigured(): void
+    {
+        file_put_contents(
+            $this->tmpDir . '/settings.php',
+            '<?php return ["guest_user" => "guest", "tmp_dir" => "/tmp", "log_dir" => "/var/log", "timezone" => "UTC"];'
+        );
+        $configStorage = new ConfigStorage($this->tmpDir);
+        $auth = new Authenticator($configStorage, $this->session);
+
+        $this->assertSame('guest', $auth->resolve());
+    }
+
+    public function testLoginSucceedsWithCorrectPassword(): void
+    {
+        $auth = new Authenticator($this->configStorage, $this->session);
+
+        $result = $auth->login('admin', 'secret123');
+        $this->assertTrue($result);
+        $this->assertTrue($auth->isLoggedIn());
+        $this->assertSame('admin', $auth->user());
+    }
+
+    public function testLoginFailsWithWrongPassword(): void
+    {
+        $auth = new Authenticator($this->configStorage, $this->session);
+
+        $result = $auth->login('admin', 'wrongpass');
+        $this->assertFalse($result);
+        $this->assertFalse($auth->isLoggedIn());
+    }
+
+    public function testLoginFailsWithUnknownUser(): void
+    {
+        $auth = new Authenticator($this->configStorage, $this->session);
+
+        $result = $auth->login('unknown', 'secret123');
+        $this->assertFalse($result);
+    }
+
+    public function testLogoutClearsSession(): void
+    {
+        $auth = new Authenticator($this->configStorage, $this->session);
+        $auth->login('admin', 'secret123');
+
+        $this->assertTrue($auth->isLoggedIn());
+
+        $auth->logout();
+        $this->assertFalse($auth->isLoggedIn());
+    }
+
+    public function testIsGuestReturnsTrueForGuestUser(): void
+    {
+        file_put_contents(
+            $this->tmpDir . '/settings.php',
+            '<?php return ["guest_user" => "guest", "tmp_dir" => "/tmp", "log_dir" => "/var/log", "timezone" => "UTC"];'
+        );
+        $configStorage = new ConfigStorage($this->tmpDir);
+        $auth = new Authenticator($configStorage, $this->session);
+
+        $this->assertTrue($auth->isGuest());
+    }
+
+    public function testIsGuestReturnsFalseForLoggedInUser(): void
+    {
+        $auth = new Authenticator($this->configStorage, $this->session);
+        $auth->login('admin', 'secret123');
+
+        $this->assertFalse($auth->isGuest());
+    }
+
+    private function removeDir(string $dir): void
+    {
+        if (!is_dir($dir)) {
+            return;
+        }
+        $items = scandir($dir);
+        foreach ($items as $item) {
+            if ($item === '.' || $item === '..') {
+                continue;
+            }
+            $path = $dir . '/' . $item;
+            is_dir($path) ? $this->removeDir($path) : unlink($path);
+        }
+        rmdir($dir);
+    }
+}
