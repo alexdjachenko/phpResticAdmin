@@ -21,7 +21,7 @@ class AuthenticatorTest extends TestCase
         $passwordHash = password_hash('secret123', PASSWORD_DEFAULT);
         file_put_contents(
             $this->tmpDir . '/users.php',
-            '<?php return ["admin" => ["password" => "' . addslashes($passwordHash) . '"]];'
+            '<?php return ["admin" => ["password" => ' . var_export($passwordHash, true) . ']];'
         );
         file_put_contents(
             $this->tmpDir . '/settings.php',
