@@ -1,14 +1,13 @@
 version: '3.8'
 services:
   app:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile
+    image: ghcr.io/alexdjachenko/phpresticadmin:latest
     ports:
       - "8080:80"
     volumes:
-      - ../htdocs:/var/www/html
-      - ../src:/var/www/src
-      - ../vendor:/var/www/vendor
-      - ../templates:/var/www/templates
-      - ../data:/var/www/data
+      - phpresticadmin_data:/var/www/data
+    deploy:
+      replicas: 1
+
+volumes:
+  phpresticadmin_data:
