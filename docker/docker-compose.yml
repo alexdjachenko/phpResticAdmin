@@ -1,0 +1,14 @@
+version: '3.8'
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "8080:80"
+    volumes:
+      - ../htdocs:/var/www/html
+      - ../src:/var/www/src
+      - ../vendor:/var/www/vendor
+      - ../templates:/var/www/templates
+      - ../data:/var/www/data

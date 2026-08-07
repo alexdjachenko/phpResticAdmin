@@ -1,0 +1,70 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+      - name: Install dependencies
+        run: cd phpresticadmin && composer install --no-progress
+      - name: PHP Lint
+        run: find phpresticadmin -name '*.php' -print0 | xargs -0 -n1 php -l
+
+  static-analysis:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+      - name: Install dependencies
+        run: cd phpresticadmin && composer install --no-progress
+      - name: PHPStan
+        run: phpresticadmin/vendor/bin/phpstan analyse -c phpresticadmin/phpstan.neon --no-progress
+
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+      - name: Install dependencies
+        run: cd phpresticadmin && composer install --no-progress
+      - name: PHPUnit Unit Tests
+        run: phpresticadmin/vendor/bin/phpunit -c phpresticadmin/phpunit.xml --testsuite unit --colors=always
+
+  integration-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+      - name: Install dependencies
+        run: cd phpresticadmin && composer install --no-progress
+      - name: Build Docker image
+        run: docker build -t phpresticadmin:test -f phpresticadmin/docker/Dockerfile phpresticadmin/
+      - name: Start container
+        run: docker run -d -p 8080:80 --name phpresticadmin-test phpresticadmin:test
+      - name: Wait for web server
+        run: |
+          sleep 3
+          for i in 1 2 3 4 5; do
+            curl -s http://localhost:8080 && break
+            sleep 2
+          done
+      - name: PHPUnit Integration Tests
+        run: phpresticadmin/vendor/bin/phpunit -c phpresticadmin/phpunit.xml --testsuite integration --colors=always
+      - name: Cleanup
+        if: always()
+        run: docker stop phpresticadmin-test && docker rm phpresticadmin-test

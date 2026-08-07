@@ -6,3 +6,6 @@ composer.phar
 # composer.lock
 phpresticadmin.theia-workspace
 .prompts
+/tmp/
+/data/logs/
+/data/data/repositories*.yaml
