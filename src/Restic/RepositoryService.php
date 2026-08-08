@@ -62,4 +62,25 @@ class RepositoryService
             'error' => $result['stderr'],
         ];
     }
+
+    /**
+     * Запускает restic backup со стримингом вывода в браузер.
+     *
+     * @param array<string, mixed> $repository
+     * @param array<int, string> $backupPaths
+     */
+    public function backup(array $repository, array $backupPaths): void
+    {
+        $command = ['restic', 'backup', '--repo', $repository['path'], ...$backupPaths];
+
+        $env = $repository['env'] ?? [];
+
+        if (!empty($repository['password'])) {
+            $env['RESTIC_PASSWORD'] = $repository['password'];
+        } else {
+            $command[] = '--insecure-no-password';
+        }
+
+        $this->runner->runStream($command, $env);
     }
+}

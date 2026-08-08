@@ -137,6 +137,92 @@ class RepositoryStorage
     }
 
     /**
+     * Обновляет репозиторий по ID в указанной категории.
+     * Сохраняет неизменяемые поля: id, added_at, category.
+     *
+     * @param array<string, mixed> $newData
+     */
+    public function update(string $category, string $id, array $newData, ?string $username): void
+    {
+        switch ($category) {
+            case 'public':
+                $repos = $this->loadYaml($this->dataFile);
+                $updated = false;
+                foreach ($repos as &$repo) {
+                    if (($repo['id'] ?? '') === $id) {
+                        $this->applyUpdate($repo, $newData);
+                        $updated = true;
+                        break;
+                    }
+                }
+                unset($repo);
+                if (!$updated) {
+                    throw new \RuntimeException('Repository not found: ' . $id);
+                }
+                $this->writeYaml($this->dataFile, $repos);
+                break;
+
+            case 'private':
+                if ($username === null) {
+                    throw new \RuntimeException('Username required for private repositories');
+                }
+                $file = $this->dataDir . '/repositories_' . $username . '.yaml';
+                $repos = $this->loadYaml($file);
+                $updated = false;
+                foreach ($repos as &$repo) {
+                    if (($repo['id'] ?? '') === $id) {
+                        $this->applyUpdate($repo, $newData);
+                        $updated = true;
+                        break;
+                    }
+                }
+                unset($repo);
+                if (!$updated) {
+                    throw new \RuntimeException('Repository not found: ' . $id);
+                }
+                $this->writeYaml($file, $repos);
+                break;
+
+            case 'session':
+                if (!isset($_SESSION['session_repos'])) {
+                    throw new \RuntimeException('Repository not found: ' . $id);
+                }
+                $updated = false;
+                foreach ($_SESSION['session_repos'] as &$repo) {
+                    if (($repo['id'] ?? '') === $id) {
+                        $this->applyUpdate($repo, $newData);
+                        $updated = true;
+                        break;
+                    }
+                }
+                unset($repo);
+                if (!$updated) {
+                    throw new \RuntimeException('Repository not found: ' . $id);
+                }
+                break;
+
+            default:
+                throw new \InvalidArgumentException('Unknown category: ' . $category);
+        }
+    }
+
+    /**
+     * Применяет новые данные к репозиторию, сохраняя неизменяемые поля.
+     *
+     * @param array<string, mixed> $repo
+     * @param array<string, mixed> $newData
+     */
+    private function applyUpdate(array &$repo, array $newData): void
+    {
+        $editable = ['name', 'type', 'path', 'password', 'backup_paths', 'env'];
+        foreach ($editable as $field) {
+            if (array_key_exists($field, $newData)) {
+                $repo[$field] = $newData[$field];
+            }
+        }
+    }
+
+    /**
      * Переносит репозиторий из одной категории в другую.
      */
     public function move(string $id, string $fromCategory, string $toCategory, ?string $username): void

@@ -57,6 +57,12 @@
         </div>
     </div>
 
+    <div class="form-group">
+        <label for="backup-paths"><?= htmlspecialchars(__('repo.backup_paths'), ENT_QUOTES, 'UTF-8') ?></label>
+        <textarea id="backup-paths" name="backup_paths" rows="4" placeholder="/home&#10;/etc"></textarea>
+        <span class="form-help"><?= htmlspecialchars(__('repo.backup_paths_help'), ENT_QUOTES, 'UTF-8') ?></span>
+    </div>
+
     <?php if (!empty($canInit)): ?>
     <div class="form-group">
         <label class="checkbox-label">

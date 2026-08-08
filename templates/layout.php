@@ -11,10 +11,31 @@
         <div class="header-left">
             <h1><a href="/"><?= htmlspecialchars(__('app.title'), ENT_QUOTES, 'UTF-8') ?></a></h1>
             <span class="nav-links">
+                <a href="/"><?= htmlspecialchars(__('nav.dashboard'), ENT_QUOTES, 'UTF-8') ?></a>
                 <a href="/repositories"><?= htmlspecialchars(__('nav.repositories'), ENT_QUOTES, 'UTF-8') ?></a>
+                <?php if (!empty($currentRepoId ?? null)): ?>
+                <a href="/snapshots"><?= htmlspecialchars(__('nav.snapshots'), ENT_QUOTES, 'UTF-8') ?></a>
+                <?php endif ?>
             </span>
         </div>
         <nav>
+            <?php if (!empty($repositories ?? [])): ?>
+            <form method="post" action="/repositories/select" class="repo-selector">
+                <select name="repo_id" onchange="this.form.submit()">
+                    <option value="">-- repos --</option>
+                    <?php foreach ($repositories as $repo): ?>
+                        <?php
+                        $cat = $repo['category'] ?? 'public';
+                        $selected = (($repo['id'] ?? '') === ($currentRepoId ?? '')) ? 'selected' : '';
+                        ?>
+                        <option value="<?= htmlspecialchars($repo['id'] ?? '', ENT_QUOTES, 'UTF-8') ?>" <?= $selected ?>>
+                            <?= htmlspecialchars($repo['name'] ?? '', ENT_QUOTES, 'UTF-8') ?>
+                        </option>
+                    <?php endforeach ?>
+                </select>
+            </form>
+            <?php endif ?>
+
             <span class="lang-switcher">
                 <?php foreach (\App\Helpers\Lang::available() as $langCode): ?>
                     <form method="post" action="/language" style="display:inline">
