@@ -64,9 +64,17 @@ class BrowseController
 
         $entries = [];
         if ($result['exitCode'] === 0) {
-            $decoded = json_decode($result['stdout'], true);
-            if (is_array($decoded)) {
-                $entries = $decoded;
+            // restic ls --json выводит NDJSON: по одному JSON-объекту на строку
+            $lines = explode("\n", $result['stdout']);
+            foreach ($lines as $line) {
+                $line = trim($line);
+                if ($line === '') {
+                    continue;
+                }
+                $decoded = json_decode($line, true);
+                if (is_array($decoded)) {
+                    $entries[] = $decoded;
+                }
             }
         } else {
             App::log('restic ls failed for snapshot ' . $snapId . ' path ' . $path . ': ' . $result['stderr'], 0);
@@ -80,6 +88,10 @@ class BrowseController
         $dirs = [];
         $files = [];
         foreach ($entries as $entry) {
+            // null-элементы в выводе restic ls пропускаем
+            if ($entry === null || empty($entry['name'])) {
+                continue;
+            }
             if (($entry['type'] ?? '') === 'dir') {
                 $dirs[] = $entry;
             } else {
