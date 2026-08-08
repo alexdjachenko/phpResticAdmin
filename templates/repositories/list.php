@@ -85,6 +85,9 @@
 
     document.getElementById('btn-cache-invalidate').addEventListener('click', function() {
         var btnEl = this;
+        var originalText = btnEl.textContent;
+        var originalClass = btnEl.className;
+
         btnEl.textContent = 'Clearing...';
         btnEl.disabled = true;
 
@@ -94,16 +97,28 @@
         sendPost('/cache/invalidate', formData.toString(), null)
         .then(function(data) {
             if (data._csrf_token) csrfCache = data._csrf_token;
-            btnEl.textContent = data.ok
-                ? 'Cleared ' + data.count + ' scripts'
-                : data.error || 'Error';
-            btnEl.className = data.ok ? 'btn-cache btn-cache-ok' : 'btn-cache btn-cache-error';
+
+            if (data.ok) {
+                btnEl.textContent = 'OK, cleared ' + data.count + ' scripts';
+                btnEl.className = 'btn-cache btn-cache-ok';
+            } else {
+                btnEl.textContent = data.error || 'Error';
+                btnEl.className = 'btn-cache btn-cache-error';
+            }
         })
         .catch(function() {
             btnEl.textContent = 'Network error';
             btnEl.className = 'btn-cache btn-cache-error';
         })
-        .finally(function() { btnEl.disabled = false; });
+        .finally(function() {
+            btnEl.disabled = false;
+
+            // Reset to original after 3 seconds
+            setTimeout(function() {
+                btnEl.textContent = originalText;
+                btnEl.className = originalClass;
+            }, 3000);
+        });
     });
     <?php endif ?>
     </script>
