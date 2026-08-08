@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.3.0](https://github.com/alexdjachenko/phpResticAdmin/compare/v0.2.0...v0.3.0) (2026-08-08)
+
+
+### Features
+
+* **stage4:** snapshots, browse, repository detail page, backup strea… ([0bd1a8f](https://github.com/alexdjachenko/phpResticAdmin/commit/0bd1a8f8542c87b5ab95f1474eebc5bfbbde4ebb))
+* **stage4:** snapshots, browse, repository detail page, backup streaming ([074eb68](https://github.com/alexdjachenko/phpResticAdmin/commit/074eb68c3fef60b3ba6c406df5abcb9113dd8967))
+
+
+### Bug Fixes
+
+* **stage4:** create restic cache dir at build time with www-data ownership ([4ace885](https://github.com/alexdjachenko/phpResticAdmin/commit/4ace885c4e84f8b0428be52a00a3fd12537b72bf))
+* **stage4:** dashboard session leak, backup black page, snapshot 0 B, broken nav ([6687c72](https://github.com/alexdjachenko/phpResticAdmin/commit/6687c72d95b9c859577fd1500312f168dc58b994))
+* **stage4:** filter self-referencing directory node from restic ls output ([19d57fe](https://github.com/alexdjachenko/phpResticAdmin/commit/19d57fe0fcc3cc9ca0023dacff8d8a7d43fc9493))
+* **stage4:** fix --insecure-no-password placement in stats, filter .. in browse ([34fd6f9](https://github.com/alexdjachenko/phpResticAdmin/commit/34fd6f9b289375ae68a93cbdbc6c40a54727ce03))
+* **stage4:** fix Format::bytes trailing zeros, add PR image tags, update AGENTS.md ([5149a6e](https://github.com/alexdjachenko/phpResticAdmin/commit/5149a6e8e5f20495d13e827be9b3db442495aa5a))
+* **stage4:** install restic 0.19.1 binary instead of apt 0.14 ([c3a4b9f](https://github.com/alexdjachenko/phpResticAdmin/commit/c3a4b9fe1fdc321a488dc31c1ec435b3a7026ac1))
+* **stage4:** move tmp_dir to system /tmp, set RESTIC_CACHE_DIR for restic ([fafa7b8](https://github.com/alexdjachenko/phpResticAdmin/commit/fafa7b8e5c7c32eed5a470ab56cec5a56796be7d))
+* **stage4:** NDJSON parsing for restic ls, stats-based snapshot sizes, E2E test ([9bbbcbf](https://github.com/alexdjachenko/phpResticAdmin/commit/9bbbcbf71e51547f0537fd03492f77d917066932))
+* **stage4:** parse restic ls NDJSON output, enrich snapshots with stats for size ([a9c787e](https://github.com/alexdjachenko/phpResticAdmin/commit/a9c787e22b4670539fca2796408287708147d658))
+* **stage4:** restore repo list, fix browse empty, add back snapshot size, filter cache noise ([40f5fd3](https://github.com/alexdjachenko/phpResticAdmin/commit/40f5fd3a1be0e4f317be5e7640c04b9689f93a12))
+* **stage4:** special-case bytes range in Format::bytes to avoid trailing .00 ([d8e27b9](https://github.com/alexdjachenko/phpResticAdmin/commit/d8e27b9e7bfe1c20a3c438f541a99e11c9825720))
+* **stage4:** use number_format instead of round in Format::bytes ([6b76bf7](https://github.com/alexdjachenko/phpResticAdmin/commit/6b76bf7d986f705a1f264b5e83fc85d987f48b45))
+
 ## [0.2.0](https://github.com/alexdjachenko/phpResticAdmin/compare/v0.1.1...v0.2.0) (2026-08-08)
 
 
