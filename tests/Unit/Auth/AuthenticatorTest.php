@@ -25,19 +25,23 @@ class AuthenticatorTest extends TestCase
                 "admin" => [
                     "password" => ' . var_export($passwordHash, true) . ',
                     "api_tokens" => [],
+                    "can_init" => true,
+                    "can_delete" => true,
                     "repos" => [
-                        "public" => ["use" => true, "edit" => true, "init" => true, "delete" => true],
-                        "private" => ["use" => true, "edit" => true, "init" => true, "delete" => true],
-                        "session" => ["use" => true, "edit" => true, "init" => true, "delete" => true],
+                        "public" => ["use" => true, "edit" => true],
+                        "private" => ["use" => true, "edit" => true],
+                        "session" => ["use" => true, "edit" => true],
                     ],
                 ],
                 "guest" => [
                     "password" => null,
                     "api_tokens" => [],
+                    "can_init" => false,
+                    "can_delete" => false,
                     "repos" => [
-                        "public" => ["use" => true, "edit" => false, "init" => false, "delete" => false],
-                        "private" => ["use" => false, "edit" => false, "init" => false, "delete" => false],
-                        "session" => ["use" => false, "edit" => false, "init" => false, "delete" => false],
+                        "public" => ["use" => true, "edit" => false],
+                        "private" => ["use" => false, "edit" => false],
+                        "session" => ["use" => false, "edit" => false],
                     ],
                 ],
             ];'
@@ -48,7 +52,6 @@ class AuthenticatorTest extends TestCase
         );
 
         $this->session = new Session();
-        // Start session in CLI mode for testing
         if (session_status() === PHP_SESSION_NONE) {
             @session_start();
         }
@@ -147,7 +150,6 @@ class AuthenticatorTest extends TestCase
         $auth = new Authenticator($this->configStorage, $this->session);
         $auth->login('admin', 'secret123');
 
-        // admin has full rights
         $this->assertTrue($auth->canUse('public'));
         $this->assertTrue($auth->canUse('private'));
         $this->assertTrue($auth->canUse('session'));
@@ -173,7 +175,6 @@ class AuthenticatorTest extends TestCase
         $auth = new Authenticator($this->configStorage, $this->session);
         $auth->login('admin', 'secret123');
 
-        // admin has edit on all categories
         $this->assertTrue($auth->canMove('public', 'private'));
         $this->assertTrue($auth->canMove('private', 'session'));
     }
@@ -193,7 +194,6 @@ class AuthenticatorTest extends TestCase
 
     public function testFallbackFullRightsForLegacyUser(): void
     {
-        // Create a user without repos section
         $passwordHash = password_hash('legacy', PASSWORD_DEFAULT);
         file_put_contents(
             $this->tmpDir . '/users.php',
@@ -206,16 +206,17 @@ class AuthenticatorTest extends TestCase
         $auth = new Authenticator($configStorage, $this->session);
         $auth->login('legacy', 'legacy');
 
-        // Legacy user gets full rights
         $this->assertTrue($auth->canUse('public'));
         $this->assertTrue($auth->canEdit('public'));
         $this->assertTrue($auth->canUse('private'));
         $this->assertTrue($auth->canEdit('private'));
+        // Legacy user gets init/delete because isLoggedIn() is true and no explicit can_init/can_delete
+        $this->assertTrue($auth->canInit());
+        $this->assertTrue($auth->canDelete());
     }
 
     public function testGuestDefaultRights(): void
     {
-        // Create users.php without repos section for guest
         file_put_contents(
             $this->tmpDir . '/users.php',
             '<?php return [
@@ -230,11 +231,13 @@ class AuthenticatorTest extends TestCase
         $configStorage = new ConfigStorage($this->tmpDir);
         $auth = new Authenticator($configStorage, $this->session);
 
-        // Guest without repos section gets default guest rights
         $this->assertTrue($auth->canUse('public'));
         $this->assertFalse($auth->canEdit('public'));
         $this->assertFalse($auth->canUse('private'));
         $this->assertFalse($auth->canEdit('private'));
+        // Guest without explicit can_init/can_delete defaults to false (not logged in)
+        $this->assertFalse($auth->canInit());
+        $this->assertFalse($auth->canDelete());
     }
 
     public function testCanInitReturnsTrueForAdmin(): void
@@ -242,9 +245,7 @@ class AuthenticatorTest extends TestCase
         $auth = new Authenticator($this->configStorage, $this->session);
         $auth->login('admin', 'secret123');
 
-        $this->assertTrue($auth->canInit('public'));
-        $this->assertTrue($auth->canInit('private'));
-        $this->assertTrue($auth->canInit('session'));
+        $this->assertTrue($auth->canInit());
     }
 
     public function testGuestCannotInit(): void
@@ -256,7 +257,7 @@ class AuthenticatorTest extends TestCase
         $configStorage = new ConfigStorage($this->tmpDir);
         $auth = new Authenticator($configStorage, $this->session);
 
-        $this->assertFalse($auth->canInit('public'));
+        $this->assertFalse($auth->canInit());
     }
 
     public function testCanDeleteReturnsTrueForAdmin(): void
@@ -264,8 +265,7 @@ class AuthenticatorTest extends TestCase
         $auth = new Authenticator($this->configStorage, $this->session);
         $auth->login('admin', 'secret123');
 
-        $this->assertTrue($auth->canDelete('public'));
-        $this->assertTrue($auth->canDelete('private'));
+        $this->assertTrue($auth->canDelete());
     }
 
     public function testGuestCannotDelete(): void
@@ -277,7 +277,7 @@ class AuthenticatorTest extends TestCase
         $configStorage = new ConfigStorage($this->tmpDir);
         $auth = new Authenticator($configStorage, $this->session);
 
-        $this->assertFalse($auth->canDelete('public'));
+        $this->assertFalse($auth->canDelete());
     }
 
     private function removeDir(string $dir): void

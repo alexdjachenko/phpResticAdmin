@@ -57,7 +57,7 @@
         </div>
     </div>
 
-    <?php if (!empty($canInitIn)): ?>
+    <?php if (!empty($canInit)): ?>
     <div class="form-group">
         <label class="checkbox-label">
             <input type="checkbox" name="init_repo" value="1">

@@ -29,10 +29,11 @@ class RepositoryController
         }
 
         $canAdd = !empty($availableCategories);
+        $canDeleteGlobal = $auth->canDelete();
 
         foreach ($repositories as &$repo) {
             $cat = $repo['category'] ?? 'public';
-            $repo['canDelete'] = $auth->canDelete($cat);
+            $repo['canDelete'] = $canDeleteGlobal;
             $repo['canMove'] = $auth->canEdit($cat);
         }
         unset($repo);
@@ -123,20 +124,12 @@ class RepositoryController
         $flash = App::session()->flash('error');
         $csrfToken = App::security()->csrfToken();
 
-        // Собираем категории, в которых можно init
-        $canInitIn = [];
-        foreach (['public', 'private', 'session'] as $cat) {
-            if ($auth->canInit($cat)) {
-                $canInitIn[] = $cat;
-            }
-        }
-
         echo App::response()->render('repositories/add.php', [
             'isLoggedIn' => $auth->isLoggedIn(),
             'username' => $user,
             'csrfToken' => $csrfToken,
             'categories' => $availableCategories,
-            'canInitIn' => $canInitIn,
+            'canInit' => $auth->canInit(),
             'error' => $flash,
         ]);
     }
@@ -190,7 +183,6 @@ class RepositoryController
             return;
         }
 
-        // Нормализация пути: если путь не абсолютный и не содержит scheme://, добавляем repo_base_dir
         $path = $this->normalizePath($path);
 
         $repository = [
@@ -212,7 +204,7 @@ class RepositoryController
         }
 
         if ($initRepo) {
-            if (!$auth->canInit($category)) {
+            if (!$auth->canInit()) {
                 App::response()->error(403, __('error.forbidden'));
                 return;
             }
@@ -276,7 +268,7 @@ class RepositoryController
 
         $category = $found['category'] ?? 'public';
 
-        if (!$auth->canDelete($category)) {
+        if (!$auth->canDelete()) {
             App::response()->json(['ok' => false, 'error' => __('error.forbidden'), '_csrf_token' => App::security()->csrfToken()], 403);
             return;
         }
@@ -357,12 +349,8 @@ class RepositoryController
         App::response()->json(['ok' => true, 'redirect' => '/repositories', '_csrf_token' => App::security()->csrfToken()]);
     }
 
-    /**
-     * Если путь относительный (не начинается с / и не содержит ://), добавляет repo_base_dir из настроек.
-     */
     private function normalizePath(string $path): string
     {
-        // Абсолютный путь или URL (s3://..., sftp://..., rest://...)
         if (str_starts_with($path, '/') || str_contains($path, '://')) {
             return $path;
         }
