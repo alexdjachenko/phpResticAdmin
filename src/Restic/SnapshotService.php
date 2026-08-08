@@ -17,15 +17,9 @@ class SnapshotService
      */
     public function listSnapshots(array $repository): array
     {
-        $command = ['restic', 'snapshots', '--json', '--repo', $repository['path']];
+        $command = $this->buildCommand(['snapshots', '--json'], $repository);
 
-        $env = $repository['env'] ?? [];
-
-        if (!empty($repository['password'])) {
-            $env['RESTIC_PASSWORD'] = $repository['password'];
-        } else {
-            $command[] = '--insecure-no-password';
-        }
+        $env = $this->buildEnv($repository);
 
         $result = $this->runner->run($command, $env);
 
@@ -40,7 +34,7 @@ class SnapshotService
         }
 
         // В старых версиях restic summary.total_size отсутствует в snapshots --json.
-        // Пробуем получить размеры через restic stats (один вызов для всех снепшотов).
+        // Пробуем получить размеры через restic stats.
         $hasSummary = false;
         foreach ($decoded as $snap) {
             if (isset($snap['summary']['total_size'])) {
@@ -50,7 +44,7 @@ class SnapshotService
         }
 
         if (!$hasSummary && !empty($decoded)) {
-            $decoded = $this->enrichWithSizes($repository, $decoded, $env);
+            $decoded = $this->enrichWithSizes($repository, $decoded);
         }
 
         return $decoded;
@@ -59,12 +53,10 @@ class SnapshotService
     /**
      * @param array<string, mixed> $repository
      * @param array<int, array<string, mixed>> $snapshots
-     * @param array<string, string> $env
      * @return array<int, array<string, mixed>>
      */
-    private function enrichWithSizes(array $repository, array $snapshots, array $env): array
+    private function enrichWithSizes(array $repository, array $snapshots): array
     {
-        // Собираем ID всех снепшотов
         $ids = [];
         foreach ($snapshots as $snap) {
             if (!empty($snap['id'])) {
@@ -77,16 +69,10 @@ class SnapshotService
         }
 
         // restic stats --json --mode raw-data <id1> <id2> ...
-        $command = array_merge(
-            ['restic', 'stats', '--json', '--mode', 'raw-data', '--repo', $repository['path']],
-            $ids
-        );
+        $command = $this->buildCommand(['stats', '--json', '--mode', 'raw-data'], $repository);
+        $command = array_merge($command, $ids);
 
-        if (!empty($repository['password'])) {
-            $env['RESTIC_PASSWORD'] = $repository['password'];
-        } else {
-            $command[] = '--insecure-no-password';
-        }
+        $env = $this->buildEnv($repository);
 
         $result = $this->runner->run($command, $env);
 
@@ -163,15 +149,9 @@ class SnapshotService
      */
     private function tagOperation(array $repository, string $snapId, string $tag, string $operation): array
     {
-        $command = ['restic', 'tag', '--repo', $repository['path'], $operation, $tag, $snapId];
+        $command = $this->buildCommand(['tag', '--repo', $repository['path'], $operation, $tag, $snapId], $repository);
 
-        $env = $repository['env'] ?? [];
-
-        if (!empty($repository['password'])) {
-            $env['RESTIC_PASSWORD'] = $repository['password'];
-        } else {
-            $command[] = '--insecure-no-password';
-        }
+        $env = $this->buildEnv($repository);
 
         $result = $this->runner->run($command, $env);
 
@@ -180,5 +160,45 @@ class SnapshotService
             'output' => $result['stdout'],
             'error' => $result['stderr'],
         ];
+    }
+
+    /**
+     * Строит команду restic с глобальным --insecure-no-password перед подкомандой.
+     *
+     * @param array<int, string> $subcommandArgs — подкоманда + аргументы
+     * @param array<string, mixed> $repository
+     * @return array<int, string>
+     */
+    private function buildCommand(array $subcommandArgs, array $repository): array
+    {
+        $cmd = ['restic'];
+
+        // Глобальный флаг ДО подкоманды, иначе restic примет его за snapshot ID
+        if (empty($repository['password'])) {
+            $cmd[] = '--insecure-no-password';
+        }
+
+        // Всегда передаём --repo
+        $cmd[] = '--repo';
+        $cmd[] = $repository['path'];
+
+        return array_merge($cmd, $subcommandArgs);
+    }
+
+    /**
+     * Строит env для restic (RESTIC_PASSWORD если задан).
+     *
+     * @param array<string, mixed> $repository
+     * @return array<string, string>
+     */
+    private function buildEnv(array $repository): array
+    {
+        $env = $repository['env'] ?? [];
+
+        if (!empty($repository['password'])) {
+            $env['RESTIC_PASSWORD'] = $repository['password'];
+        }
+
+        return $env;
     }
 }

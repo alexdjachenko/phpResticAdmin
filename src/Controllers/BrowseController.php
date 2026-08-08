@@ -88,8 +88,9 @@ class BrowseController
         $dirs = [];
         $files = [];
         foreach ($entries as $entry) {
-            // null-элементы в выводе restic ls пропускаем
-            if ($entry === null || empty($entry['name'])) {
+            // null-элементы и . / .. пропускаем
+            $name = $entry['name'] ?? '';
+            if ($entry === null || $name === '' || $name === '.' || $name === '..') {
                 continue;
             }
             if (($entry['type'] ?? '') === 'dir') {
