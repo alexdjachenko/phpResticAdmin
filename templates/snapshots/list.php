@@ -19,17 +19,23 @@
                 <th><?= htmlspecialchars(__('snap.date'), ENT_QUOTES, 'UTF-8') ?></th>
                 <th><?= htmlspecialchars(__('snap.host'), ENT_QUOTES, 'UTF-8') ?></th>
                 <th><?= htmlspecialchars(__('snap.paths'), ENT_QUOTES, 'UTF-8') ?></th>
+                <th><?= htmlspecialchars(__('snap.size'), ENT_QUOTES, 'UTF-8') ?></th>
                 <th><?= htmlspecialchars(__('snap.tags'), ENT_QUOTES, 'UTF-8') ?></th>
                 <th></th>
             </tr>
         </thead>
         <tbody>
             <?php foreach ($snapshots as $snap): ?>
+                <?php
+                $totalSize = $snap['summary']['total_size'] ?? null;
+                $sizeStr = $totalSize !== null ? \App\Helpers\Format::bytes((int) $totalSize) : '—';
+                ?>
                 <tr id="snap-<?= htmlspecialchars($snap['short_id'] ?? '', ENT_QUOTES, 'UTF-8') ?>">
                     <td><code><?= htmlspecialchars($snap['short_id'] ?? '', ENT_QUOTES, 'UTF-8') ?></code></td>
                     <td><?= htmlspecialchars(\App\Helpers\Format::date($snap['time'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
                     <td><?= htmlspecialchars($snap['hostname'] ?? '', ENT_QUOTES, 'UTF-8') ?></td>
                     <td><?= htmlspecialchars(\App\Helpers\Format::truncate(implode(', ', $snap['paths'] ?? []), 40), ENT_QUOTES, 'UTF-8') ?></td>
+                    <td><?= htmlspecialchars($sizeStr, ENT_QUOTES, 'UTF-8') ?></td>
                     <td class="tag-cell" data-snap-id="<?= htmlspecialchars($snap['short_id'] ?? '', ENT_QUOTES, 'UTF-8') ?>">
                         <?php foreach ($snap['tags'] ?? [] as $tag): ?>
                             <span class="tag-badge">

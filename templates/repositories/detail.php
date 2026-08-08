@@ -97,15 +97,21 @@ $backupPaths = $repo['backup_paths'] ?? [];
                 <th><?= htmlspecialchars(__('snap.id'), ENT_QUOTES, 'UTF-8') ?></th>
                 <th><?= htmlspecialchars(__('snap.date'), ENT_QUOTES, 'UTF-8') ?></th>
                 <th><?= htmlspecialchars(__('snap.paths'), ENT_QUOTES, 'UTF-8') ?></th>
+                <th><?= htmlspecialchars(__('snap.size'), ENT_QUOTES, 'UTF-8') ?></th>
                 <th></th>
             </tr>
         </thead>
         <tbody>
             <?php foreach ($latestSnapshots as $snap): ?>
+                <?php
+                $totalSize = $snap['summary']['total_size'] ?? null;
+                $sizeStr = $totalSize !== null ? \App\Helpers\Format::bytes((int) $totalSize) : '—';
+                ?>
                 <tr>
                     <td><code><?= htmlspecialchars($snap['short_id'] ?? '', ENT_QUOTES, 'UTF-8') ?></code></td>
                     <td><?= htmlspecialchars(\App\Helpers\Format::date($snap['time'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
                     <td><?= htmlspecialchars(implode(', ', array_map(function(string $p): string { return basename($p); }, $snap['paths'] ?? [])), ENT_QUOTES, 'UTF-8') ?></td>
+                    <td><?= htmlspecialchars($sizeStr, ENT_QUOTES, 'UTF-8') ?></td>
                     <td>
                         <a href="/browse?repo=<?= htmlspecialchars(urlencode($repo['id'] ?? ''), ENT_QUOTES, 'UTF-8') ?>&snapshot=<?= htmlspecialchars(urlencode($snap['id'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars(__('snap.browse'), ENT_QUOTES, 'UTF-8') ?></a>
                     </td>

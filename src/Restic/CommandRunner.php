@@ -11,6 +11,8 @@ class CommandRunner
      */
     public function run(array $command, array $env = [], ?string $stdin = null): array
     {
+        $env = $this->ensureHome($env);
+
         $descriptorSpec = [
             0 => ['pipe', 'r'],
             1 => ['pipe', 'w'],
@@ -65,6 +67,8 @@ class CommandRunner
      */
     public function runStream(array $command, array $env = []): void
     {
+        $env = $this->ensureHome($env);
+
         set_time_limit(0);
 
         header('Content-Type: text/plain; charset=utf-8');
@@ -111,5 +115,21 @@ class CommandRunner
         if ($exitCode !== 0) {
             \App\Core\App::log('runStream failed (exit ' . $exitCode . '): ' . ($stderr !== false ? $stderr : ''), 0);
         }
+    }
+
+    /**
+     * Гарантирует наличие HOME в окружении.
+     * Без HOME restic не может создать кеш — падают ls, find и др.
+     *
+     * @param array<string, string> $env
+     * @return array<string, string>
+     */
+    private function ensureHome(array $env): array
+    {
+        if (!isset($env['HOME'])) {
+            $home = getenv('HOME') ?: ($_SERVER['HOME'] ?? '/tmp');
+            $env['HOME'] = $home;
+        }
+        return $env;
     }
 }

@@ -9,23 +9,7 @@ class DashboardController
 {
     public function index(): void
     {
-        $auth = App::auth();
-        $user = $auth->user();
-
-        // Сбрасываем current_repo при заходе на дашборд,
-        // чтобы не показывать данные из предыдущей сессии в новой вкладке.
-        App::session()->remove('current_repo');
-
-        $repoCount = 0;
-        if ($user !== null) {
-            $repoCount = count(App::repoStorage()->loadAll($user));
-        }
-
-        echo App::response()->render('dashboard.php', [
-            'repoCount' => $repoCount,
-            'isLoggedIn' => $auth->isLoggedIn(),
-            'username' => $user,
-        ]);
+        App::response()->redirect('/repositories');
     }
 
     public function invalidateCache(): void
