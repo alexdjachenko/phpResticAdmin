@@ -22,6 +22,10 @@ class Format
             $unitIndex++;
         }
 
+        if ($unitIndex === 0) {
+            return ((int) $bytes) . ' ' . $units[$unitIndex];
+        }
+
         return number_format($bytes, $precision, '.', '') . ' ' . $units[$unitIndex];
     }
 
