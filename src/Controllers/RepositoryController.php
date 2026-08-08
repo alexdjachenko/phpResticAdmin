@@ -17,9 +17,26 @@ class RepositoryController
             return;
         }
 
-        $repositories = App::repoStorage()->loadAll();
+        $repositories = App::repoStorage()->loadAll($user);
         $flash = App::session()->flash('success');
         $csrfToken = App::security()->csrfToken();
+
+        // Вычисляем права для шаблона
+        $availableCategories = [];
+        foreach (['public', 'private', 'session'] as $cat) {
+            if ($auth->canEdit($cat)) {
+                $availableCategories[$cat] = __($cat === 'public' ? 'repo.category.public' : ($cat === 'private' ? 'repo.category.private' : 'repo.category.session'));
+            }
+        }
+
+        $canAdd = !empty($availableCategories);
+
+        foreach ($repositories as &$repo) {
+            $cat = $repo['category'] ?? 'public';
+            $repo['canDelete'] = $auth->canEdit($cat);
+            $repo['canMove'] = $auth->canEdit($cat);
+        }
+        unset($repo);
 
         echo App::response()->render('repositories/list.php', [
             'repositories' => $repositories,
@@ -27,6 +44,9 @@ class RepositoryController
             'username' => $user,
             'flash' => $flash,
             'csrfToken' => $csrfToken,
+            'canAdd' => $canAdd,
+            'availableCategories' => $availableCategories,
+            'categories' => $availableCategories,
             'debug' => App::isDebug(),
         ]);
     }
@@ -55,7 +75,8 @@ class RepositoryController
             return;
         }
 
-        $repositories = App::repoStorage()->loadAll();
+        $user = $auth->user();
+        $repositories = App::repoStorage()->loadAll($user ?? '');
         $repository = null;
 
         foreach ($repositories as $repo) {
@@ -73,5 +94,251 @@ class RepositoryController
         $result = App::repoService()->testConnection($repository);
         $result['_csrf_token'] = App::security()->csrfToken();
         App::response()->json($result);
+    }
+
+    /**
+     * GET /repositories/add — форма добавления.
+     */
+    public function addForm(): void
+    {
+        $auth = App::auth();
+        $user = $auth->user();
+
+        if ($user === null) {
+            App::response()->redirect('/login');
+            return;
+        }
+
+        $availableCategories = [];
+        foreach (['public', 'private', 'session'] as $cat) {
+            if ($auth->canEdit($cat)) {
+                $availableCategories[$cat] = __($cat === 'public' ? 'repo.category.public' : ($cat === 'private' ? 'repo.category.private' : 'repo.category.session'));
+            }
+        }
+
+        if (empty($availableCategories)) {
+            App::response()->error(403, __('error.forbidden'));
+            return;
+        }
+
+        $flash = App::session()->flash('error');
+        $csrfToken = App::security()->csrfToken();
+
+        echo App::response()->render('repositories/add.php', [
+            'isLoggedIn' => $auth->isLoggedIn(),
+            'username' => $user,
+            'csrfToken' => $csrfToken,
+            'categories' => $availableCategories,
+            'error' => $flash,
+        ]);
+    }
+
+    /**
+     * POST /repositories/add — сохранение + опционально restic init.
+     */
+    public function add(): void
+    {
+        $auth = App::auth();
+        $user = $auth->user();
+
+        if ($user === null) {
+            App::response()->redirect('/login');
+            return;
+        }
+
+        $request = new Request();
+        $security = App::security();
+
+        $token = $request->post('_csrf_token', '');
+        if (!$security->validateCsrf($token)) {
+            App::session()->flash('error', __('flash.csrf_error'));
+            App::response()->redirect('/repositories/add');
+            return;
+        }
+
+        $name = trim($request->post('name', ''));
+        $type = $request->post('type', 'local');
+        $path = trim($request->post('path', ''));
+        $category = $request->post('category', '');
+        $password = $request->post('password', '');
+        $initRepo = $request->post('init_repo', '0') === '1';
+        $s3Key = trim($request->post('s3_key', ''));
+        $s3Secret = trim($request->post('s3_secret', ''));
+
+        if ($name === '' || $path === '') {
+            App::session()->flash('error', 'Name and path are required.');
+            App::response()->redirect('/repositories/add');
+            return;
+        }
+
+        if (!in_array($category, ['public', 'private', 'session'], true)) {
+            App::session()->flash('error', 'Invalid category.');
+            App::response()->redirect('/repositories/add');
+            return;
+        }
+
+        if (!$auth->canEdit($category)) {
+            App::response()->error(403, __('error.forbidden'));
+            return;
+        }
+
+        $repository = [
+            'id' => bin2hex(random_bytes(8)),
+            'name' => $name,
+            'type' => $type,
+            'path' => $path,
+            'password' => $password !== '' ? $password : null,
+        ];
+
+        if ($s3Key !== '' || $s3Secret !== '') {
+            $repository['env'] = [];
+            if ($s3Key !== '') {
+                $repository['env']['AWS_ACCESS_KEY_ID'] = $s3Key;
+            }
+            if ($s3Secret !== '') {
+                $repository['env']['AWS_SECRET_ACCESS_KEY'] = $s3Secret;
+            }
+        }
+
+        // Инициализация restic, если выбрана
+        if ($initRepo) {
+            $result = App::repoService()->init($repository);
+            if (!$result['ok']) {
+                App::session()->flash('error', __('flash.init_failed', ['{error}' => $result['error']]));
+                App::response()->redirect('/repositories/add');
+                return;
+            }
+        }
+
+        App::repoStorage()->save($category, $repository, $user);
+        App::session()->flash('success', __('flash.repo_added'));
+        App::response()->redirect('/repositories');
+    }
+
+    /**
+     * POST /repositories/delete — удаление репозитория.
+     */
+    public function delete(): void
+    {
+        $auth = App::auth();
+        $user = $auth->user();
+
+        if ($user === null) {
+            App::response()->json(['ok' => false, 'error' => 'Authentication required', '_csrf_token' => App::security()->csrfToken()], 403);
+            return;
+        }
+
+        $request = new Request();
+        $security = App::security();
+
+        $token = $request->post('_csrf_token', '');
+        if (!$security->validateCsrf($token)) {
+            App::response()->json(['ok' => false, 'error' => __('flash.csrf_error'), '_csrf_token' => App::security()->csrfToken()], 403);
+            return;
+        }
+
+        $repoId = $request->post('repo_id', '');
+
+        if ($repoId === '') {
+            App::response()->json(['ok' => false, 'error' => 'Repository ID is required', '_csrf_token' => App::security()->csrfToken()], 400);
+            return;
+        }
+
+        $repositories = App::repoStorage()->loadAll($user);
+        $found = null;
+
+        foreach ($repositories as $repo) {
+            if (($repo['id'] ?? '') === $repoId) {
+                $found = $repo;
+                break;
+            }
+        }
+
+        if ($found === null) {
+            App::response()->json(['ok' => false, 'error' => __('flash.not_found'), '_csrf_token' => App::security()->csrfToken()], 404);
+            return;
+        }
+
+        $category = $found['category'] ?? 'public';
+
+        if (!$auth->canEdit($category)) {
+            App::response()->json(['ok' => false, 'error' => __('error.forbidden'), '_csrf_token' => App::security()->csrfToken()], 403);
+            return;
+        }
+
+        App::repoStorage()->delete($category, $repoId, $user);
+        App::session()->flash('success', __('flash.repo_deleted'));
+        App::response()->json(['ok' => true, 'redirect' => '/repositories', '_csrf_token' => App::security()->csrfToken()]);
+    }
+
+    /**
+     * POST /repositories/move — перенос между категориями.
+     */
+    public function move(): void
+    {
+        $auth = App::auth();
+        $user = $auth->user();
+
+        if ($user === null) {
+            App::response()->json(['ok' => false, 'error' => 'Authentication required', '_csrf_token' => App::security()->csrfToken()], 403);
+            return;
+        }
+
+        $request = new Request();
+        $security = App::security();
+
+        $token = $request->post('_csrf_token', '');
+        if (!$security->validateCsrf($token)) {
+            App::response()->json(['ok' => false, 'error' => __('flash.csrf_error'), '_csrf_token' => App::security()->csrfToken()], 403);
+            return;
+        }
+
+        $repoId = $request->post('repo_id', '');
+        $toCategory = $request->post('to_category', '');
+
+        if ($repoId === '' || $toCategory === '') {
+            App::response()->json(['ok' => false, 'error' => 'Repository ID and target category are required', '_csrf_token' => App::security()->csrfToken()], 400);
+            return;
+        }
+
+        if (!in_array($toCategory, ['public', 'private', 'session'], true)) {
+            App::response()->json(['ok' => false, 'error' => 'Invalid category', '_csrf_token' => App::security()->csrfToken()], 400);
+            return;
+        }
+
+        $repositories = App::repoStorage()->loadAll($user);
+        $found = null;
+
+        foreach ($repositories as $repo) {
+            if (($repo['id'] ?? '') === $repoId) {
+                $found = $repo;
+                break;
+            }
+        }
+
+        if ($found === null) {
+            App::response()->json(['ok' => false, 'error' => __('flash.not_found'), '_csrf_token' => App::security()->csrfToken()], 404);
+            return;
+        }
+
+        $fromCategory = $found['category'] ?? 'public';
+
+        if ($fromCategory === $toCategory) {
+            App::response()->json(['ok' => false, 'error' => 'Repository is already in this category', '_csrf_token' => App::security()->csrfToken()], 400);
+            return;
+        }
+
+        if (!$auth->canMove($fromCategory, $toCategory)) {
+            App::response()->json(['ok' => false, 'error' => __('error.forbidden'), '_csrf_token' => App::security()->csrfToken()], 403);
+            return;
+        }
+
+        App::repoStorage()->move($repoId, $fromCategory, $toCategory, $user);
+
+        $fromLabel = __('repo.category.' . $fromCategory);
+        $toLabel = __('repo.category.' . $toCategory);
+        App::session()->flash('success', __('flash.repo_moved', ['{from}' => $fromLabel, '{to}' => $toLabel]));
+
+        App::response()->json(['ok' => true, 'redirect' => '/repositories', '_csrf_token' => App::security()->csrfToken()]);
     }
 }

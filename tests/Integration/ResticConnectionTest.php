@@ -91,6 +91,33 @@ class ResticConnectionTest extends TestCase
         $this->assertNotEmpty($result['error']);
     }
 
+    public function testInitRepository(): void
+    {
+        $initDir = $this->tmpDir . '/init-repo';
+        mkdir($initDir, 0777, true);
+
+        $repository = [
+            'path' => $initDir,
+            'password' => null,
+        ];
+
+        $service = new RepositoryService(new CommandRunner());
+        $result = $service->init($repository);
+
+        $this->assertTrue($result['ok'], 'Init should succeed: ' . ($result['error'] ?? ''));
+
+        // Verify connection works on newly initialized repo
+        $connResult = $service->testConnection([
+            'id' => 'test',
+            'name' => 'Test',
+            'type' => 'local',
+            'path' => $initDir,
+            'password' => null,
+        ]);
+
+        $this->assertTrue($connResult['ok'], 'Connection after init should succeed: ' . ($connResult['error'] ?? ''));
+    }
+
     private function removeDir(string $dir): void
     {
         if (!is_dir($dir)) {

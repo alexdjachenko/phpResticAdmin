@@ -40,7 +40,7 @@ class AuthController
 
         if (!$security->validateCsrf($token)) {
             App::log('CSRF validation FAILED', 1);
-            App::session()->flash('error', 'Invalid security token. Please try again.');
+            App::session()->flash('error', __('flash.csrf_error'));
             App::response()->redirect('/login');
             return;
         }
@@ -53,7 +53,7 @@ class AuthController
 
         if ($username === '' || $password === '') {
             App::log('Empty credentials, redirecting', 1);
-            App::session()->flash('error', 'Username and password are required.');
+            App::session()->flash('error', __('auth.error_empty'));
             App::response()->redirect('/login');
             return;
         }
@@ -67,7 +67,7 @@ class AuthController
         }
 
         App::log('LOGIN FAILED — password_verify returned false', 1);
-        App::session()->flash('error', 'Invalid username or password.');
+        App::session()->flash('error', __('auth.error_invalid'));
         App::response()->redirect('/login');
     }
 
