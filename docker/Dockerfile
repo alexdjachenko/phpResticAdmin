@@ -17,6 +17,10 @@ COPY src/ /var/www/src/
 COPY templates/ /var/www/templates/
 COPY data/ /var/www/data/
 
+# restic cache dir — создаём на этапе сборки с правами www-data
+RUN mkdir -p /tmp/phpresticadmin/restic-cache \
+    && chown -R www-data:www-data /tmp/phpresticadmin
+
 RUN a2enmod rewrite
 COPY docker/apache-config.conf /etc/apache2/sites-available/000-default.conf
 

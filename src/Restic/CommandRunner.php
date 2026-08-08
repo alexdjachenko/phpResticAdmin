@@ -4,8 +4,6 @@ namespace App\Restic;
 
 class CommandRunner
 {
-    private static ?string $cacheDir = null;
-
     /**
      * @param array<int, string> $command
      * @param array<string, string> $env
@@ -61,7 +59,6 @@ class CommandRunner
 
     /**
      * Запускает команду и стримит stdout в браузер в реальном времени.
-     * Используется для restic backup.
      *
      * @param array<int, string> $command
      * @param array<string, string> $env
@@ -119,9 +116,12 @@ class CommandRunner
     }
 
     /**
-     * Гарантирует переменные окружения, необходимые restic:
-     * HOME — для поиска конфигурации,
-     * RESTIC_CACHE_DIR — для кеша (создаётся в tmp_dir приложения).
+     * Гарантирует переменные окружения для restic в Docker-контейнере.
+     *
+     * HOME — для .cache/restic (restic падает без HOME).
+     * RESTIC_CACHE_DIR — tmp_dir приложения, если доступен для записи.
+     * Иначе restic использует HOME/.cache/restic (предупреждение в stderr,
+     * но работает).
      *
      * @param array<string, string> $env
      * @return array<string, string>
@@ -129,20 +129,19 @@ class CommandRunner
     private function ensureEnv(array $env): array
     {
         if (!isset($env['HOME'])) {
-            $home = getenv('HOME') ?: ($_SERVER['HOME'] ?? '/tmp');
-            $env['HOME'] = $home;
+            $env['HOME'] = '/tmp';
         }
 
         if (!isset($env['RESTIC_CACHE_DIR'])) {
-            if (self::$cacheDir === null) {
-                $settings = \App\Core\App::configStorage()->loadSettings();
-                $tmpDir = rtrim($settings['tmp_dir'] ?? '/tmp', '/');
-                self::$cacheDir = $tmpDir . '/restic-cache';
-                if (!is_dir(self::$cacheDir)) {
-                    mkdir(self::$cacheDir, 0777, true);
-                }
+            $settings = \App\Core\App::configStorage()->loadSettings();
+            $tmpDir = rtrim($settings['tmp_dir'] ?? '/tmp', '/');
+            $cacheDir = $tmpDir . '/restic-cache';
+
+            if (is_dir($cacheDir) && is_writable($cacheDir)) {
+                $env['RESTIC_CACHE_DIR'] = $cacheDir;
+            } elseif (@mkdir($cacheDir, 0777, true) || is_dir($cacheDir)) {
+                $env['RESTIC_CACHE_DIR'] = $cacheDir;
             }
-            $env['RESTIC_CACHE_DIR'] = self::$cacheDir;
         }
 
         return $env;
