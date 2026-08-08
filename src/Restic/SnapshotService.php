@@ -31,153 +31,35 @@ class SnapshotService
             return [];
         }
 
-        $hasSummary = false;
-        foreach ($decoded as $snap) {
-            if (isset($snap['summary']['total_size'])) {
-                $hasSummary = true;
-                break;
-            }
-        }
-
-        if (!$hasSummary && !empty($decoded)) {
-            $decoded = $this->enrichWithSizes($repository, $decoded);
-        }
-
         return $decoded;
     }
 
     /**
+     * Возвращает полную статистику одного снепшота (restic stats --json).
+     * Тяжёлая операция, вызывается только по запросу пользователя.
+     *
      * @param array<string, mixed> $repository
-     * @param array<int, array<string, mixed>> $snapshots
-     * @return array<int, array<string, mixed>>
+     * @return array<string, mixed>|null
      */
-    private function enrichWithSizes(array $repository, array $snapshots): array
+    public function getStats(array $repository, string $snapId): ?array
     {
-        $ids = [];
-        foreach ($snapshots as $snap) {
-            if (!empty($snap['id'])) {
-                $ids[] = $snap['id'];
-            }
-        }
-
-        if (empty($ids)) {
-            return $snapshots;
-        }
+        $command = $this->buildCommand(['stats', '--json', '--mode', 'raw-data'], $repository);
+        $command[] = $snapId;
 
         $env = $this->buildEnv($repository);
-
-        // Пробуем stats --json (restic >= 0.16)
-        $command = $this->buildCommand(['stats', '--json', '--mode', 'raw-data'], $repository);
-        $command = array_merge($command, $ids);
-
         $result = $this->runner->run($command, $env);
 
-        if ($result['exitCode'] === 0) {
-            $statsEntries = json_decode($result['stdout'], true);
-            if (is_array($statsEntries)) {
-                return $this->applySizeMap($snapshots, $this->parseStatsJson($statsEntries));
-            }
+        if ($result['exitCode'] !== 0) {
+            return null;
         }
 
-        // Fallback: stats без --json (restic < 0.16)
-        $command = $this->buildCommand(['stats', '--mode', 'raw-data'], $repository);
-        $command = array_merge($command, $ids);
+        $decoded = json_decode($result['stdout'], true);
 
-        $result = $this->runner->run($command, $env);
-
-        if ($result['exitCode'] === 0) {
-            $sizeMap = $this->parseStatsText($result['stdout']);
-            if (!empty($sizeMap)) {
-                return $this->applySizeMap($snapshots, $sizeMap);
-            }
+        if (!is_array($decoded)) {
+            return null;
         }
 
-        return $snapshots;
-    }
-
-    /**
-     * @param array<int, array<string, mixed>> $statsEntries
-     * @return array<string, int>
-     */
-    private function parseStatsJson(array $statsEntries): array
-    {
-        $map = [];
-        foreach ($statsEntries as $entry) {
-            $sid = $entry['snapshot_id'] ?? $entry['id'] ?? null;
-            $ts = $entry['total_size'] ?? null;
-            if ($sid !== null && $ts !== null) {
-                $map[$sid] = (int) $ts;
-            }
-        }
-        return $map;
-    }
-
-    /**
-     * Парсит текстовый вывод restic stats (restic < 0.16).
-     * Формат для нескольких ID: секции вида
-     *   snapshot <id> of [...] at ...:
-     *     ...
-     *           Total Size:   <value> <unit>
-     *
-     * @return array<string, int>
-     */
-    private function parseStatsText(string $stdout): array
-    {
-        $map = [];
-
-        // Разбиваем на секции по snapshot <id>
-        $blocks = preg_split('/\n(?=snapshot )/', $stdout);
-        foreach ($blocks as $block) {
-            if (!preg_match('/^snapshot ([a-f0-9]+) /m', $block, $idMatch)) {
-                continue;
-            }
-            $sid = $idMatch[1];
-
-            if (!preg_match('/Total Size:\s+([\d.]+)\s*(\w+)/', $block, $sizeMatch)) {
-                continue;
-            }
-
-            $value = (float) $sizeMatch[1];
-            $unit = $sizeMatch[2];
-
-            $map[$sid] = $this->parseHumanSize($value, $unit);
-        }
-
-        return $map;
-    }
-
-    /**
-     * Переводит человекочитаемый размер в байты.
-     */
-    private function parseHumanSize(float $value, string $unit): int
-    {
-        $multipliers = [
-            'B'   => 1,
-            'KiB' => 1024,
-            'MiB' => 1024 * 1024,
-            'GiB' => 1024 * 1024 * 1024,
-            'TiB' => 1024 * 1024 * 1024 * 1024,
-        ];
-
-        $power = $multipliers[$unit] ?? 1;
-        return (int) round($value * $power);
-    }
-
-    /**
-     * @param array<int, array<string, mixed>> $snapshots
-     * @param array<string, int> $sizeMap
-     * @return array<int, array<string, mixed>>
-     */
-    private function applySizeMap(array $snapshots, array $sizeMap): array
-    {
-        foreach ($snapshots as &$snap) {
-            $sid = $snap['id'] ?? '';
-            if (isset($sizeMap[$sid])) {
-                $snap['summary'] = ['total_size' => $sizeMap[$sid]];
-            }
-        }
-        unset($snap);
-        return $snapshots;
+        return $decoded[0] ?? $decoded;
     }
 
     /**

@@ -103,15 +103,12 @@ $backupPaths = $repo['backup_paths'] ?? [];
         </thead>
         <tbody>
             <?php foreach ($latestSnapshots as $snap): ?>
-                <?php
-                $totalSize = $snap['summary']['total_size'] ?? null;
-                $sizeStr = $totalSize !== null ? \App\Helpers\Format::bytes((int) $totalSize) : '—';
-                ?>
+                <?php $processed = $snap['summary']['total_bytes_processed'] ?? null; ?>
                 <tr>
-                    <td><code><?= htmlspecialchars($snap['short_id'] ?? '', ENT_QUOTES, 'UTF-8') ?></code></td>
+                    <td><a href="/snapshots/detail?repo=<?= htmlspecialchars(urlencode($repo['id'] ?? ''), ENT_QUOTES, 'UTF-8') ?>&snapshot=<?= htmlspecialchars(urlencode($snap['id'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"><code><?= htmlspecialchars($snap['short_id'] ?? '', ENT_QUOTES, 'UTF-8') ?></code></a></td>
                     <td><?= htmlspecialchars(\App\Helpers\Format::date($snap['time'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
                     <td><?= htmlspecialchars(implode(', ', array_map(function(string $p): string { return basename($p); }, $snap['paths'] ?? [])), ENT_QUOTES, 'UTF-8') ?></td>
-                    <td><?= htmlspecialchars($sizeStr, ENT_QUOTES, 'UTF-8') ?></td>
+                    <td><?= $processed !== null ? htmlspecialchars(\App\Helpers\Format::bytes((int) $processed), ENT_QUOTES, 'UTF-8') : '—' ?></td>
                     <td>
                         <a href="/browse?repo=<?= htmlspecialchars(urlencode($repo['id'] ?? ''), ENT_QUOTES, 'UTF-8') ?>&snapshot=<?= htmlspecialchars(urlencode($snap['id'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars(__('snap.browse'), ENT_QUOTES, 'UTF-8') ?></a>
                     </td>
@@ -144,19 +141,15 @@ function sendPost(url, body, csrfEl) {
     });
 }
 
-// Check button
 document.querySelectorAll('.btn-check').forEach(function(btn) {
     btn.addEventListener('click', function() {
         var repoId = this.dataset.repoId;
         var statusEl = document.getElementById('repo-status');
-
         statusEl.textContent = <?= json_encode(__('repo.status_checking')) ?>;
         statusEl.className = 'repo-status checking';
-
         var formData = new URLSearchParams();
         formData.append('repo_id', repoId);
         formData.append('_csrf_token', this.dataset.csrf);
-
         sendPost('/repositories/check', formData.toString(), this)
         .then(function(data) {
             if (data.ok) {
@@ -167,25 +160,22 @@ document.querySelectorAll('.btn-check').forEach(function(btn) {
                 statusEl.className = 'repo-status error';
             }
         })
-        .catch(function(err) {
+        .catch(function() {
             statusEl.textContent = <?= json_encode(__('repo.status_failed')) ?>;
             statusEl.className = 'repo-status error';
         });
     });
 });
 
-// Move dropdown
 document.querySelectorAll('.move-dropdown').forEach(function(select) {
     select.addEventListener('change', function() {
         var toCategory = this.value;
         if (!toCategory) return;
         var repoId = this.dataset.repoId;
-
         var formData = new URLSearchParams();
         formData.append('repo_id', repoId);
         formData.append('to_category', toCategory);
         formData.append('_csrf_token', this.dataset.csrf);
-
         sendPost('/repositories/move', formData.toString(), this)
         .then(function(data) {
             if (data.ok) { window.location.reload(); }
@@ -195,16 +185,13 @@ document.querySelectorAll('.move-dropdown').forEach(function(select) {
     });
 });
 
-// Delete button
 document.querySelectorAll('.btn-delete').forEach(function(btn) {
     btn.addEventListener('click', function() {
         if (!confirm(<?= json_encode(__('repo.confirm_delete')) ?>)) return;
         var repoId = this.dataset.repoId;
-
         var formData = new URLSearchParams();
         formData.append('repo_id', repoId);
         formData.append('_csrf_token', this.dataset.csrf);
-
         sendPost('/repositories/delete', formData.toString(), this)
         .then(function(data) {
             if (data.ok) { window.location.href = '/repositories'; }

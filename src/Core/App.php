@@ -22,10 +22,8 @@ class App
     private static ?Security $security = null;
     private static ?Response $response = null;
 
-    /**
-     * Уровень отладки: 0 = выкл, 1 = info, 2 = verbose.
-     */
     private static int $debugLevel = 0;
+    private static ?string $resticVersion = null;
 
     public static function boot(): void
     {
@@ -37,7 +35,6 @@ class App
         self::session()->start();
         self::auth()->resolve();
 
-        // Сбросить current_repo если репозиторий был удалён
         $currentRepoId = self::session()->get('current_repo');
         if ($currentRepoId !== null) {
             $username = self::auth()->user();
@@ -54,7 +51,6 @@ class App
             }
         }
 
-        // Инициализация языка
         $userLang = self::session()->get('lang');
         if ($userLang !== null) {
             \App\Helpers\Lang::setLocale($userLang);
@@ -73,26 +69,16 @@ class App
         self::router()->dispatch($request);
     }
 
-    /**
-     * Уровень отладки из настроек.
-     */
     public static function debugLevel(): int
     {
         return self::$debugLevel;
     }
 
-    /**
-     * Включён ли режим отладки (уровень >= 1).
-     */
     public static function isDebug(): bool
     {
         return self::$debugLevel >= 1;
     }
 
-    /**
-     * Запись в лог. Уровни: 0 = всегда, 1 = info, 2 = verbose.
-     * Сообщение пишется только если $level <= debugLevel.
-     */
     public static function log(string $message, int $level = 1): void
     {
         if ($level <= self::$debugLevel) {
@@ -100,10 +86,6 @@ class App
         }
     }
 
-    /**
-     * Инвалидация кешей (opcache).
-     * @return array{count: int, files: array<int, string>}
-     */
     public static function invalidateCaches(): array
     {
         $count = 0;
@@ -125,6 +107,28 @@ class App
         }
 
         return ['count' => $count, 'files' => $files];
+    }
+
+    public static function appVersion(): string
+    {
+        $file = dirname(__DIR__, 2) . '/version.txt';
+        if (file_exists($file)) {
+            return trim(file_get_contents($file));
+        }
+        return 'dev';
+    }
+
+    public static function resticVersion(): string
+    {
+        if (self::$resticVersion === null) {
+            $result = self::runner()->run(['restic', 'version']);
+            if ($result['exitCode'] === 0 && preg_match('/restic (\S+)/', $result['stdout'], $m)) {
+                self::$resticVersion = $m[1];
+            } else {
+                self::$resticVersion = 'unknown';
+            }
+        }
+        return self::$resticVersion;
     }
 
     public static function configStorage(): ConfigStorage
@@ -291,9 +295,19 @@ class App
             $controller->list();
         });
 
+        $router->map('GET', '/snapshots/detail', function () {
+            $controller = new \App\Controllers\SnapshotController();
+            $controller->detail();
+        });
+
         $router->map('POST', '/snapshots/tag', function () {
             $controller = new \App\Controllers\SnapshotController();
             $controller->tag();
+        });
+
+        $router->map('POST', '/snapshots/stats', function () {
+            $controller = new \App\Controllers\SnapshotController();
+            $controller->stats();
         });
 
         $router->map('GET', '/browse', function () {

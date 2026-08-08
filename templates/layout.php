@@ -62,5 +62,10 @@
     <?php endif ?>
 
     <main><?= $content ?? '' ?></main>
+
+    <footer class="app-footer">
+        phpresticadmin v<?= htmlspecialchars($appVersion ?? 'dev', ENT_QUOTES, 'UTF-8') ?>
+        &middot; restic <?= htmlspecialchars($resticVersion ?? '', ENT_QUOTES, 'UTF-8') ?>
+    </footer>
 </body>
 </html>
