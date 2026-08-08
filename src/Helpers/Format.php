@@ -22,7 +22,7 @@ class Format
             $unitIndex++;
         }
 
-        return round($bytes, $precision) . ' ' . $units[$unitIndex];
+        return number_format($bytes, $precision, '.', '') . ' ' . $units[$unitIndex];
     }
 
     /**
