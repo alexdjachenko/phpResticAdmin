@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.1.1](https://github.com/alexdjachenko/phpResticAdmin/compare/v0.1.0...v0.1.1) (2026-08-08)
+
+
+### Bug Fixes
+
+* add error_log diagnostics for login debugging, update AGENTS.md with TODO section ([c366f1a](https://github.com/alexdjachenko/phpResticAdmin/commit/c366f1a988b443da0b074b195b24be89f4f5edc6))
+* add error_log diagnostics to login() ([d52bec5](https://github.com/alexdjachenko/phpResticAdmin/commit/d52bec593f202100d2f21682b563884e1fe17d8c))
+* debug mode, structured logging, cache invalidation, auto-create repositories.yaml ([1246ab4](https://github.com/alexdjachenko/phpResticAdmin/commit/1246ab4a6a2dda56637821888221f4dd56bf3ecd))
+
 ## [0.1.0](https://github.com/alexdjachenko/phpResticAdmin/compare/v0.0.2...v0.1.0) (2026-08-07)
 
 
