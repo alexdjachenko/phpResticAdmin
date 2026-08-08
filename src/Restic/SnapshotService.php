@@ -18,9 +18,7 @@ class SnapshotService
     public function listSnapshots(array $repository): array
     {
         $command = $this->buildCommand(['snapshots', '--json'], $repository);
-
         $env = $this->buildEnv($repository);
-
         $result = $this->runner->run($command, $env);
 
         if ($result['exitCode'] !== 0) {
@@ -33,8 +31,6 @@ class SnapshotService
             return [];
         }
 
-        // В старых версиях restic summary.total_size отсутствует в snapshots --json.
-        // Пробуем получить размеры через restic stats.
         $hasSummary = false;
         foreach ($decoded as $snap) {
             if (isset($snap['summary']['total_size'])) {
@@ -68,35 +64,112 @@ class SnapshotService
             return $snapshots;
         }
 
-        // restic stats --json --mode raw-data <id1> <id2> ...
+        $env = $this->buildEnv($repository);
+
+        // Пробуем stats --json (restic >= 0.16)
         $command = $this->buildCommand(['stats', '--json', '--mode', 'raw-data'], $repository);
         $command = array_merge($command, $ids);
 
-        $env = $this->buildEnv($repository);
+        $result = $this->runner->run($command, $env);
+
+        if ($result['exitCode'] === 0) {
+            $statsEntries = json_decode($result['stdout'], true);
+            if (is_array($statsEntries)) {
+                return $this->applySizeMap($snapshots, $this->parseStatsJson($statsEntries));
+            }
+        }
+
+        // Fallback: stats без --json (restic < 0.16)
+        $command = $this->buildCommand(['stats', '--mode', 'raw-data'], $repository);
+        $command = array_merge($command, $ids);
 
         $result = $this->runner->run($command, $env);
 
-        if ($result['exitCode'] !== 0) {
-            return $snapshots;
+        if ($result['exitCode'] === 0) {
+            $sizeMap = $this->parseStatsText($result['stdout']);
+            if (!empty($sizeMap)) {
+                return $this->applySizeMap($snapshots, $sizeMap);
+            }
         }
 
-        // stats --json для нескольких ID возвращает массив объектов
-        $statsEntries = json_decode($result['stdout'], true);
-        if (!is_array($statsEntries)) {
-            return $snapshots;
-        }
+        return $snapshots;
+    }
 
-        // Индексируем размеры по snapshot_id
-        $sizeMap = [];
+    /**
+     * @param array<int, array<string, mixed>> $statsEntries
+     * @return array<string, int>
+     */
+    private function parseStatsJson(array $statsEntries): array
+    {
+        $map = [];
         foreach ($statsEntries as $entry) {
             $sid = $entry['snapshot_id'] ?? $entry['id'] ?? null;
             $ts = $entry['total_size'] ?? null;
             if ($sid !== null && $ts !== null) {
-                $sizeMap[$sid] = (int) $ts;
+                $map[$sid] = (int) $ts;
             }
         }
+        return $map;
+    }
 
-        // Проставляем size в снапшоты
+    /**
+     * Парсит текстовый вывод restic stats (restic < 0.16).
+     * Формат для нескольких ID: секции вида
+     *   snapshot <id> of [...] at ...:
+     *     ...
+     *           Total Size:   <value> <unit>
+     *
+     * @return array<string, int>
+     */
+    private function parseStatsText(string $stdout): array
+    {
+        $map = [];
+
+        // Разбиваем на секции по snapshot <id>
+        $blocks = preg_split('/\n(?=snapshot )/', $stdout);
+        foreach ($blocks as $block) {
+            if (!preg_match('/^snapshot ([a-f0-9]+) /m', $block, $idMatch)) {
+                continue;
+            }
+            $sid = $idMatch[1];
+
+            if (!preg_match('/Total Size:\s+([\d.]+)\s*(\w+)/', $block, $sizeMatch)) {
+                continue;
+            }
+
+            $value = (float) $sizeMatch[1];
+            $unit = $sizeMatch[2];
+
+            $map[$sid] = $this->parseHumanSize($value, $unit);
+        }
+
+        return $map;
+    }
+
+    /**
+     * Переводит человекочитаемый размер в байты.
+     */
+    private function parseHumanSize(float $value, string $unit): int
+    {
+        $multipliers = [
+            'B'   => 1,
+            'KiB' => 1024,
+            'MiB' => 1024 * 1024,
+            'GiB' => 1024 * 1024 * 1024,
+            'TiB' => 1024 * 1024 * 1024 * 1024,
+        ];
+
+        $power = $multipliers[$unit] ?? 1;
+        return (int) round($value * $power);
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $snapshots
+     * @param array<string, int> $sizeMap
+     * @return array<int, array<string, mixed>>
+     */
+    private function applySizeMap(array $snapshots, array $sizeMap): array
+    {
         foreach ($snapshots as &$snap) {
             $sid = $snap['id'] ?? '';
             if (isset($sizeMap[$sid])) {
@@ -104,7 +177,6 @@ class SnapshotService
             }
         }
         unset($snap);
-
         return $snapshots;
     }
 
@@ -149,10 +221,11 @@ class SnapshotService
      */
     private function tagOperation(array $repository, string $snapId, string $tag, string $operation): array
     {
-        $command = $this->buildCommand(['tag', '--repo', $repository['path'], $operation, $tag, $snapId], $repository);
-
+        $command = $this->buildCommand(
+            ['tag', '--repo', $repository['path'], $operation, $tag, $snapId],
+            $repository
+        );
         $env = $this->buildEnv($repository);
-
         $result = $this->runner->run($command, $env);
 
         return [
@@ -163,9 +236,10 @@ class SnapshotService
     }
 
     /**
-     * Строит команду restic с глобальным --insecure-no-password перед подкомандой.
+     * Строит команду restic. --insecure-no-password — глобальный флаг,
+     * должен идти ДО подкоманды, иначе restic примет его за snapshot ID.
      *
-     * @param array<int, string> $subcommandArgs — подкоманда + аргументы
+     * @param array<int, string> $subcommandArgs
      * @param array<string, mixed> $repository
      * @return array<int, string>
      */
@@ -173,12 +247,10 @@ class SnapshotService
     {
         $cmd = ['restic'];
 
-        // Глобальный флаг ДО подкоманды, иначе restic примет его за snapshot ID
         if (empty($repository['password'])) {
             $cmd[] = '--insecure-no-password';
         }
 
-        // Всегда передаём --repo
         $cmd[] = '--repo';
         $cmd[] = $repository['path'];
 
@@ -186,8 +258,6 @@ class SnapshotService
     }
 
     /**
-     * Строит env для restic (RESTIC_PASSWORD если задан).
-     *
      * @param array<string, mixed> $repository
      * @return array<string, string>
      */
