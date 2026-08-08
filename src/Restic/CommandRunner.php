@@ -4,6 +4,8 @@ namespace App\Restic;
 
 class CommandRunner
 {
+    private static ?string $cacheDir = null;
+
     /**
      * @param array<int, string> $command
      * @param array<string, string> $env
@@ -11,7 +13,7 @@ class CommandRunner
      */
     public function run(array $command, array $env = [], ?string $stdin = null): array
     {
-        $env = $this->ensureHome($env);
+        $env = $this->ensureEnv($env);
 
         $descriptorSpec = [
             0 => ['pipe', 'r'],
@@ -20,7 +22,6 @@ class CommandRunner
         ];
 
         $mergedEnv = array_merge($_ENV, $_SERVER, $env);
-        // Filter out non-string values to avoid proc_open warnings
         $filteredEnv = [];
         foreach ($mergedEnv as $key => $value) {
             if (is_string($value) || is_int($value) || is_float($value)) {
@@ -67,7 +68,7 @@ class CommandRunner
      */
     public function runStream(array $command, array $env = []): void
     {
-        $env = $this->ensureHome($env);
+        $env = $this->ensureEnv($env);
 
         set_time_limit(0);
 
@@ -118,18 +119,32 @@ class CommandRunner
     }
 
     /**
-     * Гарантирует наличие HOME в окружении.
-     * Без HOME restic не может создать кеш — падают ls, find и др.
+     * Гарантирует переменные окружения, необходимые restic:
+     * HOME — для поиска конфигурации,
+     * RESTIC_CACHE_DIR — для кеша (создаётся в tmp_dir приложения).
      *
      * @param array<string, string> $env
      * @return array<string, string>
      */
-    private function ensureHome(array $env): array
+    private function ensureEnv(array $env): array
     {
         if (!isset($env['HOME'])) {
             $home = getenv('HOME') ?: ($_SERVER['HOME'] ?? '/tmp');
             $env['HOME'] = $home;
         }
+
+        if (!isset($env['RESTIC_CACHE_DIR'])) {
+            if (self::$cacheDir === null) {
+                $settings = \App\Core\App::configStorage()->loadSettings();
+                $tmpDir = rtrim($settings['tmp_dir'] ?? '/tmp', '/');
+                self::$cacheDir = $tmpDir . '/restic-cache';
+                if (!is_dir(self::$cacheDir)) {
+                    mkdir(self::$cacheDir, 0777, true);
+                }
+            }
+            $env['RESTIC_CACHE_DIR'] = self::$cacheDir;
+        }
+
         return $env;
     }
 }
