@@ -86,6 +86,82 @@ class Authenticator
         return $this->session->get('auth_user') !== null;
     }
 
+    /**
+     * Проверяет, есть ли у текущего пользователя право use на категорию.
+     */
+    public function canUse(string $category): bool
+    {
+        $config = $this->getReposConfig();
+        return $config[$category]['use'] ?? false;
+    }
+
+    /**
+     * Проверяет, есть ли у текущего пользователя право edit на категорию.
+     */
+    public function canEdit(string $category): bool
+    {
+        $config = $this->getReposConfig();
+        return $config[$category]['edit'] ?? false;
+    }
+
+    /**
+     * Проверяет, можно ли перемещать репозиторий между категориями (edit на обе).
+     */
+    public function canMove(string $fromCategory, string $toCategory): bool
+    {
+        return $this->canEdit($fromCategory) && $this->canEdit($toCategory);
+    }
+
+    /**
+     * Возвращает секцию repos текущего пользователя с fallback-ами.
+     *
+     * @return array<string, array{use: bool, edit: bool}>
+     */
+    public function getReposConfig(): array
+    {
+        $user = $this->user();
+        $users = $this->getUsers();
+
+        $defaultFull = [
+            'public'  => ['use' => true, 'edit' => true],
+            'private' => ['use' => true, 'edit' => true],
+            'session' => ['use' => true, 'edit' => true],
+        ];
+
+        $defaultGuest = [
+            'public'  => ['use' => true,  'edit' => false],
+            'private' => ['use' => false, 'edit' => false],
+            'session' => ['use' => false, 'edit' => false],
+        ];
+
+        if ($user === null) {
+            return $defaultGuest;
+        }
+
+        $userData = $users[$user] ?? null;
+
+        if ($userData === null) {
+            return $this->isGuest() ? $defaultGuest : $defaultFull;
+        }
+
+        $repos = $userData['repos'] ?? null;
+
+        if ($repos === null) {
+            return $this->isGuest() ? $defaultGuest : $defaultFull;
+        }
+
+        // Нормализуем: edit => true подразумевает use => true
+        $result = [];
+        foreach (['public', 'private', 'session'] as $category) {
+            $cat = $repos[$category] ?? ['use' => false, 'edit' => false];
+            $edit = $cat['edit'] ?? false;
+            $use = $edit || ($cat['use'] ?? false);
+            $result[$category] = ['use' => $use, 'edit' => $edit];
+        }
+
+        return $result;
+    }
+
     private function getUsers(): array
     {
         if ($this->users === null) {

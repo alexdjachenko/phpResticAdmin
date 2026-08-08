@@ -19,6 +19,6 @@ class CanaryTest extends TestCase
         $response = @file_get_contents($url, false, $context);
 
         $this->assertNotFalse($response, 'Web server must respond on ' . $url);
-        $this->assertStringContainsString('phpresticadmin', $response ?? '', 'Response must contain "phpresticadmin"');
+        $this->assertStringContainsString('phpResticAdmin', $response ?? '', 'Response must contain "phpResticAdmin"');
     }
 }

@@ -82,6 +82,44 @@ class ConfigStorageTest extends TestCase
         $this->assertEmpty($users);
     }
 
+    public function testLoadUsersWithNewFormat(): void
+    {
+        file_put_contents(
+            $this->tmpDir . '/users.php',
+            '<?php return [
+                "admin" => [
+                    "password" => "hash123",
+                    "api_tokens" => [],
+                    "repos" => [
+                        "public" => ["use" => true, "edit" => true],
+                        "private" => ["use" => true, "edit" => true],
+                        "session" => ["use" => true, "edit" => true],
+                    ],
+                ],
+                "guest" => [
+                    "password" => null,
+                    "api_tokens" => [],
+                    "repos" => [
+                        "public" => ["use" => true, "edit" => false],
+                        "private" => ["use" => false, "edit" => false],
+                        "session" => ["use" => false, "edit" => false],
+                    ],
+                ],
+            ];'
+        );
+
+        $storage = new ConfigStorage($this->tmpDir);
+        $users = $storage->loadUsers();
+
+        $this->assertIsArray($users);
+        $this->assertArrayHasKey('admin', $users);
+        $this->assertArrayHasKey('guest', $users);
+        $this->assertSame('hash123', $users['admin']['password']);
+        $this->assertTrue($users['admin']['repos']['public']['edit']);
+        $this->assertNull($users['guest']['password']);
+        $this->assertFalse($users['guest']['repos']['private']['use']);
+    }
+
     private function removeDir(string $dir): void
     {
         if (!is_dir($dir)) {

@@ -21,7 +21,26 @@ class AuthenticatorTest extends TestCase
         $passwordHash = password_hash('secret123', PASSWORD_DEFAULT);
         file_put_contents(
             $this->tmpDir . '/users.php',
-            '<?php return ["admin" => ["password" => ' . var_export($passwordHash, true) . ']];'
+            '<?php return [
+                "admin" => [
+                    "password" => ' . var_export($passwordHash, true) . ',
+                    "api_tokens" => [],
+                    "repos" => [
+                        "public" => ["use" => true, "edit" => true],
+                        "private" => ["use" => true, "edit" => true],
+                        "session" => ["use" => true, "edit" => true],
+                    ],
+                ],
+                "guest" => [
+                    "password" => null,
+                    "api_tokens" => [],
+                    "repos" => [
+                        "public" => ["use" => true, "edit" => false],
+                        "private" => ["use" => false, "edit" => false],
+                        "session" => ["use" => false, "edit" => false],
+                    ],
+                ],
+            ];'
         );
         file_put_contents(
             $this->tmpDir . '/settings.php',
@@ -121,6 +140,101 @@ class AuthenticatorTest extends TestCase
         $auth->login('admin', 'secret123');
 
         $this->assertFalse($auth->isGuest());
+    }
+
+    public function testCanUseReturnsTrueForAllowedCategory(): void
+    {
+        $auth = new Authenticator($this->configStorage, $this->session);
+        $auth->login('admin', 'secret123');
+
+        // admin has full rights
+        $this->assertTrue($auth->canUse('public'));
+        $this->assertTrue($auth->canUse('private'));
+        $this->assertTrue($auth->canUse('session'));
+    }
+
+    public function testCanEditReturnsFalseForUseOnlyCategory(): void
+    {
+        file_put_contents(
+            $this->tmpDir . '/settings.php',
+            '<?php return ["guest_user" => "guest", "tmp_dir" => "/tmp", "log_dir" => "/var/log", "timezone" => "UTC"];'
+        );
+        $configStorage = new ConfigStorage($this->tmpDir);
+        $auth = new Authenticator($configStorage, $this->session);
+
+        $this->assertTrue($auth->canUse('public'));
+        $this->assertFalse($auth->canEdit('public'));
+        $this->assertFalse($auth->canUse('private'));
+        $this->assertFalse($auth->canEdit('private'));
+    }
+
+    public function testCanMoveRequiresEditOnBothCategories(): void
+    {
+        $auth = new Authenticator($this->configStorage, $this->session);
+        $auth->login('admin', 'secret123');
+
+        // admin has edit on all categories
+        $this->assertTrue($auth->canMove('public', 'private'));
+        $this->assertTrue($auth->canMove('private', 'session'));
+    }
+
+    public function testGuestCannotMove(): void
+    {
+        file_put_contents(
+            $this->tmpDir . '/settings.php',
+            '<?php return ["guest_user" => "guest", "tmp_dir" => "/tmp", "log_dir" => "/var/log", "timezone" => "UTC"];'
+        );
+        $configStorage = new ConfigStorage($this->tmpDir);
+        $auth = new Authenticator($configStorage, $this->session);
+
+        $this->assertFalse($auth->canMove('public', 'private'));
+        $this->assertFalse($auth->canMove('public', 'public'));
+    }
+
+    public function testFallbackFullRightsForLegacyUser(): void
+    {
+        // Create a user without repos section
+        $passwordHash = password_hash('legacy', PASSWORD_DEFAULT);
+        file_put_contents(
+            $this->tmpDir . '/users.php',
+            '<?php return [
+                "legacy" => ["password" => ' . var_export($passwordHash, true) . '],
+            ];'
+        );
+
+        $configStorage = new ConfigStorage($this->tmpDir);
+        $auth = new Authenticator($configStorage, $this->session);
+        $auth->login('legacy', 'legacy');
+
+        // Legacy user gets full rights
+        $this->assertTrue($auth->canUse('public'));
+        $this->assertTrue($auth->canEdit('public'));
+        $this->assertTrue($auth->canUse('private'));
+        $this->assertTrue($auth->canEdit('private'));
+    }
+
+    public function testGuestDefaultRights(): void
+    {
+        // Create users.php without repos section for guest
+        file_put_contents(
+            $this->tmpDir . '/users.php',
+            '<?php return [
+                "guest" => ["password" => null],
+            ];'
+        );
+        file_put_contents(
+            $this->tmpDir . '/settings.php',
+            '<?php return ["guest_user" => "guest", "tmp_dir" => "/tmp", "log_dir" => "/var/log", "timezone" => "UTC"];'
+        );
+
+        $configStorage = new ConfigStorage($this->tmpDir);
+        $auth = new Authenticator($configStorage, $this->session);
+
+        // Guest without repos section gets default guest rights
+        $this->assertTrue($auth->canUse('public'));
+        $this->assertFalse($auth->canEdit('public'));
+        $this->assertFalse($auth->canUse('private'));
+        $this->assertFalse($auth->canEdit('private'));
     }
 
     private function removeDir(string $dir): void

@@ -35,6 +35,16 @@ class App
         self::session()->start();
         self::auth()->resolve();
 
+        // Инициализация языка
+        $userLang = self::session()->get('lang');
+        if ($userLang !== null) {
+            \App\Helpers\Lang::setLocale($userLang);
+        } else {
+            $detected = \App\Helpers\Lang::detectFromRequest();
+            \App\Helpers\Lang::setLocale($detected);
+            self::session()->set('lang', $detected);
+        }
+
         self::registerRoutes();
     }
 
@@ -199,9 +209,39 @@ class App
             $controller->list();
         });
 
+        $router->map('GET', '/repositories/add', function () {
+            $controller = new \App\Controllers\RepositoryController();
+            $controller->addForm();
+        });
+
+        $router->map('POST', '/repositories/add', function () {
+            $controller = new \App\Controllers\RepositoryController();
+            $controller->add();
+        });
+
         $router->map('POST', '/repositories/check', function () {
             $controller = new \App\Controllers\RepositoryController();
             $controller->check();
+        });
+
+        $router->map('POST', '/repositories/delete', function () {
+            $controller = new \App\Controllers\RepositoryController();
+            $controller->delete();
+        });
+
+        $router->map('POST', '/repositories/move', function () {
+            $controller = new \App\Controllers\RepositoryController();
+            $controller->move();
+        });
+
+        $router->map('POST', '/language', function () {
+            $request = new \App\Core\Request();
+            $lang = $request->post('lang', 'en');
+            if (in_array($lang, \App\Helpers\Lang::available(), true)) {
+                \App\Core\App::session()->set('lang', $lang);
+                \App\Helpers\Lang::setLocale($lang);
+            }
+            \App\Core\App::response()->redirect($_SERVER['HTTP_REFERER'] ?? '/');
         });
 
         $router->map('POST', '/cache/invalidate', function () {
