@@ -145,8 +145,9 @@ class AuthenticatorTest extends TestCase
     public function testCanUseReturnsTrueForAllowedCategory(): void
     {
         $auth = new Authenticator($this->configStorage, $this->session);
+        $auth->login('admin', 'secret123');
 
-        // admin is not guest, has full rights
+        // admin has full rights
         $this->assertTrue($auth->canUse('public'));
         $this->assertTrue($auth->canUse('private'));
         $this->assertTrue($auth->canUse('session'));
@@ -170,6 +171,7 @@ class AuthenticatorTest extends TestCase
     public function testCanMoveRequiresEditOnBothCategories(): void
     {
         $auth = new Authenticator($this->configStorage, $this->session);
+        $auth->login('admin', 'secret123');
 
         // admin has edit on all categories
         $this->assertTrue($auth->canMove('public', 'private'));
