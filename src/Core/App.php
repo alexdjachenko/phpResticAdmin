@@ -5,6 +5,7 @@ namespace App\Core;
 use App\Auth\Authenticator;
 use App\Restic\CommandRunner;
 use App\Restic\RepositoryService;
+use App\Restic\SnapshotService;
 use App\Storage\ConfigStorage;
 use App\Storage\RepositoryStorage;
 
@@ -17,6 +18,7 @@ class App
     private static ?RepositoryStorage $repoStorage = null;
     private static ?CommandRunner $runner = null;
     private static ?RepositoryService $repoService = null;
+    private static ?SnapshotService $snapshotService = null;
     private static ?Security $security = null;
     private static ?Response $response = null;
 
@@ -34,6 +36,23 @@ class App
 
         self::session()->start();
         self::auth()->resolve();
+
+        // Сбросить current_repo если репозиторий был удалён
+        $currentRepoId = self::session()->get('current_repo');
+        if ($currentRepoId !== null) {
+            $username = self::auth()->user();
+            $repos = self::repoStorage()->loadAll($username ?? '');
+            $stillExists = false;
+            foreach ($repos as $r) {
+                if (($r['id'] ?? '') === $currentRepoId) {
+                    $stillExists = true;
+                    break;
+                }
+            }
+            if (!$stillExists) {
+                self::session()->remove('current_repo');
+            }
+        }
 
         // Инициализация языка
         $userLang = self::session()->get('lang');
@@ -164,6 +183,14 @@ class App
         return self::$repoService;
     }
 
+    public static function snapshotService(): SnapshotService
+    {
+        if (self::$snapshotService === null) {
+            self::$snapshotService = new SnapshotService(self::runner());
+        }
+        return self::$snapshotService;
+    }
+
     public static function security(): Security
     {
         if (self::$security === null) {
@@ -232,6 +259,46 @@ class App
         $router->map('POST', '/repositories/move', function () {
             $controller = new \App\Controllers\RepositoryController();
             $controller->move();
+        });
+
+        $router->map('GET', '/repositories/detail', function () {
+            $controller = new \App\Controllers\RepositoryController();
+            $controller->detail();
+        });
+
+        $router->map('GET', '/repositories/edit', function () {
+            $controller = new \App\Controllers\RepositoryController();
+            $controller->editForm();
+        });
+
+        $router->map('POST', '/repositories/edit', function () {
+            $controller = new \App\Controllers\RepositoryController();
+            $controller->edit();
+        });
+
+        $router->map('POST', '/repositories/backup', function () {
+            $controller = new \App\Controllers\RepositoryController();
+            $controller->backup();
+        });
+
+        $router->map('POST', '/repositories/select', function () {
+            $controller = new \App\Controllers\RepositoryController();
+            $controller->select();
+        });
+
+        $router->map('GET', '/snapshots', function () {
+            $controller = new \App\Controllers\SnapshotController();
+            $controller->list();
+        });
+
+        $router->map('POST', '/snapshots/tag', function () {
+            $controller = new \App\Controllers\SnapshotController();
+            $controller->tag();
+        });
+
+        $router->map('GET', '/browse', function () {
+            $controller = new \App\Controllers\BrowseController();
+            $controller->tree();
         });
 
         $router->map('POST', '/language', function () {

@@ -429,3 +429,312 @@ button:hover,
 .btn-cancel:hover {
     background: #e9ecef;
 }
+
+/* Back link */
+.back-link {
+    font-size: 13px;
+    color: #3498db;
+    text-decoration: none;
+}
+
+.back-link:hover {
+    text-decoration: underline;
+}
+
+/* Repository detail page */
+.repo-detail h2 {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.repo-info {
+    width: 100%;
+    margin-bottom: 16px;
+    border-collapse: collapse;
+}
+
+.repo-info th,
+.repo-info td {
+    padding: 6px 12px;
+    text-align: left;
+    border-bottom: 1px solid #eee;
+}
+
+.repo-info th {
+    width: 140px;
+    color: #6c757d;
+    font-weight: 600;
+}
+
+.path-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.path-list li {
+    margin-bottom: 2px;
+}
+
+.repo-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.btn-backup {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+    font-size: 14px;
+    cursor: pointer;
+    background: #27ae60;
+    color: #fff;
+}
+
+.btn-backup:hover {
+    background: #219a52;
+}
+
+.no-backup-hint {
+    color: #6c757d;
+    font-size: 13px;
+    font-style: italic;
+}
+
+.btn-edit {
+    display: inline-block;
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-size: 14px;
+    text-decoration: none;
+    background: #f39c12;
+    color: #fff;
+}
+
+.btn-edit:hover {
+    background: #e67e22;
+}
+
+.btn-snapshots {
+    display: inline-block;
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-size: 14px;
+    text-decoration: none;
+    background: #3498db;
+    color: #fff;
+}
+
+.btn-snapshots:hover {
+    background: #2980b9;
+}
+
+.repo-snapshots {
+    margin-top: 20px;
+}
+
+.repo-snapshots h3 {
+    font-size: 16px;
+    margin-bottom: 8px;
+}
+
+/* Repository selector in header */
+.repo-selector {
+    display: inline-flex;
+    align-items: center;
+}
+
+.repo-selector select {
+    padding: 4px 8px;
+    font-size: 12px;
+    border: 1px solid #7f8c8d;
+    border-radius: 3px;
+    background: transparent;
+    color: #ecf0f1;
+    cursor: pointer;
+    max-width: 180px;
+}
+
+.repo-selector select option {
+    color: #333;
+    background: #fff;
+}
+
+.repo-selector select:focus {
+    outline: none;
+    border-color: #ecf0f1;
+}
+
+/* Snapshots table */
+.snapshot-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 8px;
+}
+
+.snapshot-table th,
+.snapshot-table td {
+    padding: 8px 12px;
+    text-align: left;
+    border-bottom: 1px solid #eee;
+}
+
+.snapshot-table th {
+    background: #f8f9fa;
+    font-weight: 600;
+}
+
+.snap-repo-name {
+    font-size: 16px;
+    color: #6c757d;
+    font-weight: normal;
+}
+
+/* Tag badges */
+.tag-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 6px;
+    margin: 1px;
+    font-size: 11px;
+    font-weight: 600;
+    background: #d1ecf1;
+    color: #0c5460;
+    border-radius: 3px;
+}
+
+.tag-remove-btn {
+    padding: 0 4px;
+    font-size: 12px;
+    line-height: 1;
+    border: none;
+    background: none;
+    color: #856404;
+    cursor: pointer;
+}
+
+.tag-remove-btn:hover {
+    color: #e74c3c;
+}
+
+.tag-add-row {
+    display: inline-flex;
+    gap: 4px;
+    margin-top: 4px;
+}
+
+.tag-input {
+    padding: 2px 6px;
+    font-size: 11px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    width: 80px;
+}
+
+.tag-add-btn {
+    padding: 2px 8px;
+    font-size: 11px;
+    border: none;
+    border-radius: 3px;
+    background: #27ae60;
+    color: #fff;
+    cursor: pointer;
+}
+
+.tag-add-btn:hover {
+    background: #219a52;
+}
+
+.tag-cell {
+    line-height: 1.8;
+}
+
+/* Browse */
+.browse-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.browse-table th,
+.browse-table td {
+    padding: 6px 12px;
+    text-align: left;
+    border-bottom: 1px solid #eee;
+}
+
+.browse-table th {
+    background: #f8f9fa;
+    font-weight: 600;
+}
+
+.browse-dir a {
+    color: #3498db;
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.browse-dir a:hover {
+    text-decoration: underline;
+}
+
+/* Breadcrumbs */
+.breadcrumbs {
+    font-size: 13px;
+    margin-bottom: 12px;
+    padding: 8px 12px;
+    background: #f8f9fa;
+    border-radius: 4px;
+}
+
+.breadcrumbs a {
+    color: #3498db;
+    text-decoration: none;
+}
+
+.breadcrumbs a:hover {
+    text-decoration: underline;
+}
+
+.breadcrumb-sep {
+    color: #adb5bd;
+    margin: 0 4px;
+}
+
+.breadcrumb-current {
+    color: #333;
+    font-weight: 600;
+}
+
+.btn-browse {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 3px;
+    font-size: 12px;
+    text-decoration: none;
+    background: #3498db;
+    color: #fff;
+}
+
+.btn-browse:hover {
+    background: #2980b9;
+}
+
+/* Dashboard */
+.dashboard-snapshots {
+    max-width: 700px;
+}
+
+/* edit form textarea */
+.add-repo-form textarea {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 14px;
+    font-family: monospace;
+}

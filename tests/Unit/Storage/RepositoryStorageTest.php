@@ -205,6 +205,54 @@ YAML;
         unset($_SESSION['session_repos']);
     }
 
+    public function testUpdatePreservesId(): void
+    {
+        $storage = new RepositoryStorage($this->tmpDir . '/repositories.yaml');
+
+        $storage->save('public', ['id' => 'upd1', 'name' => 'Original', 'type' => 'local', 'path' => '/tmp/orig', 'password' => null], 'testuser');
+
+        $storage->update('public', 'upd1', ['name' => 'Updated Name'], 'testuser');
+
+        $all = $storage->loadAll('testuser');
+        $this->assertCount(1, $all);
+        $this->assertSame('upd1', $all[0]['id']);
+        $this->assertSame('Updated Name', $all[0]['name']);
+        $this->assertSame('local', $all[0]['type']);
+        $this->assertSame('/tmp/orig', $all[0]['path']);
+    }
+
+    public function testUpdateChangesEditableFields(): void
+    {
+        $storage = new RepositoryStorage($this->tmpDir . '/repositories.yaml');
+
+        $storage->save('public', ['id' => 'upd2', 'name' => 'Original', 'type' => 'local', 'path' => '/tmp/orig', 'password' => null], 'testuser');
+
+        $storage->update('public', 'upd2', ['name' => 'New Name', 'type' => 'sftp', 'path' => '/new/path'], 'testuser');
+
+        $all = $storage->loadAll('testuser');
+        $this->assertSame('New Name', $all[0]['name']);
+        $this->assertSame('sftp', $all[0]['type']);
+        $this->assertSame('/new/path', $all[0]['path']);
+    }
+
+    public function testUpdateBackupPaths(): void
+    {
+        $storage = new RepositoryStorage($this->tmpDir . '/repositories.yaml');
+
+        $storage->save('public', ['id' => 'upd3', 'name' => 'BP Repo', 'type' => 'local', 'path' => '/tmp/bp', 'password' => null], 'testuser');
+
+        $storage->update('public', 'upd3', ['backup_paths' => ['/home', '/etc']], 'testuser');
+
+        $all = $storage->loadAll('testuser');
+        $this->assertSame(['/home', '/etc'], $all[0]['backup_paths']);
+
+        // Update to remove backup_paths
+        $storage->update('public', 'upd3', ['backup_paths' => null], 'testuser');
+
+        $all = $storage->loadAll('testuser');
+        $this->assertNull($all[0]['backup_paths'] ?? null);
+    }
+
     private function removeDir(string $dir): void
     {
         if (!is_dir($dir)) {

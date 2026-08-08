@@ -16,6 +16,21 @@ class Response
     public function render(string $template, array $vars = []): string
     {
         $vars['debug'] = App::isDebug();
+
+        $user = App::auth()->user();
+        $vars['repositories'] = $user !== null ? App::repoStorage()->loadAll($user) : [];
+        $vars['currentRepoId'] = App::session()->get('current_repo');
+
+        if (!isset($vars['isLoggedIn'])) {
+            $vars['isLoggedIn'] = App::auth()->isLoggedIn();
+        }
+        if (!isset($vars['username'])) {
+            $vars['username'] = $user;
+        }
+
+        // Flash message (читаем один раз, показываем везде)
+        $vars['flash'] = $vars['flash'] ?? App::session()->flash('success') ?? App::session()->flash('error');
+
         return \App\Helpers\View::render($template, $vars, 'layout.php');
     }
 
