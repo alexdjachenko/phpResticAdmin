@@ -302,6 +302,41 @@ Fallback-правила:
 
 ---
 
+## Gotchas (неочевидные ловушки, найденные при отладке)
+
+### restic CLI
+
+- **`restic ls --json` выдаёт NDJSON (JSON Lines), а не массив.** Каждая строка — отдельный JSON-объект. `json_decode($stdout, true)` на всём выводе падает, нужно парсить построчно.
+- **`restic snapshots --json` в старых версиях (0.14, Debian bookworm) не содержит `summary.total_size`.** Для получения размеров использовать `restic stats --json --mode raw-data <ids...>`. В коде: `SnapshotService::enrichWithSizes()`.
+- **`--insecure-no-password` — глобальный флаг, должен стоять ДО подкоманды** (`restic --insecure-no-password --repo /x snapshots`), а не после позиционных аргументов (иначе restic примет его за snapshot ID). В коде: `SnapshotService::buildCommand()` обеспечивает правильный порядок.
+- **`restic ls` возвращает записи `.` и `..`** среди вывода. `empty('..')` → false, поэтому фильтровать явно: `$name === '.' || $name === '..'`.
+- **restic требует `$HOME` для кеша** (`.cache/restic`). В Docker-контейнере переменная не задана → падает `ls`, `find` и др. `CommandRunner::ensureEnv()` проставляет `HOME=/tmp`.
+- **`restic ls` не рекурсивен.** Показывает только прямых детей каталога. Каждый клик по папке в browse делает отдельный HTTP-запрос.
+
+### Docker / права
+
+- **Apache работает под `www-data`.** `mkdir('/tmp/phpresticadmin')` падает с Permission denied. Создавать директорию на этапе сборки в `Dockerfile`: `RUN mkdir -p /tmp/phpresticadmin/restic-cache && chown -R www-data:www-data /tmp/phpresticadmin`.
+- **`RESTIC_CACHE_DIR`** указывает на `/tmp/phpresticadmin/restic-cache` (создаётся в Dockerfile). `CommandRunner::ensureEnv()` пробует использовать её; при недоступности — fallback на `HOME/.cache/restic`.
+- **`tmp_dir` в `settings.php`** — `/tmp/phpresticadmin` (системный tmp, не проектный). Не требует Docker volume.
+
+### PHP
+
+- **`round(1.0, 2)` → `1` (без конечных нулей), а не `"1.00"`.** Для форматирования с сохранением десятичных знаков использовать `number_format()`. Исключение: байты (unitIndex=0) — целые без десятичных.
+- **`empty('..')` → false.** Строка `".."` не считается empty. Явные сравнения надёжнее.
+
+### CI / GitHub Actions
+
+- **GitHub-агент НЕ имеет доступа к Actions API** (логи джобов, `gh run view`). Для получения логов CI просить пользователя скинуть вывод или дать прямую ссылку на PR Checks.
+- **PR-образы тегируются `pr-{номер}`** при каждом пуше (workflow `build-and-publish.yml`). `latest` ставится только на версионные теги `v*`, не на push в main.
+
+### Интерфейс
+
+- **`current_repo` в сессии переживает между вкладками.** При открытии новой вкладки дашборд показывает данные последнего выбранного репо. Дашборд делает `redirect('/repositories')`, сбрасывая `current_repo`.
+- **Стриминг (`Content-Type: text/plain`) даёт чёрную страницу без навигации.** Для backup используется синхронный `backupSync()` + рендеринг в шаблоне `repositories/backup.php`.
+- **Языковой переключатель в layout НЕ проверяет CSRF** (роут `/language` не вызывает `validateCsrf`). Токен убран из формы, чтобы не расходовать впустую.
+
+---
+
 ## Основные команды
 
 | Команда | Назначение | Контекст |
