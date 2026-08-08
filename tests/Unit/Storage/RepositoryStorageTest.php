@@ -51,11 +51,19 @@ YAML;
 
     public function testLoadAllReturnsEmptyArrayWhenFileMissing(): void
     {
-        $storage = new RepositoryStorage($this->tmpDir . '/nonexistent.yaml');
+        $path = $this->tmpDir . '/nonexistent.yaml';
+        $storage = new RepositoryStorage($path);
         $repos = $storage->loadAll();
 
         $this->assertIsArray($repos);
         $this->assertEmpty($repos);
+
+        // File must be auto-created with a template comment
+        $this->assertFileExists($path);
+        $content = file_get_contents($path);
+        $this->assertIsString($content);
+        $this->assertStringContainsString('# repositories:', $content);
+        $this->assertStringContainsString('#   - id:', $content);
     }
 
     public function testLoadAllReturnsEmptyArrayForEmptyYaml(): void

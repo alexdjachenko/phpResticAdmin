@@ -40,7 +40,7 @@ src/
     CommandRunner.php    # Обёртка proc_open() для выполнения restic CLI
     RepositoryService.php # testConnection(): выполняет "restic snapshots --json"
   Controllers/
-    DashboardController.php  # GET / → редирект на /repositories
+    DashboardController.php  # GET / → редирект на /repositories, POST /cache/invalidate
     AuthController.php       # GET/POST /login, GET /logout
     RepositoryController.php # GET /repositories, POST /repositories/check (AJAX)
 templates/
@@ -52,7 +52,7 @@ templates/
 data/
   cfg/
     users.php            # return ['username' => ['password' => 'bcrypt-хеш']]
-    settings.php         # return ['guest_user' => null|string, 'timezone', ...]
+    settings.php         # return ['guest_user' => null|string, 'debug' => int, 'timezone', ...]
   data/
     repositories.yaml    # YAML-список репозиториев (id, name, type, path, password, env)
 tests/
@@ -84,21 +84,23 @@ docker/
 1. `htdocs/index.php` подключает `vendor/autoload.php`, вызывает `App::boot()`, затем `App::run()`
 2. `App::boot()`:
    - Устанавливает `date_default_timezone_set` из `settings.php`
+   - Кеширует уровень отладки из `'debug'` (0/1/2)
    - Запускает PHP-сессию через `Session::start()`
    - Вызывает `Authenticator::resolve()` (читает `auth_user` из сессии или подставляет `guest_user`)
-   - Вызывает `registerRoutes()` — регистрирует 6 статических роутов
+   - Вызывает `registerRoutes()` — регистрирует 7 статических роутов
 3. `App::run()`: создаёт `Request`, передаёт его в `Router::dispatch()`
 
 ### Роуты (все статические, без параметров пути)
 
-| Метод | Путь                 | Controller::method         | Требуется авторизация |
-|-------|----------------------|----------------------------|------------------------|
-| GET   | `/`                  | DashboardController::index | Нет |
-| GET   | `/login`             | AuthController::loginForm  | Нет |
-| POST  | `/login`             | AuthController::login      | Нет |
-| GET   | `/logout`            | AuthController::logout     | Нет |
-| GET   | `/repositories`      | RepositoryController::list | user != null |
-| POST  | `/repositories/check`| RepositoryController::check| isLoggedIn |
+| Метод | Путь                 | Controller::method              | Требуется авторизация |
+|-------|----------------------|---------------------------------|------------------------|
+| GET   | `/`                  | DashboardController::index       | Нет |
+| GET   | `/login`             | AuthController::loginForm        | Нет |
+| POST  | `/login`             | AuthController::login            | Нет |
+| GET   | `/logout`            | AuthController::logout           | Нет |
+| GET   | `/repositories`      | RepositoryController::list       | user != null |
+| POST  | `/repositories/check`| RepositoryController::check      | isLoggedIn |
+| POST  | `/cache/invalidate`  | DashboardController::invalidateCache | isLoggedIn + debug |
 
 ### Логика аутентификации
 
@@ -114,14 +116,35 @@ docker/
 ### CSRF-защита
 
 - `Security::csrfToken()` генерирует случайный токен и сохраняет в сессии
+- `Security::validateCsrf()` сравнивает с токеном сессии через `hash_equals` и удаляет токен после первой проверки — токен ОДНОРАЗОВЫЙ
 - Форма входа и кнопка «Проверить» содержат скрытое поле `_csrf_token`
-- При POST `Security::validateCsrf()` сравнивает с токеном сессии (hash_equals, токен одноразовый — сбрасывается после первой проверки)
+- Все JSON-ответы (успех и ошибка) эндпоинта `/repositories/check` ДОЛЖНЫ возвращать поле `_csrf_token` с новым токеном — фронтенд обновляет `data-csrf` на кнопке из ответа
+- Если JSON-ответ не вернул новый токен, следующее нажатие «Проверить» получит «Invalid security token»
+
+### Режим отладки и логирование
+
+- В `settings.php`: `'debug' => 0` (0=выкл, 1=info, 2=verbose)
+- В production ставить `0` — логируется только критическое (уровень 0)
+- `App::log($message, $level)` — сообщение пишется только если `$level <= debugLevel`
+  - Уровень 0: всегда (ошибки, вход в систему, инвалидация кеша)
+  - Уровень 1: info (попытки входа, проверки CSRF, prefix хеша)
+  - Уровень 2: verbose (загрузка каждого конфига)
+- `App::isDebug()` возвращает `true` при уровне >= 1
+- При включённой отладке в шапке появляется бейдж DEBUG, на странице репозиториев — панель с кнопкой инвалидации OPcache
+
+### Инвалидация кешей
+
+- `POST /cache/invalidate` — требует авторизации и включённой отладки, CSRF-токен
+- `App::invalidateCaches()` вызывает `opcache_reset()` и `opcache_get_status()`
+- Возвращает количество сброшенных скриптов, при уровне >= 2 — их список
+- Кнопка в debug-панели на странице репозиториев
 
 ### Рендеринг шаблонов
 
 - `View::render('template.php', $vars, 'layout.php')`:
   - `extract($vars)`, `require` шаблона, захват вывода в `$content`
   - Затем `require` layout.php, который выводит `$content` внутри `<main>`
+- `Response::render()` автоматически добавляет `'debug' => App::isDebug()` в переменные шаблона
 - Шаблоны — чистые PHP-файлы, без шаблонизатора
 
 ### Интеграция с Restic
@@ -129,6 +152,11 @@ docker/
 - `CommandRunner::run()` использует `proc_open()` с пайпами stdin/stdout/stderr
 - `RepositoryService::testConnection()` выполняет `restic snapshots --json --repo <путь>`
 - Если пароль задан — передаёт `RESTIC_PASSWORD` в окружение; иначе добавляет `--insecure-no-password`
+
+### Автосоздание `repositories.yaml`
+
+- При первом обращении к `RepositoryStorage::loadAll()` если файл не существует — создаётся с комментарием-шаблоном
+- Это гарантирует, что приложение не падает с «No repositories configured» при чистой установке
 
 ---
 
@@ -164,6 +192,7 @@ return [
 ```php
 return [
     'guest_user' => null,  // Установите 'guest', чтобы разрешить анонимный доступ только для чтения
+    'debug' => 0,          // 0 = выкл, 1 = info, 2 = verbose
     'tmp_dir' => __DIR__ . '/../../tmp',
     'log_dir' => __DIR__ . '/../logs',
     'timezone' => 'UTC',
@@ -200,21 +229,21 @@ repositories:
 
 ### Не удаётся войти даже с правильным паролем
 
-1. **OPcache**: модуль Apache PHP кеширует подключаемые через `require` файлы. `ConfigStorage::loadPhpFile()` вызывает `opcache_invalidate()` перед `require`, но если вы отредактировали `users.php` после того, как APCu/OPcache уже закешировал старую версию — перезапустите Apache внутри контейнера: `docker exec <контейнер> apache2ctl restart` или просто перезапустите контейнер.
+1. **OPcache**: модуль Apache PHP кеширует подключаемые через `require` файлы. `ConfigStorage::loadPhpFile()` вызывает `opcache_invalidate()` перед `require`, но надёжнее — перезапустить контейнер: `docker restart <контейнер>`.
 
-2. **Формат хеша**: Хеш пароля в `users.php` должен быть валидным bcrypt-хешем из `password_hash('пароль', PASSWORD_DEFAULT)`. НЕ используйте хеш-заглушку из шаблона — это фиктивная строка, которая никогда не пройдёт проверку для пароля `'admin'`.
+2. **Формат хеша**: bcrypt-хеш — ровно 60 символов, начинается с `$2y$`. При копировании из терминала в буфер часто приклеивается приглашение командной строки (`root@...`), хеш становится длиннее 60 символов и `password_verify` всегда возвращает `false`. Проверить: `php -r '$u = require "data/cfg/users.php"; var_dump(strlen($u["admin"]["password"]));'` — должно быть ровно 60.
 
-3. **Видимость файлов**: Если используется bind mount для `data/`, убедитесь, что файл читаем для `www-data` внутри контейнера.
+3. **Генерация без мусора**: `php -r "echo password_hash('admin', PASSWORD_DEFAULT) . PHP_EOL;"` — копировать только строку хеша, без `root@...`.
 
-### Тесты проходят локально, но падают в CI
+4. **Включите отладку**: в `settings.php` поставьте `'debug' => 2`, перезапустите контейнер. Логи покажут `[AUTH] password_verify FAILED for admin, need_rehash: yes/no`.
 
-- `AuthenticatorTest` использует `session_start()` в CLI-режиме. CI должен иметь поддержку сессий в PHP CLI.
-- `ResticConnectionTest` требует бинарник `restic` в PATH. Тест инициализирует временный репозиторий, выполняет `snapshots --json`, затем очищает. Если `restic init` завершился с ошибкой, тест пропускается через `markTestSkipped()`.
-- Интеграционный `CanaryTest` ожидает, что приложение ответит на `http://localhost:8080` и содержит "phpresticadmin" в теле ответа. Контейнер должен быть запущен до запуска тестов.
+### Ошибка «Invalid security token» при повторной проверке репозитория
 
-### Ошибка «Invalid security token» при входе
+CSRF-токен одноразовый. При первом AJAX-запросе `/repositories/check` токен расходуется. Если ответ не содержит нового `_csrf_token`, следующее нажатие кнопки отправит старый токен и получит ошибку. Каждый JSON-ответ `/repositories/check` должен включать `'_csrf_token' => App::security()->csrfToken()`.
 
-CSRF-токен одноразовый. Если вы отправили форму, нажали «Назад» в браузере и отправили снова — токен уже использован. Обновите страницу входа, чтобы получить новый токен.
+### Отладка без нарушения заголовков
+
+`echo`/`var_dump` в production-контейнере ломают `session_start()` и `header()` (ошибка «headers already sent»). Использовать `App::log()` — пишет в stderr Apache через `error_log()`, читается через `docker logs <контейнер>`.
 
 ---
 
@@ -224,6 +253,7 @@ CSRF-токен одноразовый. Если вы отправили фор�
 - **Пространства имён**: PSR-4, `App\` → `src/`, `App\Tests\` → `tests/`
 - **Без фреймворков**: Вся инфраструктура находится в `src/Core/`. Не добавлять фреймворковые зависимости.
 - **Статический сервис-локатор**: Статические методы `App::*()` выступают в роли сервис-контейнера. Не использовать `new` напрямую — всегда обращаться через `App`.
+- **Логирование через `App::log()`**: Не использовать `error_log()` напрямую. Всегда `App::log($message, $level)` с правильным уровнем (0=critical, 1=info, 2=verbose).
 - **Тестировать каждый новый класс**: Создавать соответствующий тест в `tests/Unit/` до или сразу после написания класса.
 - **PHPStan level 1**: Весь код в `src/` и `htdocs/` должен проходить проверку.
 
@@ -242,5 +272,6 @@ CSRF-токен одноразовый. Если вы отправили фор�
 ## TODO / Технический долг
 
 - [ ] **Демо-данные**: при установке не создаётся `repositories.yaml` с примерами репозиториев. Гостевой вход показывает «No repositories configured». Добавить демо-репозиторий в этапе 3.
-- [ ] **Отладка входа**: `AuthController::login()` временно содержит `error_log()` для диагностики. Убрать после завершения отладки.
+- [ ] **Убрать отладочные `error_log`**: `AuthController::login()`, `Authenticator::login()` и `ConfigStorage::loadPhpFile()` содержат временные `error_log()` для диагностики проблемы входа. Удалить после полной проверки авторизации.
 - [ ] **Валидация `users.php`**: лишняя запятая между элементами массива вызывает «Cannot use empty array elements in arrays». Нужна валидация конфигов при загрузке.
+- [ ] **Интеграционный тест `POST /cache/invalidate`**: нужен тест в `tests/Integration/` с запущенным контейнером, `debug=1`, авторизацией и проверкой сброса OPcache.

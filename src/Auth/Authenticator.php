@@ -2,6 +2,7 @@
 
 namespace App\Auth;
 
+use App\Core\App;
 use App\Core\Session;
 use App\Storage\ConfigStorage;
 
@@ -43,15 +44,15 @@ class Authenticator
         $users = $this->getUsers();
 
         if (!isset($users[$username])) {
-            error_log('[AUTH] User not found: ' . $username);
+            App::log('User not found: ' . $username, 1);
             return false;
         }
 
         $hash = $users[$username]['password'];
-        error_log('[AUTH] Checking password for ' . $username . ', hash prefix: ' . substr($hash, 0, 10) . '...');
+        App::log('Checking password for ' . $username . ', hash prefix: ' . substr($hash, 0, 10) . '...', 1);
 
         if (!password_verify($password, $hash)) {
-            error_log('[AUTH] password_verify FAILED for ' . $username . ', need_rehash: ' . (password_needs_rehash($hash, PASSWORD_DEFAULT) ? 'yes' : 'no'));
+            App::log('password_verify FAILED for ' . $username . ', need_rehash: ' . (password_needs_rehash($hash, PASSWORD_DEFAULT) ? 'yes' : 'no'), 1);
             return false;
         }
 

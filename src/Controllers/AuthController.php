@@ -27,46 +27,46 @@ class AuthController
 
     public function login(): void
     {
-        error_log('[LOGIN] START');
+        App::log('POST /login — START', 1);
 
         $request = new Request();
         $auth = App::auth();
         $security = App::security();
 
-        error_log('[LOGIN] POST data: ' . json_encode($request->allPost()));
+        App::log('POST data: ' . json_encode($request->allPost()), 1);
 
         $token = $request->post('_csrf_token', '');
-        error_log('[LOGIN] CSRF token from form: ' . ($token !== '' ? 'present' : 'EMPTY'));
+        App::log('CSRF token from form: ' . ($token !== '' ? 'present' : 'EMPTY'), 1);
 
         if (!$security->validateCsrf($token)) {
-            error_log('[LOGIN] CSRF validation FAILED');
+            App::log('CSRF validation FAILED', 1);
             App::session()->flash('error', 'Invalid security token. Please try again.');
             App::response()->redirect('/login');
             return;
         }
-        error_log('[LOGIN] CSRF OK');
+        App::log('CSRF OK', 1);
 
         $username = $request->post('username', '');
         $password = $request->post('password', '');
 
-        error_log('[LOGIN] username=' . ($username !== '' ? $username : 'EMPTY') . ' password=' . ($password !== '' ? '***' : 'EMPTY'));
+        App::log('username=' . ($username !== '' ? $username : 'EMPTY') . ' password=' . ($password !== '' ? '***' : 'EMPTY'), 1);
 
         if ($username === '' || $password === '') {
-            error_log('[LOGIN] Empty credentials, redirecting');
+            App::log('Empty credentials, redirecting', 1);
             App::session()->flash('error', 'Username and password are required.');
             App::response()->redirect('/login');
             return;
         }
 
-        error_log('[LOGIN] Calling auth->login()...');
+        App::log('Calling auth->login()...', 1);
 
         if ($auth->login($username, $password)) {
-            error_log('[LOGIN] SUCCESS');
+            App::log('LOGIN SUCCESS', 0);
             App::response()->redirect('/repositories');
             return;
         }
 
-        error_log('[LOGIN] FAILED - password_verify returned false');
+        App::log('LOGIN FAILED — password_verify returned false', 1);
         App::session()->flash('error', 'Invalid username or password.');
         App::response()->redirect('/login');
     }

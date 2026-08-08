@@ -2,6 +2,7 @@
 
 namespace App\Storage;
 
+use App\Core\App;
 use Symfony\Component\Yaml\Yaml;
 
 class RepositoryStorage
@@ -19,6 +20,8 @@ class RepositoryStorage
     public function loadAll(): array
     {
         if (!file_exists($this->dataFile)) {
+            App::log('repositories.yaml not found, creating empty file', 0);
+            $this->createEmpty();
             return [];
         }
 
@@ -35,5 +38,16 @@ class RepositoryStorage
         }
 
         return array_values($repositories);
+    }
+
+    private function createEmpty(): void
+    {
+        $dir = dirname($this->dataFile);
+        if (!is_dir($dir)) {
+            mkdir($dir, 0777, true);
+        }
+
+        $yaml = "# repositories:\n#   - id: \"a1b2c3d4e5f6g7h8\"\n#     name: \"Example Backup\"\n#     type: \"local\"\n#     path: \"/backups/example\"\n#     password: null\n";
+        file_put_contents($this->dataFile, $yaml);
     }
 }

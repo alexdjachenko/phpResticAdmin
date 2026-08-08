@@ -15,6 +15,7 @@ class Response
      */
     public function render(string $template, array $vars = []): string
     {
+        $vars['debug'] = App::isDebug();
         return \App\Helpers\View::render($template, $vars, 'layout.php');
     }
 

@@ -20,9 +20,17 @@ class App
     private static ?Security $security = null;
     private static ?Response $response = null;
 
+    /**
+     * Уровень отладки: 0 = выкл, 1 = info, 2 = verbose.
+     */
+    private static int $debugLevel = 0;
+
     public static function boot(): void
     {
-        date_default_timezone_set(self::configStorage()->loadSettings()['timezone'] ?? 'UTC');
+        $settings = self::configStorage()->loadSettings();
+
+        date_default_timezone_set($settings['timezone'] ?? 'UTC');
+        self::$debugLevel = (int) ($settings['debug'] ?? 0);
 
         self::session()->start();
         self::auth()->resolve();
@@ -34,6 +42,60 @@ class App
     {
         $request = new Request();
         self::router()->dispatch($request);
+    }
+
+    /**
+     * Уровень отладки из настроек.
+     */
+    public static function debugLevel(): int
+    {
+        return self::$debugLevel;
+    }
+
+    /**
+     * Включён ли режим отладки (уровень >= 1).
+     */
+    public static function isDebug(): bool
+    {
+        return self::$debugLevel >= 1;
+    }
+
+    /**
+     * Запись в лог. Уровни: 0 = всегда, 1 = info, 2 = verbose.
+     * Сообщение пишется только если $level <= debugLevel.
+     */
+    public static function log(string $message, int $level = 1): void
+    {
+        if ($level <= self::$debugLevel) {
+            error_log('[phpresticadmin] ' . $message);
+        }
+    }
+
+    /**
+     * Инвалидация кешей (opcache).
+     * @return array{count: int, files: array<int, string>}
+     */
+    public static function invalidateCaches(): array
+    {
+        $count = 0;
+        $files = [];
+
+        if (function_exists('opcache_reset')) {
+            opcache_reset();
+        }
+
+        if (function_exists('opcache_get_status')) {
+            $status = opcache_get_status(false);
+            $scripts = $status['scripts'] ?? [];
+            $count = count($scripts);
+            if ($count > 0 && self::$debugLevel >= 2) {
+                foreach ($scripts as $path => $info) {
+                    $files[] = str_replace('/var/www/', '', $path);
+                }
+            }
+        }
+
+        return ['count' => $count, 'files' => $files];
     }
 
     public static function configStorage(): ConfigStorage
@@ -140,6 +202,11 @@ class App
         $router->map('POST', '/repositories/check', function () {
             $controller = new \App\Controllers\RepositoryController();
             $controller->check();
+        });
+
+        $router->map('POST', '/cache/invalidate', function () {
+            $controller = new \App\Controllers\DashboardController();
+            $controller->invalidateCache();
         });
     }
 }

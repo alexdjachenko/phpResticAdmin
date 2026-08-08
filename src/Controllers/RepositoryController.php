@@ -27,6 +27,7 @@ class RepositoryController
             'username' => $user,
             'flash' => $flash,
             'csrfToken' => $csrfToken,
+            'debug' => App::isDebug(),
         ]);
     }
 
@@ -34,7 +35,7 @@ class RepositoryController
     {
         $auth = App::auth();
         if (!$auth->isLoggedIn()) {
-            App::response()->json(['ok' => false, 'error' => 'Authentication required'], 403);
+            App::response()->json(['ok' => false, 'error' => 'Authentication required', '_csrf_token' => App::security()->csrfToken()], 403);
             return;
         }
 
@@ -43,14 +44,14 @@ class RepositoryController
 
         $token = $request->post('_csrf_token', '');
         if (!$security->validateCsrf($token)) {
-            App::response()->json(['ok' => false, 'error' => 'Invalid security token'], 403);
+            App::response()->json(['ok' => false, 'error' => 'Invalid security token', '_csrf_token' => App::security()->csrfToken()], 403);
             return;
         }
 
         $repoId = $request->post('repo_id', '');
 
         if ($repoId === '') {
-            App::response()->json(['ok' => false, 'error' => 'Repository ID is required'], 400);
+            App::response()->json(['ok' => false, 'error' => 'Repository ID is required', '_csrf_token' => App::security()->csrfToken()], 400);
             return;
         }
 
@@ -65,11 +66,12 @@ class RepositoryController
         }
 
         if ($repository === null) {
-            App::response()->json(['ok' => false, 'error' => 'Repository not found'], 404);
+            App::response()->json(['ok' => false, 'error' => 'Repository not found', '_csrf_token' => App::security()->csrfToken()], 404);
             return;
         }
 
         $result = App::repoService()->testConnection($repository);
+        $result['_csrf_token'] = App::security()->csrfToken();
         App::response()->json($result);
     }
 }

@@ -38,10 +38,22 @@
 
     <?php if ($isLoggedIn): ?>
     <script>
+    function sendPost(url, body, csrfEl) {
+        return fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: body
+        })
+        .then(function(resp) { return resp.json(); })
+        .then(function(data) {
+            if (data._csrf_token && csrfEl) csrfEl.dataset.csrf = data._csrf_token;
+            return data;
+        });
+    }
+
     document.querySelectorAll('.btn-check').forEach(function(btn) {
         btn.addEventListener('click', function() {
             var repoId = this.dataset.repoId;
-            var csrf = this.dataset.csrf;
             var statusCell = document.querySelector('.repo-status[data-repo-id="' + repoId + '"]');
 
             statusCell.textContent = 'Checking...';
@@ -49,20 +61,10 @@
 
             var formData = new URLSearchParams();
             formData.append('repo_id', repoId);
-            formData.append('_csrf_token', csrf);
+            formData.append('_csrf_token', this.dataset.csrf);
 
-            fetch('/repositories/check', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: formData.toString()
-            })
-            .then(function(resp) { return resp.json(); })
+            sendPost('/repositories/check', formData.toString(), this)
             .then(function(data) {
-                // Update CSRF token for subsequent checks
-                if (data._csrf_token) {
-                    btn.dataset.csrf = data._csrf_token;
-                }
-
                 if (data.ok) {
                     statusCell.textContent = 'OK';
                     statusCell.className = 'repo-status ok';
@@ -77,6 +79,42 @@
             });
         });
     });
+    <?php if (!empty($debug) && $isLoggedIn): ?>
+    // Cache invalidation
+    var csrfCache = '<?= htmlspecialchars($csrfToken ?? '', ENT_QUOTES, 'UTF-8') ?>';
+
+    document.getElementById('btn-cache-invalidate').addEventListener('click', function() {
+        var btnEl = this;
+        btnEl.textContent = 'Clearing...';
+        btnEl.disabled = true;
+
+        var formData = new URLSearchParams();
+        formData.append('_csrf_token', csrfCache);
+
+        sendPost('/cache/invalidate', formData.toString(), null)
+        .then(function(data) {
+            if (data._csrf_token) csrfCache = data._csrf_token;
+            btnEl.textContent = data.ok
+                ? 'Cleared ' + data.count + ' scripts'
+                : data.error || 'Error';
+            btnEl.className = data.ok ? 'btn-cache btn-cache-ok' : 'btn-cache btn-cache-error';
+        })
+        .catch(function() {
+            btnEl.textContent = 'Network error';
+            btnEl.className = 'btn-cache btn-cache-error';
+        })
+        .finally(function() { btnEl.disabled = false; });
+    });
+    <?php endif ?>
     </script>
     <?php endif ?>
+<?php endif ?>
+
+<?php if (!empty($debug) && $isLoggedIn): ?>
+<hr class="debug-sep">
+<div class="debug-panel">
+    <h3>Debug</h3>
+    <p>Debug level: <strong><?= \App\Core\App::debugLevel() ?></strong></p>
+    <button id="btn-cache-invalidate" class="btn-cache">Invalidate OPcache</button>
+</div>
 <?php endif ?>

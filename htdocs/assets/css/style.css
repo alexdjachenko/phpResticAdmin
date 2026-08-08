@@ -41,6 +41,19 @@ header nav a:hover {
     text-decoration: underline;
 }
 
+.debug-badge {
+    display: inline-block;
+    margin-left: 10px;
+    padding: 2px 8px;
+    font-size: 10px;
+    font-weight: 700;
+    color: #856404;
+    background: #fff3cd;
+    border: 1px solid #ffc107;
+    border-radius: 3px;
+    vertical-align: middle;
+}
+
 main {
     max-width: 960px;
     margin: 20px auto;
@@ -147,4 +160,56 @@ button:hover,
 .repo-status.checking {
     color: #7f8c8d;
     font-style: italic;
+}
+
+.debug-sep {
+    margin: 20px 0;
+    border: none;
+    border-top: 1px dashed #ccc;
+}
+
+.debug-panel {
+    padding: 12px 16px;
+    background: #fff3cd;
+    border: 1px solid #ffc107;
+    border-radius: 4px;
+}
+
+.debug-panel h3 {
+    font-size: 14px;
+    margin-bottom: 8px;
+    color: #856404;
+}
+
+.debug-panel p {
+    font-size: 13px;
+    margin-bottom: 8px;
+    color: #856404;
+}
+
+.btn-cache {
+    padding: 6px 14px;
+    border: none;
+    border-radius: 4px;
+    font-size: 13px;
+    cursor: pointer;
+    background: #e67e22;
+    color: #fff;
+}
+
+.btn-cache:hover {
+    background: #d35400;
+}
+
+.btn-cache:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.btn-cache-ok {
+    background: #27ae60;
+}
+
+.btn-cache-error {
+    background: #e74c3c;
 }

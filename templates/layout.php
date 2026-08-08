@@ -15,6 +15,9 @@
             <?php else: ?>
                 <a href="/login">Login</a>
             <?php endif ?>
+            <?php if (!empty($debug)): ?>
+                <span class="debug-badge">DEBUG</span>
+            <?php endif ?>
         </nav>
     </header>
 

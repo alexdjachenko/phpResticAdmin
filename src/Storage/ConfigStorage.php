@@ -2,6 +2,8 @@
 
 namespace App\Storage;
 
+use App\Core\App;
+
 class ConfigStorage
 {
     private string $configDir;
@@ -20,7 +22,7 @@ class ConfigStorage
     }
 
     /**
-     * @return array{guest_user: ?string, tmp_dir: string, log_dir: string, timezone: string}
+     * @return array{guest_user: ?string, debug: int, tmp_dir: string, log_dir: string, timezone: string}
      */
     public function loadSettings(): array
     {
@@ -32,7 +34,7 @@ class ConfigStorage
         $path = $this->configDir . '/' . $filename;
 
         if (!file_exists($path)) {
-            error_log('[CONFIG] File not found: ' . $path);
+            App::log('Config file not found: ' . $path, 2);
             return [];
         }
 
@@ -42,7 +44,7 @@ class ConfigStorage
 
         $data = require $path;
 
-        error_log('[CONFIG] Loaded: ' . $path . ' keys=' . (is_array($data) ? count($data) : 'NOT_ARRAY'));
+        App::log('Loaded config: ' . $path . ' keys=' . (is_array($data) ? count($data) : 'NOT_ARRAY'), 2);
 
         if (!is_array($data)) {
             return [];
