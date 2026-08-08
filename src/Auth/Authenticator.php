@@ -43,10 +43,15 @@ class Authenticator
         $users = $this->getUsers();
 
         if (!isset($users[$username])) {
+            error_log('[AUTH] User not found: ' . $username);
             return false;
         }
 
-        if (!password_verify($password, $users[$username]['password'])) {
+        $hash = $users[$username]['password'];
+        error_log('[AUTH] Checking password for ' . $username . ', hash prefix: ' . substr($hash, 0, 10) . '...');
+
+        if (!password_verify($password, $hash)) {
+            error_log('[AUTH] password_verify FAILED for ' . $username . ', need_rehash: ' . (password_needs_rehash($hash, PASSWORD_DEFAULT) ? 'yes' : 'no'));
             return false;
         }
 
