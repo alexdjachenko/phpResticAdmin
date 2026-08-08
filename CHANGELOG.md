@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.2.0](https://github.com/alexdjachenko/phpResticAdmin/compare/v0.1.1...v0.2.0) (2026-08-08)
+
+
+### Features
+
+* Stage 3: CRUD repositories with categories and i18n ([51f4190](https://github.com/alexdjachenko/phpResticAdmin/commit/51f41909b883c0c306af1e9ba603da60f12f2226))
+* Stage 3: CRUD repositories with categories and i18n ([e757b3f](https://github.com/alexdjachenko/phpResticAdmin/commit/e757b3f93fb2b9b52a9f794e10f04e6661e86862))
+
+
+### Bug Fixes
+
+* canarytest expects capital letters ([93ba3ea](https://github.com/alexdjachenko/phpResticAdmin/commit/93ba3eaaa909cdfc3593ae885f269e3f999978ce))
+* unit tests - LangTest real keys, AuthenticatorTest admin login ([dd2d8ce](https://github.com/alexdjachenko/phpResticAdmin/commit/dd2d8ce6e9836051ef2932e82ab5bc19c7003c5c))
+
 ## [0.1.1](https://github.com/alexdjachenko/phpResticAdmin/compare/v0.1.0...v0.1.1) (2026-08-08)
 
 
