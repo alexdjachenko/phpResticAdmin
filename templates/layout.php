@@ -39,7 +39,6 @@
             <span class="lang-switcher">
                 <?php foreach (\App\Helpers\Lang::available() as $langCode): ?>
                     <form method="post" action="/language" style="display:inline">
-                        <input type="hidden" name="_csrf_token" value="<?= htmlspecialchars($csrfToken ?? '', ENT_QUOTES, 'UTF-8') ?>">
                         <input type="hidden" name="lang" value="<?= htmlspecialchars($langCode, ENT_QUOTES, 'UTF-8') ?>">
                         <button type="submit" class="lang-btn <?= \App\Helpers\Lang::getLocale() === $langCode ? 'active' : '' ?>">
                             <?= htmlspecialchars(strtoupper($langCode), ENT_QUOTES, 'UTF-8') ?>
@@ -63,5 +62,10 @@
     <?php endif ?>
 
     <main><?= $content ?? '' ?></main>
+
+    <footer class="app-footer">
+        phpresticadmin v<?= htmlspecialchars($appVersion ?? 'dev', ENT_QUOTES, 'UTF-8') ?>
+        &middot; restic <?= htmlspecialchars($resticVersion ?? '', ENT_QUOTES, 'UTF-8') ?>
+    </footer>
 </body>
 </html>

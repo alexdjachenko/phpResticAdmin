@@ -17,16 +17,8 @@ class SnapshotService
      */
     public function listSnapshots(array $repository): array
     {
-        $command = ['restic', 'snapshots', '--json', '--repo', $repository['path']];
-
-        $env = $repository['env'] ?? [];
-
-        if (!empty($repository['password'])) {
-            $env['RESTIC_PASSWORD'] = $repository['password'];
-        } else {
-            $command[] = '--insecure-no-password';
-        }
-
+        $command = $this->buildCommand(['snapshots', '--json'], $repository);
+        $env = $this->buildEnv($repository);
         $result = $this->runner->run($command, $env);
 
         if ($result['exitCode'] !== 0) {
@@ -40,6 +32,34 @@ class SnapshotService
         }
 
         return $decoded;
+    }
+
+    /**
+     * Возвращает полную статистику одного снепшота (restic stats --json).
+     * Тяжёлая операция, вызывается только по запросу пользователя.
+     *
+     * @param array<string, mixed> $repository
+     * @return array<string, mixed>|null
+     */
+    public function getStats(array $repository, string $snapId): ?array
+    {
+        $command = $this->buildCommand(['stats', '--json', '--mode', 'raw-data'], $repository);
+        $command[] = $snapId;
+
+        $env = $this->buildEnv($repository);
+        $result = $this->runner->run($command, $env);
+
+        if ($result['exitCode'] !== 0) {
+            return null;
+        }
+
+        $decoded = json_decode($result['stdout'], true);
+
+        if (!is_array($decoded)) {
+            return null;
+        }
+
+        return $decoded[0] ?? $decoded;
     }
 
     /**
@@ -83,16 +103,11 @@ class SnapshotService
      */
     private function tagOperation(array $repository, string $snapId, string $tag, string $operation): array
     {
-        $command = ['restic', 'tag', '--repo', $repository['path'], $operation, $tag, $snapId];
-
-        $env = $repository['env'] ?? [];
-
-        if (!empty($repository['password'])) {
-            $env['RESTIC_PASSWORD'] = $repository['password'];
-        } else {
-            $command[] = '--insecure-no-password';
-        }
-
+        $command = $this->buildCommand(
+            ['tag', '--repo', $repository['path'], $operation, $tag, $snapId],
+            $repository
+        );
+        $env = $this->buildEnv($repository);
         $result = $this->runner->run($command, $env);
 
         return [
@@ -100,5 +115,42 @@ class SnapshotService
             'output' => $result['stdout'],
             'error' => $result['stderr'],
         ];
+    }
+
+    /**
+     * Строит команду restic. --insecure-no-password — глобальный флаг,
+     * должен идти ДО подкоманды, иначе restic примет его за snapshot ID.
+     *
+     * @param array<int, string> $subcommandArgs
+     * @param array<string, mixed> $repository
+     * @return array<int, string>
+     */
+    private function buildCommand(array $subcommandArgs, array $repository): array
+    {
+        $cmd = ['restic'];
+
+        if (empty($repository['password'])) {
+            $cmd[] = '--insecure-no-password';
+        }
+
+        $cmd[] = '--repo';
+        $cmd[] = $repository['path'];
+
+        return array_merge($cmd, $subcommandArgs);
+    }
+
+    /**
+     * @param array<string, mixed> $repository
+     * @return array<string, string>
+     */
+    private function buildEnv(array $repository): array
+    {
+        $env = $repository['env'] ?? [];
+
+        if (!empty($repository['password'])) {
+            $env['RESTIC_PASSWORD'] = $repository['password'];
+        }
+
+        return $env;
     }
 }

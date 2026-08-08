@@ -19,18 +19,29 @@
                 <th><?= htmlspecialchars(__('snap.date'), ENT_QUOTES, 'UTF-8') ?></th>
                 <th><?= htmlspecialchars(__('snap.host'), ENT_QUOTES, 'UTF-8') ?></th>
                 <th><?= htmlspecialchars(__('snap.paths'), ENT_QUOTES, 'UTF-8') ?></th>
-                <th><?= htmlspecialchars(__('snap.tags'), ENT_QUOTES, 'UTF-8') ?></th>
                 <th><?= htmlspecialchars(__('snap.size'), ENT_QUOTES, 'UTF-8') ?></th>
+                <th><?= htmlspecialchars(__('snap.added'), ENT_QUOTES, 'UTF-8') ?></th>
+                <th><?= htmlspecialchars(__('snap.tags'), ENT_QUOTES, 'UTF-8') ?></th>
                 <th></th>
             </tr>
         </thead>
         <tbody>
             <?php foreach ($snapshots as $snap): ?>
+                <?php
+                $processed = $snap['summary']['total_bytes_processed'] ?? null;
+                $added = $snap['summary']['data_added'] ?? null;
+                ?>
                 <tr id="snap-<?= htmlspecialchars($snap['short_id'] ?? '', ENT_QUOTES, 'UTF-8') ?>">
-                    <td><code><?= htmlspecialchars($snap['short_id'] ?? '', ENT_QUOTES, 'UTF-8') ?></code></td>
+                    <td>
+                        <a href="/snapshots/detail?repo=<?= htmlspecialchars(urlencode($repo['id'] ?? ''), ENT_QUOTES, 'UTF-8') ?>&snapshot=<?= htmlspecialchars(urlencode($snap['id'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+                            <code><?= htmlspecialchars($snap['short_id'] ?? '', ENT_QUOTES, 'UTF-8') ?></code>
+                        </a>
+                    </td>
                     <td><?= htmlspecialchars(\App\Helpers\Format::date($snap['time'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
                     <td><?= htmlspecialchars($snap['hostname'] ?? '', ENT_QUOTES, 'UTF-8') ?></td>
                     <td><?= htmlspecialchars(\App\Helpers\Format::truncate(implode(', ', $snap['paths'] ?? []), 40), ENT_QUOTES, 'UTF-8') ?></td>
+                    <td><?= $processed !== null ? htmlspecialchars(\App\Helpers\Format::bytes((int) $processed), ENT_QUOTES, 'UTF-8') : '—' ?></td>
+                    <td><?= $added !== null ? htmlspecialchars(\App\Helpers\Format::bytes((int) $added), ENT_QUOTES, 'UTF-8') : '—' ?></td>
                     <td class="tag-cell" data-snap-id="<?= htmlspecialchars($snap['short_id'] ?? '', ENT_QUOTES, 'UTF-8') ?>">
                         <?php foreach ($snap['tags'] ?? [] as $tag): ?>
                             <span class="tag-badge">
@@ -55,7 +66,6 @@
                                     data-csrf="<?= htmlspecialchars($csrfToken ?? '', ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars(__('snap.tag_add'), ENT_QUOTES, 'UTF-8') ?></button>
                         </div>
                     </td>
-                    <td><?= htmlspecialchars(\App\Helpers\Format::bytes((int) ($snap['summary']['total_size'] ?? 0)), ENT_QUOTES, 'UTF-8') ?></td>
                     <td>
                         <a href="/browse?repo=<?= htmlspecialchars(urlencode($repo['id'] ?? ''), ENT_QUOTES, 'UTF-8') ?>&snapshot=<?= htmlspecialchars(urlencode($snap['id'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" class="btn-browse"><?= htmlspecialchars(__('snap.browse'), ENT_QUOTES, 'UTF-8') ?></a>
                     </td>
@@ -88,7 +98,6 @@
         });
     }
 
-    // Add tag
     document.querySelectorAll('.tag-add-btn').forEach(function(btn) {
         btn.addEventListener('click', function() {
             var snapId = this.dataset.snapId;
@@ -114,7 +123,6 @@
         });
     });
 
-    // Enter key in tag input
     document.querySelectorAll('.tag-input').forEach(function(input) {
         input.addEventListener('keydown', function(e) {
             if (e.key === 'Enter') {
@@ -125,7 +133,6 @@
         });
     });
 
-    // Remove tag
     document.querySelectorAll('.tag-remove-btn').forEach(function(btn) {
         btn.addEventListener('click', function() {
             var snapId = this.dataset.snapId;

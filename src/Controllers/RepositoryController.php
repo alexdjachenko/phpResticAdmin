@@ -351,7 +351,7 @@ class RepositoryController
     }
 
     /**
-     * POST /repositories/backup — запуск restic backup со стримингом.
+     * POST /repositories/backup — запуск restic backup с показом вывода.
      */
     public function backup(): void
     {
@@ -402,8 +402,16 @@ class RepositoryController
             return;
         }
 
-        App::repoService()->backup($repo, $backupPaths);
-        exit;
+        $result = App::repoService()->backupSync($repo, $backupPaths);
+
+        echo App::response()->render('repositories/backup.php', [
+            'repo' => $repo,
+            'output' => $result['output'],
+            'error' => $result['error'],
+            'ok' => $result['ok'],
+            'isLoggedIn' => $auth->isLoggedIn(),
+            'username' => $user,
+        ]);
     }
 
     /**

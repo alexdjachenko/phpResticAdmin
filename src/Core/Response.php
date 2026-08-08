@@ -28,8 +28,10 @@ class Response
             $vars['username'] = $user;
         }
 
-        // Flash message (читаем один раз, показываем везде)
         $vars['flash'] = $vars['flash'] ?? App::session()->flash('success') ?? App::session()->flash('error');
+        $vars['csrfToken'] = $vars['csrfToken'] ?? App::security()->csrfToken();
+        $vars['appVersion'] = App::appVersion();
+        $vars['resticVersion'] = App::resticVersion();
 
         return \App\Helpers\View::render($template, $vars, 'layout.php');
     }

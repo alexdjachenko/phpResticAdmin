@@ -87,6 +87,15 @@ main {
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
+.app-footer {
+    max-width: 960px;
+    margin: 0 auto 20px;
+    padding: 4px 20px;
+    font-size: 11px;
+    color: #999;
+    text-align: right;
+}
+
 h2 {
     margin-bottom: 16px;
     font-size: 20px;
@@ -737,4 +746,24 @@ button:hover,
     border-radius: 4px;
     font-size: 14px;
     font-family: monospace;
+}
+
+/* Backup output */
+.backup-output {
+    background: #1e1e1e;
+    color: #d4d4d4;
+    padding: 16px;
+    border-radius: 4px;
+    font-size: 13px;
+    font-family: monospace;
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 600px;
+    overflow-y: auto;
+    margin: 12px 0;
+}
+
+.backup-error {
+    background: #3e1e1e;
+    color: #f8d7da;
 }

@@ -64,16 +64,42 @@ class BrowseController
 
         $entries = [];
         if ($result['exitCode'] === 0) {
-            $decoded = json_decode($result['stdout'], true);
-            if (is_array($decoded)) {
-                $entries = $decoded;
+            $lines = explode("\n", $result['stdout']);
+            foreach ($lines as $line) {
+                $line = trim($line);
+                if ($line === '') {
+                    continue;
+                }
+                $decoded = json_decode($line, true);
+                if (is_array($decoded)) {
+                    $entries[] = $decoded;
+                }
             }
+        } else {
+            App::log('restic ls failed for snapshot ' . $snapId . ' path ' . $path . ': ' . $result['stderr'], 0);
         }
 
-        // Разделяем на папки и файлы
+        if ($result['exitCode'] === 0 && empty($entries)) {
+            App::log('restic ls empty for snapshot ' . $snapId . ' path ' . $path . ' (stdout: ' . substr($result['stdout'], 0, 200) . ')', 1);
+        }
+
+        // Разделяем на папки и файлы, фильтруем мусор
+        $normalizedPath = '/' . ltrim($path, '/');
         $dirs = [];
         $files = [];
         foreach ($entries as $entry) {
+            $name = $entry['name'] ?? '';
+            $entryPath = $entry['path'] ?? '';
+
+            if ($entry === null || $name === '' || $name === '.' || $name === '..') {
+                continue;
+            }
+
+            // restic ls возвращает сам узел директории среди её детей — фильтруем
+            if ($entryPath === $normalizedPath) {
+                continue;
+            }
+
             if (($entry['type'] ?? '') === 'dir') {
                 $dirs[] = $entry;
             } else {
@@ -81,7 +107,6 @@ class BrowseController
             }
         }
 
-        // Сортируем: папки сверху, потом файлы, по алфавиту
         usort($dirs, function (array $a, array $b): int {
             return strcasecmp($a['name'] ?? '', $b['name'] ?? '');
         });
@@ -89,7 +114,6 @@ class BrowseController
             return strcasecmp($a['name'] ?? '', $b['name'] ?? '');
         });
 
-        // Хлебные крошки
         $breadcrumbs = $this->buildBreadcrumbs($repo, $snapId, $path);
 
         echo App::response()->render('browse/tree.php', [
@@ -112,20 +136,17 @@ class BrowseController
     {
         $crumbs = [];
 
-        // Репозиторий
         $crumbs[] = [
             'label' => $repo['name'] ?? $repo['id'] ?? 'Repo',
             'url' => '/repositories/detail?repo=' . urlencode($repo['id'] ?? ''),
         ];
 
-        // Снепшот
         $shortId = substr($snapId, 0, 8);
         $crumbs[] = [
             'label' => $shortId,
             'url' => '/snapshots?repo=' . urlencode($repo['id'] ?? ''),
         ];
 
-        // Сегменты пути
         $path = '/' . ltrim($path, '/');
         $segments = array_values(array_filter(explode('/', $path), function (string $s): bool { return $s !== ''; }));
         $accumulatedPath = '';
