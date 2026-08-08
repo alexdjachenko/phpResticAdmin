@@ -49,10 +49,9 @@ class Authenticator
         }
 
         $hash = $users[$username]['password'];
-        App::log('Checking password for ' . $username . ', hash prefix: ' . substr($hash, 0, 10) . '...', 1);
 
         if (!password_verify($password, $hash)) {
-            App::log('password_verify FAILED for ' . $username . ', need_rehash: ' . (password_needs_rehash($hash, PASSWORD_DEFAULT) ? 'yes' : 'no'), 1);
+            App::log('password_verify FAILED for ' . $username, 1);
             return false;
         }
 
@@ -86,36 +85,37 @@ class Authenticator
         return $this->session->get('auth_user') !== null;
     }
 
-    /**
-     * Проверяет, есть ли у текущего пользователя право use на категорию.
-     */
     public function canUse(string $category): bool
     {
         $config = $this->getReposConfig();
         return $config[$category]['use'] ?? false;
     }
 
-    /**
-     * Проверяет, есть ли у текущего пользователя право edit на категорию.
-     */
     public function canEdit(string $category): bool
     {
         $config = $this->getReposConfig();
         return $config[$category]['edit'] ?? false;
     }
 
-    /**
-     * Проверяет, можно ли перемещать репозиторий между категориями (edit на обе).
-     */
+    public function canInit(string $category): bool
+    {
+        $config = $this->getReposConfig();
+        return $config[$category]['init'] ?? false;
+    }
+
+    public function canDelete(string $category): bool
+    {
+        $config = $this->getReposConfig();
+        return $config[$category]['delete'] ?? false;
+    }
+
     public function canMove(string $fromCategory, string $toCategory): bool
     {
         return $this->canEdit($fromCategory) && $this->canEdit($toCategory);
     }
 
     /**
-     * Возвращает секцию repos текущего пользователя с fallback-ами.
-     *
-     * @return array<string, array{use: bool, edit: bool}>
+     * @return array<string, array{use: bool, edit: bool, init: bool, delete: bool}>
      */
     public function getReposConfig(): array
     {
@@ -123,15 +123,15 @@ class Authenticator
         $users = $this->getUsers();
 
         $defaultFull = [
-            'public'  => ['use' => true, 'edit' => true],
-            'private' => ['use' => true, 'edit' => true],
-            'session' => ['use' => true, 'edit' => true],
+            'public'  => ['use' => true, 'edit' => true, 'init' => true, 'delete' => true],
+            'private' => ['use' => true, 'edit' => true, 'init' => true, 'delete' => true],
+            'session' => ['use' => true, 'edit' => true, 'init' => true, 'delete' => true],
         ];
 
         $defaultGuest = [
-            'public'  => ['use' => true,  'edit' => false],
-            'private' => ['use' => false, 'edit' => false],
-            'session' => ['use' => false, 'edit' => false],
+            'public'  => ['use' => true,  'edit' => false, 'init' => false, 'delete' => false],
+            'private' => ['use' => false, 'edit' => false, 'init' => false, 'delete' => false],
+            'session' => ['use' => false, 'edit' => false, 'init' => false, 'delete' => false],
         ];
 
         if ($user === null) {
@@ -150,13 +150,14 @@ class Authenticator
             return $this->isGuest() ? $defaultGuest : $defaultFull;
         }
 
-        // Нормализуем: edit => true подразумевает use => true
         $result = [];
         foreach (['public', 'private', 'session'] as $category) {
-            $cat = $repos[$category] ?? ['use' => false, 'edit' => false];
+            $cat = $repos[$category] ?? ['use' => false, 'edit' => false, 'init' => false, 'delete' => false];
             $edit = $cat['edit'] ?? false;
             $use = $edit || ($cat['use'] ?? false);
-            $result[$category] = ['use' => $use, 'edit' => $edit];
+            $init = $cat['init'] ?? false;
+            $delete = $cat['delete'] ?? false;
+            $result[$category] = ['use' => $use, 'edit' => $edit, 'init' => $init, 'delete' => $delete];
         }
 
         return $result;

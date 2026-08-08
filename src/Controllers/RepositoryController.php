@@ -21,11 +21,10 @@ class RepositoryController
         $flash = App::session()->flash('success');
         $csrfToken = App::security()->csrfToken();
 
-        // Вычисляем права для шаблона
         $availableCategories = [];
         foreach (['public', 'private', 'session'] as $cat) {
             if ($auth->canEdit($cat)) {
-                $availableCategories[$cat] = __($cat === 'public' ? 'repo.category.public' : ($cat === 'private' ? 'repo.category.private' : 'repo.category.session'));
+                $availableCategories[$cat] = __('repo.category.' . $cat);
             }
         }
 
@@ -33,7 +32,7 @@ class RepositoryController
 
         foreach ($repositories as &$repo) {
             $cat = $repo['category'] ?? 'public';
-            $repo['canDelete'] = $auth->canEdit($cat);
+            $repo['canDelete'] = $auth->canDelete($cat);
             $repo['canMove'] = $auth->canEdit($cat);
         }
         unset($repo);
@@ -112,7 +111,7 @@ class RepositoryController
         $availableCategories = [];
         foreach (['public', 'private', 'session'] as $cat) {
             if ($auth->canEdit($cat)) {
-                $availableCategories[$cat] = __($cat === 'public' ? 'repo.category.public' : ($cat === 'private' ? 'repo.category.private' : 'repo.category.session'));
+                $availableCategories[$cat] = __('repo.category.' . $cat);
             }
         }
 
@@ -124,11 +123,20 @@ class RepositoryController
         $flash = App::session()->flash('error');
         $csrfToken = App::security()->csrfToken();
 
+        // Собираем категории, в которых можно init
+        $canInitIn = [];
+        foreach (['public', 'private', 'session'] as $cat) {
+            if ($auth->canInit($cat)) {
+                $canInitIn[] = $cat;
+            }
+        }
+
         echo App::response()->render('repositories/add.php', [
             'isLoggedIn' => $auth->isLoggedIn(),
             'username' => $user,
             'csrfToken' => $csrfToken,
             'categories' => $availableCategories,
+            'canInitIn' => $canInitIn,
             'error' => $flash,
         ]);
     }
@@ -182,6 +190,9 @@ class RepositoryController
             return;
         }
 
+        // Нормализация пути: если путь не абсолютный и не содержит scheme://, добавляем repo_base_dir
+        $path = $this->normalizePath($path);
+
         $repository = [
             'id' => bin2hex(random_bytes(8)),
             'name' => $name,
@@ -200,8 +211,12 @@ class RepositoryController
             }
         }
 
-        // Инициализация restic, если выбрана
         if ($initRepo) {
+            if (!$auth->canInit($category)) {
+                App::response()->error(403, __('error.forbidden'));
+                return;
+            }
+
             $result = App::repoService()->init($repository);
             if (!$result['ok']) {
                 App::session()->flash('error', __('flash.init_failed', ['{error}' => $result['error']]));
@@ -261,7 +276,7 @@ class RepositoryController
 
         $category = $found['category'] ?? 'public';
 
-        if (!$auth->canEdit($category)) {
+        if (!$auth->canDelete($category)) {
             App::response()->json(['ok' => false, 'error' => __('error.forbidden'), '_csrf_token' => App::security()->csrfToken()], 403);
             return;
         }
@@ -340,5 +355,21 @@ class RepositoryController
         App::session()->flash('success', __('flash.repo_moved', ['{from}' => $fromLabel, '{to}' => $toLabel]));
 
         App::response()->json(['ok' => true, 'redirect' => '/repositories', '_csrf_token' => App::security()->csrfToken()]);
+    }
+
+    /**
+     * Если путь относительный (не начинается с / и не содержит ://), добавляет repo_base_dir из настроек.
+     */
+    private function normalizePath(string $path): string
+    {
+        // Абсолютный путь или URL (s3://..., sftp://..., rest://...)
+        if (str_starts_with($path, '/') || str_contains($path, '://')) {
+            return $path;
+        }
+
+        $settings = App::configStorage()->loadSettings();
+        $baseDir = rtrim($settings['repo_base_dir'] ?? '/backups', '/');
+
+        return $baseDir . '/' . $path;
     }
 }

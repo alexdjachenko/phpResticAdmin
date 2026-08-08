@@ -26,18 +26,18 @@ class AuthenticatorTest extends TestCase
                     "password" => ' . var_export($passwordHash, true) . ',
                     "api_tokens" => [],
                     "repos" => [
-                        "public" => ["use" => true, "edit" => true],
-                        "private" => ["use" => true, "edit" => true],
-                        "session" => ["use" => true, "edit" => true],
+                        "public" => ["use" => true, "edit" => true, "init" => true, "delete" => true],
+                        "private" => ["use" => true, "edit" => true, "init" => true, "delete" => true],
+                        "session" => ["use" => true, "edit" => true, "init" => true, "delete" => true],
                     ],
                 ],
                 "guest" => [
                     "password" => null,
                     "api_tokens" => [],
                     "repos" => [
-                        "public" => ["use" => true, "edit" => false],
-                        "private" => ["use" => false, "edit" => false],
-                        "session" => ["use" => false, "edit" => false],
+                        "public" => ["use" => true, "edit" => false, "init" => false, "delete" => false],
+                        "private" => ["use" => false, "edit" => false, "init" => false, "delete" => false],
+                        "session" => ["use" => false, "edit" => false, "init" => false, "delete" => false],
                     ],
                 ],
             ];'
@@ -235,6 +235,49 @@ class AuthenticatorTest extends TestCase
         $this->assertFalse($auth->canEdit('public'));
         $this->assertFalse($auth->canUse('private'));
         $this->assertFalse($auth->canEdit('private'));
+    }
+
+    public function testCanInitReturnsTrueForAdmin(): void
+    {
+        $auth = new Authenticator($this->configStorage, $this->session);
+        $auth->login('admin', 'secret123');
+
+        $this->assertTrue($auth->canInit('public'));
+        $this->assertTrue($auth->canInit('private'));
+        $this->assertTrue($auth->canInit('session'));
+    }
+
+    public function testGuestCannotInit(): void
+    {
+        file_put_contents(
+            $this->tmpDir . '/settings.php',
+            '<?php return ["guest_user" => "guest", "tmp_dir" => "/tmp", "log_dir" => "/var/log", "timezone" => "UTC"];'
+        );
+        $configStorage = new ConfigStorage($this->tmpDir);
+        $auth = new Authenticator($configStorage, $this->session);
+
+        $this->assertFalse($auth->canInit('public'));
+    }
+
+    public function testCanDeleteReturnsTrueForAdmin(): void
+    {
+        $auth = new Authenticator($this->configStorage, $this->session);
+        $auth->login('admin', 'secret123');
+
+        $this->assertTrue($auth->canDelete('public'));
+        $this->assertTrue($auth->canDelete('private'));
+    }
+
+    public function testGuestCannotDelete(): void
+    {
+        file_put_contents(
+            $this->tmpDir . '/settings.php',
+            '<?php return ["guest_user" => "guest", "tmp_dir" => "/tmp", "log_dir" => "/var/log", "timezone" => "UTC"];'
+        );
+        $configStorage = new ConfigStorage($this->tmpDir);
+        $auth = new Authenticator($configStorage, $this->session);
+
+        $this->assertFalse($auth->canDelete('public'));
     }
 
     private function removeDir(string $dir): void
