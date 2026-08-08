@@ -79,48 +79,6 @@
             });
         });
     });
-    <?php if (!empty($debug) && $isLoggedIn): ?>
-    // Cache invalidation
-    var csrfCache = '<?= htmlspecialchars($csrfToken ?? '', ENT_QUOTES, 'UTF-8') ?>';
-
-    document.getElementById('btn-cache-invalidate').addEventListener('click', function() {
-        var btnEl = this;
-        var originalText = btnEl.textContent;
-        var originalClass = btnEl.className;
-
-        btnEl.textContent = 'Clearing...';
-        btnEl.disabled = true;
-
-        var formData = new URLSearchParams();
-        formData.append('_csrf_token', csrfCache);
-
-        sendPost('/cache/invalidate', formData.toString(), null)
-        .then(function(data) {
-            if (data._csrf_token) csrfCache = data._csrf_token;
-
-            if (data.ok) {
-                btnEl.textContent = 'OK, cleared ' + data.count + ' scripts';
-                btnEl.className = 'btn-cache btn-cache-ok';
-            } else {
-                btnEl.textContent = data.error || 'Error';
-                btnEl.className = 'btn-cache btn-cache-error';
-            }
-        })
-        .catch(function() {
-            btnEl.textContent = 'Network error';
-            btnEl.className = 'btn-cache btn-cache-error';
-        })
-        .finally(function() {
-            btnEl.disabled = false;
-
-            // Reset to original after 3 seconds
-            setTimeout(function() {
-                btnEl.textContent = originalText;
-                btnEl.className = originalClass;
-            }, 3000);
-        });
-    });
-    <?php endif ?>
     </script>
     <?php endif ?>
 <?php endif ?>
@@ -132,4 +90,47 @@
     <p>Debug level: <strong><?= \App\Core\App::debugLevel() ?></strong></p>
     <button id="btn-cache-invalidate" class="btn-cache">Invalidate OPcache</button>
 </div>
+<script>
+(function() {
+    var btn = document.getElementById('btn-cache-invalidate');
+    if (!btn) return;
+
+    var csrfCache = '<?= htmlspecialchars($csrfToken ?? '', ENT_QUOTES, 'UTF-8') ?>';
+
+    btn.addEventListener('click', function() {
+        var originalText = btn.textContent;
+        var originalClass = btn.className;
+
+        btn.textContent = 'Clearing...';
+        btn.disabled = true;
+
+        var formData = new URLSearchParams();
+        formData.append('_csrf_token', csrfCache);
+
+        sendPost('/cache/invalidate', formData.toString(), null)
+        .then(function(data) {
+            if (data._csrf_token) csrfCache = data._csrf_token;
+
+            if (data.ok) {
+                btn.textContent = 'OK, cleared ' + data.count + ' scripts';
+                btn.className = 'btn-cache btn-cache-ok';
+            } else {
+                btn.textContent = data.error || 'Error';
+                btn.className = 'btn-cache btn-cache-error';
+            }
+        })
+        .catch(function() {
+            btn.textContent = 'Network error';
+            btn.className = 'btn-cache btn-cache-error';
+        })
+        .finally(function() {
+            btn.disabled = false;
+            setTimeout(function() {
+                btn.textContent = originalText;
+                btn.className = originalClass;
+            }, 3000);
+        });
+    });
+})();
+</script>
 <?php endif ?>
