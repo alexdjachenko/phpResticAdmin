@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.3.0](https://github.com/alexdjachenko/phpResticAdmin/compare/v0.2.0...v0.3.0) (2026-08-08)
+
+
+### Features
+
+* **stage4:** snapshots, browse, repository detail page, backup strea… ([0bd1a8f](https://github.com/alexdjachenko/phpResticAdmin/commit/0bd1a8f8542c87b5ab95f1474eebc5bfbbde4ebb))
+* **stage4:** snapshots, browse, repository detail page, backup streaming ([074eb68](https://github.com/alexdjachenko/phpResticAdmin/commit/074eb68c3fef60b3ba6c406df5abcb9113dd8967))
+
+
+### Bug Fixes
+
+* **stage4:** special-case bytes range in Format::bytes to avoid trailing .00 ([d8e27b9](https://github.com/alexdjachenko/phpResticAdmin/commit/d8e27b9e7bfe1c20a3c438f541a99e11c9825720))
+* **stage4:** use number_format instead of round in Format::bytes ([6b76bf7](https://github.com/alexdjachenko/phpResticAdmin/commit/6b76bf7d986f705a1f264b5e83fc85d987f48b45))
+
 ## [0.2.0](https://github.com/alexdjachenko/phpResticAdmin/compare/v0.1.1...v0.2.0) (2026-08-08)
 
 
