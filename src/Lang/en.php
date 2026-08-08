@@ -46,6 +46,8 @@ return [
     'flash.repo_deleted' => 'Repository deleted.',
     'flash.repo_moved'   => 'Repository moved from {from} to {to}.',
     'flash.init_failed'  => 'Repository initialization failed: {error}',
+    'flash.backup_ok'    => 'Backup completed successfully.',
+    'flash.backup_failed'=> 'Backup failed. See output below.',
     'flash.csrf_error'   => 'Invalid security token. Please try again.',
     'flash.not_found'    => 'Repository not found.',
     'auth.login_title'   => 'Login',

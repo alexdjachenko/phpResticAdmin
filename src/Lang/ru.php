@@ -46,6 +46,8 @@ return [
     'flash.repo_deleted' => 'Репозиторий удалён.',
     'flash.repo_moved'   => 'Репозиторий перенесён из {from} в {to}.',
     'flash.init_failed'  => 'Ошибка инициализации репозитория: {error}',
+    'flash.backup_ok'    => 'Бекап успешно завершён.',
+    'flash.backup_failed'=> 'Ошибка бекапа. Смотрите вывод ниже.',
     'flash.csrf_error'   => 'Неверный токен безопасности. Попробуйте ещё раз.',
     'flash.not_found'    => 'Репозиторий не найден.',
     'auth.login_title'   => 'Вход',

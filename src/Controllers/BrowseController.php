@@ -68,6 +68,12 @@ class BrowseController
             if (is_array($decoded)) {
                 $entries = $decoded;
             }
+        } else {
+            App::log('restic ls failed for snapshot ' . $snapId . ' path ' . $path . ': ' . $result['stderr'], 0);
+        }
+
+        if ($result['exitCode'] === 0 && empty($entries)) {
+            App::log('restic ls empty for snapshot ' . $snapId . ' path ' . $path . ' (stdout: ' . substr($result['stdout'], 0, 200) . ')', 1);
         }
 
         // Разделяем на папки и файлы

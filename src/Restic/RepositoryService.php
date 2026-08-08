@@ -82,5 +82,33 @@ class RepositoryService
         }
 
         $this->runner->runStream($command, $env);
-    }
-}
+        }
+
+        /**
+        * Запускает restic backup и возвращает результат (без стриминга).
+        *
+        * @param array<string, mixed> $repository
+        * @param array<int, string> $backupPaths
+        * @return array{ok: bool, output: string, error: string}
+        */
+        public function backupSync(array $repository, array $backupPaths): array
+        {
+        $command = ['restic', 'backup', '--repo', $repository['path'], ...$backupPaths];
+
+        $env = $repository['env'] ?? [];
+
+        if (!empty($repository['password'])) {
+            $env['RESTIC_PASSWORD'] = $repository['password'];
+        } else {
+            $command[] = '--insecure-no-password';
+        }
+
+        $result = $this->runner->run($command, $env);
+
+        return [
+            'ok' => $result['exitCode'] === 0,
+            'output' => $result['stdout'],
+            'error' => $result['stderr'],
+        ];
+        }
+        }

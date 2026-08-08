@@ -12,24 +12,9 @@ class DashboardController
         $auth = App::auth();
         $user = $auth->user();
 
-        $currentRepoId = App::session()->get('current_repo');
-        $repo = null;
-        $recentSnapshots = [];
-
-        if ($currentRepoId !== null && $user !== null) {
-            $repositories = App::repoStorage()->loadAll($user);
-            foreach ($repositories as $r) {
-                if (($r['id'] ?? '') === $currentRepoId) {
-                    $category = $r['category'] ?? 'public';
-                    if ($auth->canUse($category)) {
-                        $repo = $r;
-                        $snapshots = App::snapshotService()->listSnapshots($r);
-                        $recentSnapshots = array_slice($snapshots, 0, 5);
-                    }
-                    break;
-                }
-            }
-        }
+        // Сбрасываем current_repo при заходе на дашборд,
+        // чтобы не показывать данные из предыдущей сессии в новой вкладке.
+        App::session()->remove('current_repo');
 
         $repoCount = 0;
         if ($user !== null) {
@@ -37,8 +22,6 @@ class DashboardController
         }
 
         echo App::response()->render('dashboard.php', [
-            'repo' => $repo,
-            'recentSnapshots' => $recentSnapshots,
             'repoCount' => $repoCount,
             'isLoggedIn' => $auth->isLoggedIn(),
             'username' => $user,

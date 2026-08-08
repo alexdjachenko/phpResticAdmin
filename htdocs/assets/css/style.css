@@ -738,3 +738,23 @@ button:hover,
     font-size: 14px;
     font-family: monospace;
 }
+
+/* Backup output */
+.backup-output {
+    background: #1e1e1e;
+    color: #d4d4d4;
+    padding: 16px;
+    border-radius: 4px;
+    font-size: 13px;
+    font-family: monospace;
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 600px;
+    overflow-y: auto;
+    margin: 12px 0;
+}
+
+.backup-error {
+    background: #3e1e1e;
+    color: #f8d7da;
+}

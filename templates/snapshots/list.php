@@ -20,7 +20,6 @@
                 <th><?= htmlspecialchars(__('snap.host'), ENT_QUOTES, 'UTF-8') ?></th>
                 <th><?= htmlspecialchars(__('snap.paths'), ENT_QUOTES, 'UTF-8') ?></th>
                 <th><?= htmlspecialchars(__('snap.tags'), ENT_QUOTES, 'UTF-8') ?></th>
-                <th><?= htmlspecialchars(__('snap.size'), ENT_QUOTES, 'UTF-8') ?></th>
                 <th></th>
             </tr>
         </thead>
@@ -55,7 +54,6 @@
                                     data-csrf="<?= htmlspecialchars($csrfToken ?? '', ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars(__('snap.tag_add'), ENT_QUOTES, 'UTF-8') ?></button>
                         </div>
                     </td>
-                    <td><?= htmlspecialchars(\App\Helpers\Format::bytes((int) ($snap['summary']['total_size'] ?? 0)), ENT_QUOTES, 'UTF-8') ?></td>
                     <td>
                         <a href="/browse?repo=<?= htmlspecialchars(urlencode($repo['id'] ?? ''), ENT_QUOTES, 'UTF-8') ?>&snapshot=<?= htmlspecialchars(urlencode($snap['id'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" class="btn-browse"><?= htmlspecialchars(__('snap.browse'), ENT_QUOTES, 'UTF-8') ?></a>
                     </td>
@@ -88,7 +86,6 @@
         });
     }
 
-    // Add tag
     document.querySelectorAll('.tag-add-btn').forEach(function(btn) {
         btn.addEventListener('click', function() {
             var snapId = this.dataset.snapId;
@@ -114,7 +111,6 @@
         });
     });
 
-    // Enter key in tag input
     document.querySelectorAll('.tag-input').forEach(function(input) {
         input.addEventListener('keydown', function(e) {
             if (e.key === 'Enter') {
@@ -125,7 +121,6 @@
         });
     });
 
-    // Remove tag
     document.querySelectorAll('.tag-remove-btn').forEach(function(btn) {
         btn.addEventListener('click', function() {
             var snapId = this.dataset.snapId;

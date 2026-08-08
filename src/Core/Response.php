@@ -31,6 +31,9 @@ class Response
         // Flash message (читаем один раз, показываем везде)
         $vars['flash'] = $vars['flash'] ?? App::session()->flash('success') ?? App::session()->flash('error');
 
+        // CSRF-токен нужен layout'у для языкового переключателя
+        $vars['csrfToken'] = $vars['csrfToken'] ?? App::security()->csrfToken();
+
         return \App\Helpers\View::render($template, $vars, 'layout.php');
     }
 
