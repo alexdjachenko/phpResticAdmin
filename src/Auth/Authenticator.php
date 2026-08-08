@@ -19,9 +19,6 @@ class Authenticator
         $this->session = $session;
     }
 
-    /**
-     * Возвращает имя текущего пользователя или guest_user, либо null.
-     */
     public function resolve(): ?string
     {
         $authUser = $this->session->get('auth_user');
@@ -49,10 +46,9 @@ class Authenticator
         }
 
         $hash = $users[$username]['password'];
-        App::log('Checking password for ' . $username . ', hash prefix: ' . substr($hash, 0, 10) . '...', 1);
 
         if (!password_verify($password, $hash)) {
-            App::log('password_verify FAILED for ' . $username . ', need_rehash: ' . (password_needs_rehash($hash, PASSWORD_DEFAULT) ? 'yes' : 'no'), 1);
+            App::log('password_verify FAILED for ' . $username, 1);
             return false;
         }
 
@@ -86,18 +82,12 @@ class Authenticator
         return $this->session->get('auth_user') !== null;
     }
 
-    /**
-     * Проверяет, есть ли у текущего пользователя право use на категорию.
-     */
     public function canUse(string $category): bool
     {
         $config = $this->getReposConfig();
         return $config[$category]['use'] ?? false;
     }
 
-    /**
-     * Проверяет, есть ли у текущего пользователя право edit на категорию.
-     */
     public function canEdit(string $category): bool
     {
         $config = $this->getReposConfig();
@@ -105,22 +95,35 @@ class Authenticator
     }
 
     /**
-     * Проверяет, можно ли перемещать репозиторий между категориями (edit на обе).
+     * Глобальное право инициализировать новые restic-репозитории.
      */
+    public function canInit(): bool
+    {
+        $userData = $this->getUserData();
+        return $userData['can_init'] ?? $this->isLoggedIn();
+    }
+
+    /**
+     * Глобальное право удалять репозитории.
+     */
+    public function canDelete(): bool
+    {
+        $userData = $this->getUserData();
+        return $userData['can_delete'] ?? $this->isLoggedIn();
+    }
+
     public function canMove(string $fromCategory, string $toCategory): bool
     {
         return $this->canEdit($fromCategory) && $this->canEdit($toCategory);
     }
 
     /**
-     * Возвращает секцию repos текущего пользователя с fallback-ами.
-     *
      * @return array<string, array{use: bool, edit: bool}>
      */
     public function getReposConfig(): array
     {
         $user = $this->user();
-        $users = $this->getUsers();
+        $userData = $this->getUserData();
 
         $defaultFull = [
             'public'  => ['use' => true, 'edit' => true],
@@ -138,8 +141,6 @@ class Authenticator
             return $defaultGuest;
         }
 
-        $userData = $users[$user] ?? null;
-
         if ($userData === null) {
             return $this->isGuest() ? $defaultGuest : $defaultFull;
         }
@@ -150,7 +151,6 @@ class Authenticator
             return $this->isGuest() ? $defaultGuest : $defaultFull;
         }
 
-        // Нормализуем: edit => true подразумевает use => true
         $result = [];
         foreach (['public', 'private', 'session'] as $category) {
             $cat = $repos[$category] ?? ['use' => false, 'edit' => false];
@@ -160,6 +160,19 @@ class Authenticator
         }
 
         return $result;
+    }
+
+    /**
+     * @return array{password: ?string, can_init: bool, can_delete: bool, repos?: array}|null
+     */
+    private function getUserData(): ?array
+    {
+        $user = $this->user();
+        if ($user === null) {
+            return null;
+        }
+        $users = $this->getUsers();
+        return $users[$user] ?? null;
     }
 
     private function getUsers(): array

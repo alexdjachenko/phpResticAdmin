@@ -58,7 +58,7 @@ class Lang
     public static function available(): array
     {
         if (self::$available === null) {
-            $langDir = dirname(__DIR__, 2) . '/data/lang';
+            $langDir = dirname(__DIR__) . '/Lang';
             self::$available = [];
 
             if (is_dir($langDir)) {
@@ -114,7 +114,7 @@ class Lang
             return self::$loaded[$lang];
         }
 
-        $path = dirname(__DIR__, 2) . '/data/lang/' . $lang . '.php';
+        $path = dirname(__DIR__) . '/Lang/' . $lang . '.php';
 
         if (!file_exists($path)) {
             self::$loaded[$lang] = [];

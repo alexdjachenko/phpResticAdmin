@@ -21,19 +21,19 @@ class RepositoryController
         $flash = App::session()->flash('success');
         $csrfToken = App::security()->csrfToken();
 
-        // Вычисляем права для шаблона
         $availableCategories = [];
         foreach (['public', 'private', 'session'] as $cat) {
             if ($auth->canEdit($cat)) {
-                $availableCategories[$cat] = __($cat === 'public' ? 'repo.category.public' : ($cat === 'private' ? 'repo.category.private' : 'repo.category.session'));
+                $availableCategories[$cat] = __('repo.category.' . $cat);
             }
         }
 
         $canAdd = !empty($availableCategories);
+        $canDeleteGlobal = $auth->canDelete();
 
         foreach ($repositories as &$repo) {
             $cat = $repo['category'] ?? 'public';
-            $repo['canDelete'] = $auth->canEdit($cat);
+            $repo['canDelete'] = $canDeleteGlobal;
             $repo['canMove'] = $auth->canEdit($cat);
         }
         unset($repo);
@@ -112,7 +112,7 @@ class RepositoryController
         $availableCategories = [];
         foreach (['public', 'private', 'session'] as $cat) {
             if ($auth->canEdit($cat)) {
-                $availableCategories[$cat] = __($cat === 'public' ? 'repo.category.public' : ($cat === 'private' ? 'repo.category.private' : 'repo.category.session'));
+                $availableCategories[$cat] = __('repo.category.' . $cat);
             }
         }
 
@@ -129,6 +129,7 @@ class RepositoryController
             'username' => $user,
             'csrfToken' => $csrfToken,
             'categories' => $availableCategories,
+            'canInit' => $auth->canInit(),
             'error' => $flash,
         ]);
     }
@@ -182,6 +183,8 @@ class RepositoryController
             return;
         }
 
+        $path = $this->normalizePath($path);
+
         $repository = [
             'id' => bin2hex(random_bytes(8)),
             'name' => $name,
@@ -200,8 +203,12 @@ class RepositoryController
             }
         }
 
-        // Инициализация restic, если выбрана
         if ($initRepo) {
+            if (!$auth->canInit()) {
+                App::response()->error(403, __('error.forbidden'));
+                return;
+            }
+
             $result = App::repoService()->init($repository);
             if (!$result['ok']) {
                 App::session()->flash('error', __('flash.init_failed', ['{error}' => $result['error']]));
@@ -261,7 +268,7 @@ class RepositoryController
 
         $category = $found['category'] ?? 'public';
 
-        if (!$auth->canEdit($category)) {
+        if (!$auth->canDelete()) {
             App::response()->json(['ok' => false, 'error' => __('error.forbidden'), '_csrf_token' => App::security()->csrfToken()], 403);
             return;
         }
@@ -340,5 +347,17 @@ class RepositoryController
         App::session()->flash('success', __('flash.repo_moved', ['{from}' => $fromLabel, '{to}' => $toLabel]));
 
         App::response()->json(['ok' => true, 'redirect' => '/repositories', '_csrf_token' => App::security()->csrfToken()]);
+    }
+
+    private function normalizePath(string $path): string
+    {
+        if (str_starts_with($path, '/') || str_contains($path, '://')) {
+            return $path;
+        }
+
+        $settings = App::configStorage()->loadSettings();
+        $baseDir = rtrim($settings['repo_base_dir'] ?? '/backups', '/');
+
+        return $baseDir . '/' . $path;
     }
 }

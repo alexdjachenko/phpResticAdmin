@@ -24,7 +24,8 @@
 
     <div class="form-group">
         <label for="repo-path"><?= htmlspecialchars(__('repo.path'), ENT_QUOTES, 'UTF-8') ?></label>
-        <input type="text" id="repo-path" name="path" required>
+        <input type="text" id="repo-path" name="path" required placeholder="/backups/my-repo">
+        <span class="form-help"><?= htmlspecialchars(__('repo.path_help'), ENT_QUOTES, 'UTF-8') ?></span>
     </div>
 
     <div class="form-group">
@@ -56,6 +57,7 @@
         </div>
     </div>
 
+    <?php if (!empty($canInit)): ?>
     <div class="form-group">
         <label class="checkbox-label">
             <input type="checkbox" name="init_repo" value="1">
@@ -63,6 +65,7 @@
         </label>
         <span class="form-help"><?= htmlspecialchars(__('repo.init_help'), ENT_QUOTES, 'UTF-8') ?></span>
     </div>
+    <?php endif ?>
 
     <div class="form-actions">
         <button type="submit"><?= htmlspecialchars(__('form.submit'), ENT_QUOTES, 'UTF-8') ?></button>

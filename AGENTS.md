@@ -9,7 +9,47 @@ PHPResticAdmin — **бесфреймворковое** PHP-приложение
 - **Dev-зависимости**: PHPUnit 10, PHPStan 1
 - **CLI-инструмент**: `restic` (устанавливается в Docker-образ)
 - **Репозиторий**: `alexdjachenko/PHPResticAdmin` на GitHub
-- **Триггер CI**: push/PR в `main`
+- **VCS**: Git, хостинг GitHub. Работаем через feature-ветки и Pull Requests
+- **CI**: GitHub Actions — тесты запускаются только там. Ориентируемся на статусы сборок на GitHub, локально проект не запускаем
+- **Текущий этап**: Stage 3 (CRUD репозиториев, категории, i18n) — завершён, в доработке
+
+---
+
+## Воркфлоу разработки (Git/GitHub)
+
+### Рекомендуемый процесс
+
+```
+1. git checkout main && git pull origin main        # актуализировать main
+2. git checkout -b feature-branch                   # создать ветку
+3. ... код, правки, тесты ...                       # разработка
+4. git add -A && git commit -m "..."               # зафиксировать
+5. git push -u origin feature-branch               # отправить на GitHub
+6. Открыть Pull Request из ветки в main             # через ссылку из вывода git push
+7. Дождаться зелёных проверок CI (GitHub Actions)   # lint, phpstan, unit, integration
+8. Если проверки упали — правим, git push снова     # CI перезапускается автоматически
+9. После зелёных проверок — "Merge pull request"   # на GitHub
+10. git checkout main && git pull origin main       # подтянуть изменения локально
+```
+
+### После мерджа не в main
+
+Если продолжается работа в той же ветке после мерджа PR (ветка отстала от main):
+
+```bash
+git checkout feature-branch
+git pull origin main
+```
+
+Это подтянет merge-коммит, и можно продолжать коммитить в ту же ветку.
+
+### Ориентация на CI
+
+- **Локально проект НЕ запускаем.** Нет локального веб-сервера, нет Docker-контейнера для разработки
+- **Локально НЕ гоним тесты.** Исключение — быстрая проверка синтаксиса (`php -l`)
+- **Все тесты проходят в GitHub Actions** — lint, phpstan, unit, integration
+- При падении тестов смотрим логи в GitHub Actions (вкладка Checks в PR) и правим по логам
+- Интеграционные тесты требуют Docker с restic — они проходят ТОЛЬКО в CI
 
 ---
 
@@ -31,31 +71,38 @@ src/
     Security.php         # Генерация/проверка CSRF-токенов + помощник htmlspecialchars
   Helpers/
     View.php             # Статический рендерер шаблонов с опциональной обёрткой layout
+    Lang.php             # i18n: загрузка переводов, setLocale(), get(), detectFromRequest()
+    functions.php        # Глобальная функция-хелпер __() для переводов
+  Lang/
+    en.php               # Английские переводы (ключ → строка)
+    ru.php               # Русские переводы
   Auth/
-    Authenticator.php    # Вход/выход, поддержка guest_user, password_verify
+    Authenticator.php    # Вход/выход, canUse/canEdit/canMove, guest_user, права по категориям
   Storage/
     ConfigStorage.php    # Чтение PHP-конфигов из data/cfg/ (users.php, settings.php)
-    RepositoryStorage.php # Чтение YAML из data/data/repositories.yaml
+    RepositoryStorage.php # CRUD (save/delete/move) + три категории: public/private/session
   Restic/
     CommandRunner.php    # Обёртка proc_open() для выполнения restic CLI
-    RepositoryService.php # testConnection(): выполняет "restic snapshots --json"
+    RepositoryService.php # testConnection(), init() — restic snapshots и restic init
   Controllers/
     DashboardController.php  # GET / → редирект на /repositories, POST /cache/invalidate
     AuthController.php       # GET/POST /login, GET /logout
-    RepositoryController.php # GET /repositories, POST /repositories/check (AJAX)
+    RepositoryController.php # GET /repositories, addForm/add, check, delete, move
 templates/
-  layout.php             # HTML-оболочка: шапка с username/logout, flash-сообщения, <main>
+  layout.php             # HTML-оболочка: шапка, переключатель языка, flash-сообщения, <main>
   login.php              # Форма входа (username + password + CSRF-токен)
   dashboard.php          # Заглушка, не рендерится — / редиректит на /repositories
   repositories/
-    list.php             # Таблица репозиториев + кнопки «Проверить» (AJAX через fetch)
+    list.php             # Таблица репозиториев + кнопки Check/Delete/Move + AJAX
+    add.php              # Форма добавления: имя, тип, путь, пароль, S3-поля, категория, restic init
 data/
   cfg/
-    users.php            # return ['username' => ['password' => 'bcrypt-хеш']]
-    settings.php         # return ['guest_user' => null|string, 'debug' => int, 'timezone', ...]
+    users.php            # Новый формат: password, api_tokens, repos (use/edit по категориям)
+    settings.php         # guest_user, debug, tmp_dir, log_dir, timezone
   data/
-    repositories.yaml    # YAML-список репозиториев (id, name, type, path, password, env)
-tests/
+    repositories.yaml    # YAML public-репозиториев
+    repositories_{user}.yaml  # YAML private-репозиториев (создаётся автоматически)
+  tests/
   bootstrap.php          # composer autoload
   Unit/
     Core/SessionTest.php
@@ -63,9 +110,10 @@ tests/
     Auth/AuthenticatorTest.php
     Storage/ConfigStorageTest.php
     Storage/RepositoryStorageTest.php
+    Helpers/LangTest.php
   Integration/
-    CanaryTest.php       # Дымовой тест: HTTP GET / → содержит "phpresticadmin"
-    ResticConnectionTest.php  # Требует restic: init репозитория → testConnection
+    CanaryTest.php       # Дымовой тест: HTTP GET / → содержит "phpResticAdmin"
+    ResticConnectionTest.php  # Требует restic: init + testConnection
 docker/
   Dockerfile             # php:8.1-apache + restic + composer install --no-dev
   docker-compose.yml     # Порт 8080:80, именованный том для /var/www/data
@@ -87,20 +135,26 @@ docker/
    - Кеширует уровень отладки из `'debug'` (0/1/2)
    - Запускает PHP-сессию через `Session::start()`
    - Вызывает `Authenticator::resolve()` (читает `auth_user` из сессии или подставляет `guest_user`)
-   - Вызывает `registerRoutes()` — регистрирует 7 статических роутов
+   - Инициализирует язык: читает `lang` из сессии или определяет из `Accept-Language`
+   - Вызывает `registerRoutes()` — регистрирует все роуты
 3. `App::run()`: создаёт `Request`, передаёт его в `Router::dispatch()`
 
 ### Роуты (все статические, без параметров пути)
 
-| Метод | Путь                 | Controller::method              | Требуется авторизация |
-|-------|----------------------|---------------------------------|------------------------|
-| GET   | `/`                  | DashboardController::index       | Нет |
-| GET   | `/login`             | AuthController::loginForm        | Нет |
-| POST  | `/login`             | AuthController::login            | Нет |
-| GET   | `/logout`            | AuthController::logout           | Нет |
-| GET   | `/repositories`      | RepositoryController::list       | user != null |
-| POST  | `/repositories/check`| RepositoryController::check      | isLoggedIn |
-| POST  | `/cache/invalidate`  | DashboardController::invalidateCache | isLoggedIn + debug |
+| Метод | Путь                   | Controller::method                | Требуется авторизация      |
+|-------|------------------------|-----------------------------------|----------------------------|
+| GET   | `/`                    | DashboardController::index         | Нет |
+| GET   | `/login`               | AuthController::loginForm          | Нет |
+| POST  | `/login`               | AuthController::login              | Нет |
+| GET   | `/logout`              | AuthController::logout             | Нет |
+| GET   | `/repositories`        | RepositoryController::list         | user != null |
+| GET   | `/repositories/add`    | RepositoryController::addForm      | isLoggedIn + canEdit |
+| POST  | `/repositories/add`    | RepositoryController::add          | isLoggedIn + canEdit |
+| POST  | `/repositories/check`  | RepositoryController::check        | isLoggedIn |
+| POST  | `/repositories/delete` | RepositoryController::delete       | isLoggedIn + canEdit |
+| POST  | `/repositories/move`   | RepositoryController::move         | isLoggedIn + canMove |
+| POST  | `/language`            | App (inline handler)               | Нет |
+| POST  | `/cache/invalidate`    | DashboardController::invalidateCache | isLoggedIn + debug |
 
 ### Логика аутентификации
 
@@ -113,13 +167,38 @@ docker/
 - Если `guest_user` задан (например, `"guest"`) → неаутентифицированные пользователи могут видеть список репозиториев, но кнопка «Проверить» скрыта
 - Только пользователи с `isLoggedIn()` могут делать POST на `/repositories/check`
 
+### Категории репозиториев и модель прав
+
+Три категории репозиториев:
+
+| Категория  | Хранилище                         | Назначение |
+|------------|-----------------------------------|------------|
+| `public`   | `data/data/repositories.yaml`     | Общие репозитории, видны всем |
+| `private`  | `data/data/repositories_{user}.yaml` | Личные репозитории пользователя |
+| `session`  | `$_SESSION['session_repos']`      | Временные, живут пока жива сессия |
+
+Модель прав (use/edit) для каждой категории задаётся в `users.php` в секции `repos`:
+
+- `use` — видеть репозитории категории в списке (задаётся в `repos.{category}.use`)
+- `edit` — добавлять, удалять, редактировать. Подразумевает `use` (задаётся в `repos.{category}.edit`)
+- `init` — инициализировать новые restic-репозитории (глобальный флаг `can_init` на уровне пользователя)
+- `delete` — удалять репозитории (глобальный флаг `can_delete` на уровне пользователя)
+- `canMove(from, to)` — требует `edit` на обе категории
+
+Fallback для `can_init`/`can_delete`: если флаг не указан — `isLoggedIn()` (true для вошедших, false для guest).
+
+Fallback-правила:
+- Пользователь с полной секцией `repos` — используются указанные права
+- Пользователь без секции `repos`: logged-in → полные права, guest → defaultGuest (public.use, без edit)
+- `edit: true` автоматически даёт `use: true`
+
 ### CSRF-защита
 
 - `Security::csrfToken()` генерирует случайный токен и сохраняет в сессии
 - `Security::validateCsrf()` сравнивает с токеном сессии через `hash_equals` и удаляет токен после первой проверки — токен ОДНОРАЗОВЫЙ
-- Форма входа и кнопка «Проверить» содержат скрытое поле `_csrf_token`
-- Все JSON-ответы (успех и ошибка) эндпоинта `/repositories/check` ДОЛЖНЫ возвращать поле `_csrf_token` с новым токеном — фронтенд обновляет `data-csrf` на кнопке из ответа
-- Если JSON-ответ не вернул новый токен, следующее нажатие «Проверить» получит «Invalid security token»
+- Все формы содержат скрытое поле `_csrf_token`
+- Все JSON-ответы ДОЛЖНЫ возвращать поле `_csrf_token` с новым токеном — фронтенд обновляет `data-csrf` на всех элементах
+- Если JSON-ответ не вернул новый токен, следующий POST получит «Invalid security token»
 
 ### Режим отладки и логирование
 
@@ -147,16 +226,28 @@ docker/
 - `Response::render()` автоматически добавляет `'debug' => App::isDebug()` в переменные шаблона
 - Шаблоны — чистые PHP-файлы, без шаблонизатора
 
+### i18n (интернационализация)
+
+- `Lang::get($key, $replace)` — получить перевод по ключу, с опциональной подстановкой плейсхолдеров `{name}`
+- `__()` — глобальная функция-хелпер, вызывает `Lang::get()`
+- Файлы переводов: `src/Lang/{locale}.php`, возвращают `return [key => value]`
+- `Lang::detectFromRequest()` — парсит `Accept-Language`, берёт первые 2 символа
+- Язык сохраняется в сессию (`lang`). При первом заходе определяется из заголовка, затем можно переключить через POST `/language`
+- Fallback: если ключа нет в текущем языке → английский → сам ключ
+- Все строки в шаблонах и контроллерах (flash-сообщения, ошибки) ОБЯЗАНЫ идти через `__()`
+
 ### Интеграция с Restic
 
 - `CommandRunner::run()` использует `proc_open()` с пайпами stdin/stdout/stderr
 - `RepositoryService::testConnection()` выполняет `restic snapshots --json --repo <путь>`
+- `RepositoryService::init()` выполняет `restic init --repo <путь>`
 - Если пароль задан — передаёт `RESTIC_PASSWORD` в окружение; иначе добавляет `--insecure-no-password`
 
 ### Автосоздание `repositories.yaml`
 
-- При первом обращении к `RepositoryStorage::loadAll()` если файл не существует — создаётся с комментарием-шаблоном
-- Это гарантирует, что приложение не падает с «No repositories configured» при чистой установке
+- При первом обращении к `RepositoryStorage::loadPublic()` если файл не существует — создаётся с комментарием-шаблоном
+- Private-файлы (`repositories_{user}.yaml`) создаются автоматически при первом `save('private', ...)`
+- Session-репозитории живут в сессии, файлов не создают
 
 ---
 
@@ -165,7 +256,8 @@ docker/
 | Команда | Назначение | Контекст |
 |---------|------------|----------|
 | `composer install` | Установка зависимостей | Локальная разработка и CI |
-| `vendor/bin/phpunit -c phpunit.xml --testsuite unit` | Запуск модульных тестов | Локально или CI |
+| `composer dump-autoload` | Обновить автозагрузку после изменений в composer.json | После добавления files autoload |
+| `vendor/bin/phpunit -c phpunit.xml --testsuite unit` | Запуск модульных тестов | CI (локально — только для отладки) |
 | `vendor/bin/phpunit -c phpunit.xml --testsuite integration` | Запуск интеграционных тестов | CI (Docker + restic) |
 | `vendor/bin/phpstan analyse -c phpstan.neon --no-progress` | Статический анализ | CI (level 1, src + htdocs) |
 | `find . -name '*.php' -not -path './vendor/*' -print0 \| xargs -0 -n1 php -l` | Синтаксический линтинг всех PHP-файлов | CI |
@@ -175,28 +267,58 @@ docker/
 
 ---
 
+## Правила написания кода
+
+См. отдельный файл **[CODING.md](CODING.md)** — именование, структура, i18n, архитектура, шаблоны.
+
+---
+
 ## Конфигурационные файлы
 
 ### `data/cfg/users.php`
 
+Новый формат (Stage 3):
+
 ```php
 return [
     'admin' => [
-        'password' => '$2y$10$...',  // bcrypt-хеш из password_hash()
-    ],
+        'password' => '$2y$10$...',
+        'api_tokens' => [],
+        'can_init' => true,
+        'can_delete' => true,
+        'repos' => [
+            'public'  => ['use' => true, 'edit' => true],
+            'private' => ['use' => true, 'edit' => true],
+            'session' => ['use' => true, 'edit' => true],
+        ],
+        ],
+        'guest' => [
+        'password' => null,
+        'api_tokens' => [],
+        'can_init' => false,
+        'can_delete' => false,
+        'repos' => [
+            'public'  => ['use' => true,  'edit' => false],
+            'private' => ['use' => false, 'edit' => false],
+            'session' => ['use' => false, 'edit' => false],
+        ],
+        ],
 ];
 ```
+
+Legacy-формат (без `can_init`/`can_delete` и `repos`) поддерживается: logged-in получают полные права, guest — defaultGuest. `can_init`/`can_delete` без явного флага: `isLoggedIn()`.
 
 ### `data/cfg/settings.php`
 
 ```php
 return [
-    'guest_user' => null,  // Установите 'guest', чтобы разрешить анонимный доступ только для чтения
-    'debug' => 0,          // 0 = выкл, 1 = info, 2 = verbose
+    'guest_user' => 'guest',  // Имя пользователя-гостя из users.php
+    'debug' => 0,             // 0 = выкл, 1 = info, 2 = verbose
     'tmp_dir' => __DIR__ . '/../../tmp',
     'log_dir' => __DIR__ . '/../logs',
     'timezone' => 'UTC',
-];
+    'repo_base_dir' => '/backups',  // Базовый каталог для относительных путей
+    ];
 ```
 
 ### `data/data/repositories.yaml`
@@ -205,11 +327,21 @@ return [
 repositories:
   - id: "уникальный-id"
     name: "Отображаемое имя"
-    type: "local"           # local, sftp, s3 и т.д.
+    type: "local"           # local, sftp, s3, rest
     path: "/backups/repo"   # путь к restic-репозиторию
     password: null           # RESTIC_PASSWORD, null для insecure-no-password
-    # env:                   # опциональные дополнительные переменные окружения
+    # env:                   # опциональные переменные окружения
     #   AWS_ACCESS_KEY_ID: "..."
+    #   AWS_SECRET_ACCESS_KEY: "..."
+```
+
+### `data/lang/{locale}.php`
+
+```php
+return [
+    'section.key' => 'Перевод строки',
+    'section.key_with_placeholder' => 'Текст с {param} для подстановки',
+];
 ```
 
 ---
@@ -239,23 +371,11 @@ repositories:
 
 ### Ошибка «Invalid security token» при повторной проверке репозитория
 
-CSRF-токен одноразовый. При первом AJAX-запросе `/repositories/check` токен расходуется. Если ответ не содержит нового `_csrf_token`, следующее нажатие кнопки отправит старый токен и получит ошибку. Каждый JSON-ответ `/repositories/check` должен включать `'_csrf_token' => App::security()->csrfToken()`.
+CSRF-токен одноразовый. При первом AJAX-запросе токен расходуется. Если ответ не содержит нового `_csrf_token`, следующее нажатие кнопки отправит старый токен и получит ошибку. Каждый JSON-ответ должен включать `'_csrf_token' => App::security()->csrfToken()`.
 
 ### Отладка без нарушения заголовков
 
 `echo`/`var_dump` в production-контейнере ломают `session_start()` и `header()` (ошибка «headers already sent»). Использовать `App::log()` — пишет в stderr Apache через `error_log()`, читается через `docker logs <контейнер>`.
-
----
-
-## Правила написания кода
-
-- **Версия PHP**: 8.1+, типизированные свойства, именованные аргументы
-- **Пространства имён**: PSR-4, `App\` → `src/`, `App\Tests\` → `tests/`
-- **Без фреймворков**: Вся инфраструктура находится в `src/Core/`. Не добавлять фреймворковые зависимости.
-- **Статический сервис-локатор**: Статические методы `App::*()` выступают в роли сервис-контейнера. Не использовать `new` напрямую — всегда обращаться через `App`.
-- **Логирование через `App::log()`**: Не использовать `error_log()` напрямую. Всегда `App::log($message, $level)` с правильным уровнем (0=critical, 1=info, 2=verbose).
-- **Тестировать каждый новый класс**: Создавать соответствующий тест в `tests/Unit/` до или сразу после написания класса.
-- **PHPStan level 1**: Весь код в `src/` и `htdocs/` должен проходить проверку.
 
 ---
 
@@ -271,7 +391,8 @@ CSRF-токен одноразовый. При первом AJAX-запросе 
 
 ## TODO / Технический долг
 
-- [ ] **Демо-данные**: при установке не создаётся `repositories.yaml` с примерами репозиториев. Гостевой вход показывает «No repositories configured». Добавить демо-репозиторий в этапе 3.
-- [ ] **Убрать отладочные `error_log`**: `AuthController::login()`, `Authenticator::login()` и `ConfigStorage::loadPhpFile()` содержат временные `error_log()` для диагностики проблемы входа. Удалить после полной проверки авторизации.
-- [ ] **Валидация `users.php`**: лишняя запятая между элементами массива вызывает «Cannot use empty array elements in arrays». Нужна валидация конфигов при загрузке.
-- [ ] **Интеграционный тест `POST /cache/invalidate`**: нужен тест в `tests/Integration/` с запущенным контейнером, `debug=1`, авторизацией и проверкой сброса OPcache.
+- [x] **Stage 3: CRUD репозиториев**: категории (public/private/session), права (use/edit), save/delete/move, restic init, i18n
+- [ ] **Демо-данные**: при установке не создаётся `repositories.yaml` с примерами репозиториев. Гостевой вход показывает «No repositories configured»
+- [ ] **Валидация `users.php`**: лишняя запятая между элементами массива вызывает «Cannot use empty array elements in arrays»
+- [ ] **Интеграционный тест `POST /cache/invalidate`**: нужен тест с запущенным контейнером, `debug=1`, авторизацией и проверкой сброса OPcache
+- [ ] **Интеграционные тесты CRUD**: тесты на add/delete/move через HTTP
