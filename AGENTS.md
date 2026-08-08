@@ -179,9 +179,13 @@ docker/
 
 Модель прав (use/edit) для каждой категории задаётся в `users.php` в секции `repos`:
 
-- `use` — видеть репозитории категории в списке
-- `edit` — добавлять, удалять, редактировать. Подразумевает `use`
+- `use` — видеть репозитории категории в списке (задаётся в `repos.{category}.use`)
+- `edit` — добавлять, удалять, редактировать. Подразумевает `use` (задаётся в `repos.{category}.edit`)
+- `init` — инициализировать новые restic-репозитории (глобальный флаг `can_init` на уровне пользователя)
+- `delete` — удалять репозитории (глобальный флаг `can_delete` на уровне пользователя)
 - `canMove(from, to)` — требует `edit` на обе категории
+
+Fallback для `can_init`/`can_delete`: если флаг не указан — `isLoggedIn()` (true для вошедших, false для guest).
 
 Fallback-правила:
 - Пользователь с полной секцией `repos` — используются указанные права
@@ -280,25 +284,29 @@ return [
     'admin' => [
         'password' => '$2y$10$...',
         'api_tokens' => [],
+        'can_init' => true,
+        'can_delete' => true,
         'repos' => [
-            'public'  => ['use' => true, 'edit' => true, 'init' => true, 'delete' => true],
-            'private' => ['use' => true, 'edit' => true, 'init' => true, 'delete' => true],
-            'session' => ['use' => true, 'edit' => true, 'init' => true, 'delete' => true],
+            'public'  => ['use' => true, 'edit' => true],
+            'private' => ['use' => true, 'edit' => true],
+            'session' => ['use' => true, 'edit' => true],
         ],
         ],
         'guest' => [
         'password' => null,
         'api_tokens' => [],
+        'can_init' => false,
+        'can_delete' => false,
         'repos' => [
-            'public'  => ['use' => true,  'edit' => false, 'init' => false, 'delete' => false],
-            'private' => ['use' => false, 'edit' => false, 'init' => false, 'delete' => false],
-            'session' => ['use' => false, 'edit' => false, 'init' => false, 'delete' => false],
+            'public'  => ['use' => true,  'edit' => false],
+            'private' => ['use' => false, 'edit' => false],
+            'session' => ['use' => false, 'edit' => false],
         ],
         ],
 ];
 ```
 
-Legacy-формат (без `repos`) поддерживается: logged-in получают полные права, guest — defaultGuest.
+Legacy-формат (без `can_init`/`can_delete` и `repos`) поддерживается: logged-in получают полные права, guest — defaultGuest. `can_init`/`can_delete` без явного флага: `isLoggedIn()`.
 
 ### `data/cfg/settings.php`
 
