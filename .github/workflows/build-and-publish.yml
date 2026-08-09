@@ -18,6 +18,12 @@ jobs:
   release-please:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    # ШАГ 1: Объявляем выходы из джобы, чтобы их увидела сборка Docker
+    outputs:
+      releases_created: ${{ steps.release.outputs.releases_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+      major: ${{ steps.release.outputs.major }}
+      minor: ${{ steps.release.outputs.minor }}
     steps:
       - uses: googleapis/release-please-action@v4
         with:
@@ -25,20 +31,9 @@ jobs:
 
   build-and-publish:
     runs-on: ubuntu-latest
-
-    # ХИТРОСТЬ ТУТ: Если это пуш в main, мы принудительно заставляем джобу 
-    # подождать, пока завершится release-please и создаст тег на сервере.
-    # Если это Pull Request, она запустится сразу же (так как для PR джоба release-please пропускается)
-    needs: [release-please]
-    if: always() && (needs.release-please.result == 'success' || needs.release-please.result == 'skipped')
-    
-    
+    # ШАГ 2: Связываем джобы через needs, чтобы Docker мог прочитать переменные из release-please
+    needs: release-please
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0    # Скачивает всю историю коммитов
-          fetch-tags: true  # Принудительно скачивает все Git-теги с сервера
-
       - name: Docker meta
         id: meta
         uses: docker/metadata-action@v5
@@ -48,20 +43,18 @@ jobs:
           flavor: |
             latest=auto
           tags: |
-            # 1. Спрашиваем у локального Git, привязан ли к текущему коммиту какой-то тег.
-            # Если тег есть (например, v1.2.3), экшен подставит его сюда и сделает основным + создаст latest.
-            # Если тегов нет (обычный коммит или PR), эта строчка просто безопасно проигнорируется.
-            type=raw,value={{tag}},enable=${{ github.event_name == 'push' }}
+            # 1. Если release-please только что создал релиз, берем теги прямо из его результатов!
+            type=raw,value=latest,enable=${{ needs.release-please.outputs.releases_created == 'true' }}
+            type=raw,value=${{ needs.release-please.outputs.tag_name }},enable=${{ needs.release-please.outputs.releases_created == 'true' }}
+            type=raw,value=v${{ needs.release-please.outputs.major }},enable=${{ needs.release-please.outputs.releases_created == 'true' }}
+            type=raw,value=v${{ needs.release-please.outputs.major }}.${{ needs.release-please.outputs.minor }},enable=${{ needs.release-please.outputs.releases_created == 'true' }}
             
-            # 2. Ваши стандартные правила семантического версионирования (сработают, если на шаге 1 нашелся тег)
-            type=semver,pattern=v{{major}},enable=${{ github.event_name == 'push' }}
-            type=semver,pattern=v{{major}}.{{minor}},enable=${{ github.event_name == 'push' }}
-            
-            # 3. Если это коммит в main или PR, всегда собирается sha-xxxxxx для отладки
+            # 2. Ваши стандартные отладочные сборки (на каждый пуш в main собирается sha)
             type=sha,prefix=sha-
             
-            # 4. Если это Pull Request, соберется тег pr-XXX (ваша отладка)
+            # 3. Ваша отладка в Pull Request
             type=raw,value=pr-${{ github.event.pull_request.number }},enable=${{ github.event_name == 'pull_request' }}
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
