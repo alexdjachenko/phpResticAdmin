@@ -101,26 +101,27 @@ class SnapshotServiceTest extends TestCase
         $snapshots = $service->listSnapshots($this->repo);
         $this->assertNotEmpty($snapshots);
 
-        $snapId = $snapshots[0]['short_id']; // 8 chars, as used by the UI
+        // Restic tag changes snapshot ID, so we must use the full ID
+        // and re-fetch after each tag operation.
+        $snapId = $snapshots[0]['id'];
 
         // Add tag
         $result = $service->addTag($this->repo, $snapId, 'test-tag-xyz');
         $this->assertTrue($result['ok'], 'Add tag should succeed: ' . ($result['error'] ?? ''));
 
-        // Verify tag
-        $snap = $service->getSnapshot($this->repo, $snapId);
-        $this->assertNotNull($snap, 'Snapshot should be found after add');
-        $tags = $snap['tags'] ?? [];
+        // Re-fetch: tag operation changes snapshot ID, only one snapshot exists
+        $snapshots = $service->listSnapshots($this->repo);
+        $snapId = $snapshots[0]['id'];
+        $tags = $snapshots[0]['tags'] ?? [];
         $this->assertContains('test-tag-xyz', $tags, 'Tag should be present after add');
 
-        // Remove tag
+        // Remove tag using the fresh ID
         $result = $service->removeTag($this->repo, $snapId, 'test-tag-xyz');
         $this->assertTrue($result['ok'], 'Remove tag should succeed: ' . ($result['error'] ?? ''));
 
-        // Verify removed
-        $snap = $service->getSnapshot($this->repo, $snapId);
-        $this->assertNotNull($snap, 'Snapshot should be found after remove');
-        $tags = $snap['tags'] ?? [];
+        // Re-fetch and verify
+        $snapshots = $service->listSnapshots($this->repo);
+        $tags = $snapshots[0]['tags'] ?? [];
         $this->assertNotContains('test-tag-xyz', $tags, 'Tag should be removed');
     }
 
