@@ -11,7 +11,7 @@ PHPResticAdmin — **бесфреймворковое** PHP-приложение
 - **Репозиторий**: `alexdjachenko/PHPResticAdmin` на GitHub
 - **VCS**: Git, хостинг GitHub. Работаем через feature-ветки и Pull Requests
 - **CI**: GitHub Actions — тесты запускаются только там. Ориентируемся на статусы сборок на GitHub, локально проект не запускаем
-- **Текущий этап**: Stage 4 (Снепшоты, Browse, страница репозитория, backup, механика текущего репозитория) — завершён, в доработке
+- **Текущий этап**: Stage 5 (Export, Maintenance, Keys) — реализован
 
 ---
 
@@ -99,15 +99,20 @@ src/
     ConfigStorage.php    # Чтение PHP-конфигов из data/cfg/ (users.php, settings.php)
     RepositoryStorage.php # CRUD (save/delete/move/update) + три категории: public/private/session
   Restic/
-    CommandRunner.php    # run() + runStream() — обёртка proc_open()
-    RepositoryService.php # testConnection(), init(), backup()
+    CommandRunner.php    # run() + runStream() + runStreamWithHeaders() — обёртка proc_open()
+    RepositoryService.php # testConnection(), init(), backup(), backupSync()
     SnapshotService.php   # listSnapshots(), getSnapshot(), addTag(), removeTag()
+    MaintenanceService.php # check(), prune(), rebuildIndex(), unlock(), forget()
+    KeyService.php         # listKeys(), addKey(), removeKey(), changePassword()
   Controllers/
     DashboardController.php  # GET / → дашборд, POST /cache/invalidate
     AuthController.php       # GET/POST /login, GET /logout
     RepositoryController.php # list, addForm/add, detail, editForm/edit, check, delete, move, backup, select
     SnapshotController.php   # GET /snapshots, POST /snapshots/tag (AJAX-теги)
     BrowseController.php     # GET /browse — дерево файлов + хлебные крошки
+    ExportController.php     # GET /download, GET /export — скачивание файлов и снепшотов
+    MaintenanceController.php # GET /maintenance, POST /maintenance/* — обслуживание
+    KeyController.php        # GET /keys, POST /keys/* — управление ключами
 templates/
   layout.php             # Шапка, dropdown репозиториев, навигация, flash, <main>
   login.php              # Форма входа
@@ -118,9 +123,14 @@ templates/
     detail.php           # Страница деталей: инфо + Check/Backup/Snapshots/Edit/Move/Delete
     edit.php             # Форма редактирования с backup_paths и S3
   snapshots/
-    list.php             # Таблица снепшотов + AJAX-тегирование + Browse
+    list.php             # Таблица снепшотов + AJAX-тегирование + Browse + Export
   browse/
-    tree.php             # Дерево файлов/папок + хлебные крошки
+    tree.php             # Дерево файлов/папок + хлебные крошки + Download
+  maintenance/
+    index.php            # Формы обслуживания (check/prune/rebuild-index/unlock/forget)
+    result.php           # Результат операции обслуживания
+  keys/
+    list.php             # Таблица ключей + формы add/remove/passwd
 data/
   cfg/
     users.php            # Новый формат: password, api_tokens, repos (use/edit по категориям)
@@ -128,8 +138,11 @@ data/
   data/
     repositories.yaml    # YAML public-репозиториев
     repositories_{user}.yaml  # YAML private-репозиториев (создаётся автоматически)
-  tests/
-  bootstrap.php          # composer autoload
+  tests/Unit/Restic/MaintenanceServiceTest.php
+  tests/Unit/Restic/KeyServiceTest.php
+  tests/Integration/ExportEndToEndTest.php
+  tests/Integration/MaintenanceEndToEndTest.php
+  tests/Integration/KeyEndToEndTest.php
   Unit/
     Core/SessionTest.php
     Core/SecurityTest.php
@@ -194,6 +207,18 @@ docker/
 | GET   | `/browse`              | BrowseController::tree             | user != null + canUse |
 | POST  | `/language`            | App (inline handler)               | Нет |
 | POST  | `/cache/invalidate`    | DashboardController::invalidateCache | isLoggedIn + debug |
+| GET   | `/download`            | ExportController::file             | user != null + canUse |
+| GET   | `/export`              | ExportController::snapshot         | user != null + canUse |
+| GET   | `/maintenance`         | MaintenanceController::index       | isLoggedIn + canEdit |
+| POST  | `/maintenance/check`   | MaintenanceController::check       | isLoggedIn + canEdit |
+| POST  | `/maintenance/prune`   | MaintenanceController::prune       | isLoggedIn + canEdit |
+| POST  | `/maintenance/rebuild-index` | MaintenanceController::rebuildIndex | isLoggedIn + canEdit |
+| POST  | `/maintenance/unlock`  | MaintenanceController::unlock      | isLoggedIn + canEdit |
+| POST  | `/maintenance/forget`  | MaintenanceController::forget      | isLoggedIn + canEdit |
+| GET   | `/keys`                | KeyController::list                | isLoggedIn + canEdit |
+| POST  | `/keys/add`            | KeyController::add                 | isLoggedIn + canEdit |
+| POST  | `/keys/remove`         | KeyController::remove              | isLoggedIn + canEdit |
+| POST  | `/keys/passwd`         | KeyController::passwd              | isLoggedIn + canEdit |
 
 ### Логика аутентификации
 
@@ -333,7 +358,9 @@ Fallback-правила:
 
 - **`current_repo` в сессии переживает между вкладками.** При открытии новой вкладки дашборд показывает данные последнего выбранного репо. Дашборд делает `redirect('/repositories')`, сбрасывая `current_repo`.
 - **Стриминг (`Content-Type: text/plain`) даёт чёрную страницу без навигации.** Для backup используется синхронный `backupSync()` + рендеринг в шаблоне `repositories/backup.php`.
-- **Языковой переключатель в layout НЕ проверяет CSRF** (роут `/language` не вызывает `validateCsrf`). Токен убран из формы, чтобы не расходовать впустую.
+- **`restic dump /` создаёт tar-архив**, который нужно отдавать с `Content-Type: application/x-tar`
+- **`restic key add` и `restic key passwd` требуют подтверждения пароля через stdin** (два ввода)
+- **`restic check` может быть долгим** — для CI использовать `--read-data-subset=1/100`
 
 ---
 
@@ -448,6 +475,7 @@ repositories:
 
 - [x] **Stage 3: CRUD репозиториев**
 - [x] **Stage 4: Снепшоты, Browse, страница репозитория, backup**
+- [x] **Stage 5: Export, Maintenance, Keys, копирайты**
 - [ ] **Демо-данные**: при установке не создаётся `repositories.yaml` с примерами
 - [ ] **Валидация `users.php`**: лишняя запятая в массиве ломает парсинг
 - [ ] **Интеграционный тест `POST /cache/invalidate`**

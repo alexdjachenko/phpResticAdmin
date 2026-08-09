@@ -15,6 +15,8 @@
                 <a href="/repositories"><?= htmlspecialchars(__('nav.repositories'), ENT_QUOTES, 'UTF-8') ?></a>
                 <?php if (!empty($currentRepoId ?? null)): ?>
                 <a href="/snapshots"><?= htmlspecialchars(__('nav.snapshots'), ENT_QUOTES, 'UTF-8') ?></a>
+                <a href="/maintenance?repo=<?= htmlspecialchars(urlencode($currentRepoId), ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars(__('nav.maintenance'), ENT_QUOTES, 'UTF-8') ?></a>
+                <a href="/keys?repo=<?= htmlspecialchars(urlencode($currentRepoId), ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars(__('nav.keys'), ENT_QUOTES, 'UTF-8') ?></a>
                 <?php endif ?>
             </span>
         </div>
@@ -64,8 +66,10 @@
     <main><?= $content ?? '' ?></main>
 
     <footer class="app-footer">
-        phpresticadmin v<?= htmlspecialchars($appVersion ?? 'dev', ENT_QUOTES, 'UTF-8') ?>
+        © 2026 Alex Djachenko (Алексей Дьяченко)
+        &middot; <strong>phpResticAdmin</strong> v<?= htmlspecialchars($appVersion ?? 'dev', ENT_QUOTES, 'UTF-8') ?>
         &middot; restic <?= htmlspecialchars($resticVersion ?? '', ENT_QUOTES, 'UTF-8') ?>
+        &middot; <a href="https://www.apache.org/licenses/LICENSE-2.0" target="_blank" rel="noopener">Apache 2.0</a>
     </footer>
 </body>
 </html>

@@ -1,9 +1,17 @@
 <?php
 
+/**
+ * phpResticAdmin — Web UI for restic backup repositories.
+ * Copyright (c) 2026 Alex Djachenko (Алексей Дьяченко)
+ * Licensed under the Apache License, Version 2.0.
+ */
+
 namespace App\Core;
 
 use App\Auth\Authenticator;
 use App\Restic\CommandRunner;
+use App\Restic\KeyService;
+use App\Restic\MaintenanceService;
 use App\Restic\RepositoryService;
 use App\Restic\SnapshotService;
 use App\Storage\ConfigStorage;
@@ -19,6 +27,8 @@ class App
     private static ?CommandRunner $runner = null;
     private static ?RepositoryService $repoService = null;
     private static ?SnapshotService $snapshotService = null;
+    private static ?MaintenanceService $maintenanceService = null;
+    private static ?KeyService $keyService = null;
     private static ?Security $security = null;
     private static ?Response $response = null;
 
@@ -195,6 +205,22 @@ class App
         return self::$snapshotService;
     }
 
+    public static function maintenanceService(): MaintenanceService
+    {
+        if (self::$maintenanceService === null) {
+            self::$maintenanceService = new MaintenanceService(self::runner());
+        }
+        return self::$maintenanceService;
+    }
+
+    public static function keyService(): KeyService
+    {
+        if (self::$keyService === null) {
+            self::$keyService = new KeyService(self::runner());
+        }
+        return self::$keyService;
+    }
+
     public static function security(): Security
     {
         if (self::$security === null) {
@@ -328,6 +354,66 @@ class App
         $router->map('POST', '/cache/invalidate', function () {
             $controller = new \App\Controllers\DashboardController();
             $controller->invalidateCache();
+        });
+
+        $router->map('GET', '/download', function () {
+            $controller = new \App\Controllers\ExportController();
+            $controller->file();
+        });
+
+        $router->map('GET', '/export', function () {
+            $controller = new \App\Controllers\ExportController();
+            $controller->snapshot();
+        });
+
+        $router->map('GET', '/maintenance', function () {
+            $controller = new \App\Controllers\MaintenanceController();
+            $controller->index();
+        });
+
+        $router->map('POST', '/maintenance/check', function () {
+            $controller = new \App\Controllers\MaintenanceController();
+            $controller->check();
+        });
+
+        $router->map('POST', '/maintenance/prune', function () {
+            $controller = new \App\Controllers\MaintenanceController();
+            $controller->prune();
+        });
+
+        $router->map('POST', '/maintenance/rebuild-index', function () {
+            $controller = new \App\Controllers\MaintenanceController();
+            $controller->rebuildIndex();
+        });
+
+        $router->map('POST', '/maintenance/unlock', function () {
+            $controller = new \App\Controllers\MaintenanceController();
+            $controller->unlock();
+        });
+
+        $router->map('POST', '/maintenance/forget', function () {
+            $controller = new \App\Controllers\MaintenanceController();
+            $controller->forget();
+        });
+
+        $router->map('GET', '/keys', function () {
+            $controller = new \App\Controllers\KeyController();
+            $controller->list();
+        });
+
+        $router->map('POST', '/keys/add', function () {
+            $controller = new \App\Controllers\KeyController();
+            $controller->add();
+        });
+
+        $router->map('POST', '/keys/remove', function () {
+            $controller = new \App\Controllers\KeyController();
+            $controller->remove();
+        });
+
+        $router->map('POST', '/keys/passwd', function () {
+            $controller = new \App\Controllers\KeyController();
+            $controller->passwd();
         });
     }
 }

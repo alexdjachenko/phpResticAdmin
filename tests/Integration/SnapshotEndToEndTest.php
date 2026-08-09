@@ -1,5 +1,11 @@
 <?php
 
+/**
+ * phpResticAdmin — Web UI for restic backup repositories.
+ * Copyright (c) 2026 Alex Djachenko (Алексей Дьяченко)
+ * Licensed under the Apache License, Version 2.0.
+ */
+
 namespace App\Tests\Integration;
 
 use App\Restic\CommandRunner;
@@ -238,6 +244,78 @@ class SnapshotEndToEndTest extends TestCase
             $this->assertArrayHasKey('file_b.txt', $files);
             $this->assertSame(200, $files['file_b.txt'], "backup-" . ($i + 1) . " file_b should be 200 bytes");
         }
+    }
+
+    public function testExportSingleFile(): void
+    {
+        // backup-3: file_a.txt = 150 bytes of 'X'
+        $snapId = $this->snapshots[2]['id'];
+        $result = $this->runner->run(
+            ['restic', 'dump', $snapId, '/dir1/file_a.txt', '--repo', $this->repoDir, '--insecure-no-password'],
+            ['RESTIC_PASSWORD' => '']
+        );
+
+        $this->assertSame(0, $result['exitCode'], 'dump file_a.txt should succeed: ' . $result['stderr']);
+        $this->assertEquals(str_repeat('X', 150), $result['stdout'], 'file_a.txt should contain exactly 150 X characters');
+    }
+
+    public function testExportEntireSnapshot(): void
+    {
+        $snapId = $this->snapshots[1]['id'];
+        $result = $this->runner->run(
+            ['restic', 'dump', $snapId, '/', '--repo', $this->repoDir, '--insecure-no-password'],
+            ['RESTIC_PASSWORD' => '']
+        );
+
+        $this->assertSame(0, $result['exitCode'], 'dump / should succeed: ' . $result['stderr']);
+        $this->assertGreaterThan(0, strlen($result['stdout']), 'tar output should not be empty');
+        $this->assertStringContainsString('ustar', substr($result['stdout'], 257, 10), 'Output should be a valid tar archive');
+    }
+
+    public function testForgetKeepLastKeepsCorrectSnapshots(): void
+    {
+        $result = $this->runner->run(
+            ['restic', 'forget', '--keep-last', '2', '--repo', $this->repoDir, '--insecure-no-password'],
+            ['RESTIC_PASSWORD' => '']
+        );
+        $this->assertSame(0, $result['exitCode'], 'forget should succeed: ' . $result['stderr']);
+
+        $snapResult = $this->runner->run(
+            ['restic', 'snapshots', '--json', '--repo', $this->repoDir, '--insecure-no-password'],
+            ['RESTIC_PASSWORD' => '']
+        );
+        $snaps = json_decode($snapResult['stdout'], true);
+        $this->assertIsArray($snaps);
+        $this->assertCount(2, $snaps, 'should keep exactly 2 snapshots');
+
+        $remainingIds = array_map(fn($s) => $s['id'] ?? '', $snaps);
+        $this->assertContains($this->snapshots[1]['id'], $remainingIds, 'backup-2 should be kept');
+        $this->assertContains($this->snapshots[2]['id'], $remainingIds, 'backup-3 should be kept');
+        $this->assertNotContains($this->snapshots[0]['id'], $remainingIds, 'backup-1 should be removed');
+    }
+
+    public function testForgetThenCheck(): void
+    {
+        $result = $this->runner->run(
+            ['restic', 'forget', '--keep-last', '1', '--repo', $this->repoDir, '--insecure-no-password'],
+            ['RESTIC_PASSWORD' => '']
+        );
+        $this->assertSame(0, $result['exitCode'], 'forget should succeed: ' . $result['stderr']);
+
+        $result = $this->runner->run(
+            ['restic', 'check', '--repo', $this->repoDir, '--insecure-no-password'],
+            ['RESTIC_PASSWORD' => '']
+        );
+        $this->assertSame(0, $result['exitCode'], 'check after forget should succeed: ' . $result['stderr']);
+    }
+
+    public function testUnlockSucceeds(): void
+    {
+        $result = $this->runner->run(
+            ['restic', 'unlock', '--repo', $this->repoDir, '--insecure-no-password'],
+            ['RESTIC_PASSWORD' => '']
+        );
+        $this->assertSame(0, $result['exitCode'], 'unlock on clean repo should succeed');
     }
 
     // ========================

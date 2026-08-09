@@ -41,7 +41,10 @@ $repoId = $repo['id'] ?? '';
             <?php endforeach ?>
             <?php foreach ($files as $entry): ?>
                 <tr class="browse-file">
-                    <td><?= htmlspecialchars($entry['name'] ?? '', ENT_QUOTES, 'UTF-8') ?></td>
+                    <td>
+                        <?= htmlspecialchars($entry['name'] ?? '', ENT_QUOTES, 'UTF-8') ?>
+                        <a href="/download?repo=<?= htmlspecialchars(urlencode($repoId), ENT_QUOTES, 'UTF-8') ?>&snapshot=<?= htmlspecialchars(urlencode($snapId), ENT_QUOTES, 'UTF-8') ?>&path=<?= htmlspecialchars(urlencode($entry['path'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" class="btn-download" title="<?= htmlspecialchars(__('export.download'), ENT_QUOTES, 'UTF-8') ?>">&darr;</a>
+                    </td>
                     <td><?= htmlspecialchars(\App\Helpers\Format::bytes((int) ($entry['size'] ?? 0)), ENT_QUOTES, 'UTF-8') ?></td>
                     <td><?= htmlspecialchars(\App\Helpers\Format::date($entry['mtime'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
                 </tr>
