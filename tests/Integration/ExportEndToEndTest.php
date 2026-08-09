@@ -65,7 +65,7 @@ class ExportEndToEndTest extends TestCase
     public function testDumpSingleFileReturnsCorrectContent(): void
     {
         $result = $this->runner->run(
-            ['restic', 'dump', $this->snapId, '/dir/file.txt', '--repo', $this->repoDir, '--insecure-no-password'],
+            ['restic', 'dump', $this->snapId, $this->dataDir . '/dir/file.txt', '--repo', $this->repoDir, '--insecure-no-password'],
             ['RESTIC_PASSWORD' => '']
         );
 

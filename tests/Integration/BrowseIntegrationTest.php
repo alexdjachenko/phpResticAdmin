@@ -74,7 +74,7 @@ class BrowseIntegrationTest extends TestCase
         );
 
         $this->assertSame(0, $result['exitCode'], 'Browse should succeed: ' . $result['stderr']);
-        $entries = json_decode($result['stdout'], true);
+        $entries = $this->parseNdjson($result['stdout']);
         $this->assertIsArray($entries);
         $this->assertNotEmpty($entries);
 
@@ -87,19 +87,40 @@ class BrowseIntegrationTest extends TestCase
 
     public function testBrowseSubdirectory(): void
     {
+        $dataDir = $this->tmpDir . '/data';
         $result = $this->runner->run(
-            ['restic', 'ls', '--json', '--repo', $this->repoDir, '--insecure-no-password', $this->snapId, '/a/b'],
+            ['restic', 'ls', '--json', '--repo', $this->repoDir, '--insecure-no-password', $this->snapId, $dataDir . '/a/b'],
             ['RESTIC_PASSWORD' => '']
         );
 
         $this->assertSame(0, $result['exitCode'], 'Browse subdir should succeed: ' . $result['stderr']);
-        $entries = json_decode($result['stdout'], true);
+        $entries = $this->parseNdjson($result['stdout']);
         $this->assertIsArray($entries);
 
         $files = array_filter($entries, function (array $e): bool {
             return ($e['type'] ?? '') === 'file' && ($e['name'] ?? '') === 'file.txt';
         });
         $this->assertNotEmpty($files, 'Should find file.txt in /a/b');
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function parseNdjson(string $output): array
+    {
+        $entries = [];
+        $lines = explode("\n", trim($output));
+        foreach ($lines as $line) {
+            $line = trim($line);
+            if ($line === '' || $line === 'null') {
+                continue;
+            }
+            $entry = json_decode($line, true);
+            if (is_array($entry)) {
+                $entries[] = $entry;
+            }
+        }
+        return $entries;
     }
 
     private function removeDir(string $dir): void

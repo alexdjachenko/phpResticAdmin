@@ -103,20 +103,9 @@ class KeyEndToEndTest extends TestCase
 
     public function testChangePassword(): void
     {
-        // Get current key ID
-        $listResult = $this->runner->run(
-            ['restic', 'key', 'list', '--json', '--repo', $this->repoDir],
-            ['RESTIC_PASSWORD' => $this->repoPassword]
-        );
-        $keys = json_decode($listResult['stdout'], true);
-        $this->assertIsArray($keys);
-        $this->assertNotEmpty($keys);
-        $keyId = $keys[0]['id'] ?? '';
-        $this->assertNotEmpty($keyId);
-
-        // Change password
+        // Change password (restic 0.19+ key passwd no longer takes key ID)
         $result = $this->runner->run(
-            ['restic', 'key', 'passwd', $keyId, '--repo', $this->repoDir],
+            ['restic', 'key', 'passwd', '--repo', $this->repoDir],
             ['RESTIC_PASSWORD' => $this->repoPassword],
             "changed789\nchanged789\n"
         );

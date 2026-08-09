@@ -62,7 +62,7 @@ class ResticConnectionTest extends TestCase
 
         // Load via RepositoryStorage
         $storage = new RepositoryStorage($yamlFile);
-        $loaded = $storage->loadAll();
+        $loaded = $storage->loadAll('test');
 
         $this->assertCount(1, $loaded);
         $this->assertSame('test123', $loaded[0]['id']);

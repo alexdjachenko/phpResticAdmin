@@ -110,7 +110,7 @@ class SnapshotService
     private function tagOperation(array $repository, string $snapId, string $tag, string $operation): array
     {
         $command = $this->buildCommand(
-            ['tag', '--repo', $repository['path'], $operation, $tag, $snapId],
+            ['tag', $operation, $tag, $snapId],
             $repository
         );
         $env = $this->buildEnv($repository);

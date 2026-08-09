@@ -79,7 +79,7 @@ class SnapshotServiceTest extends TestCase
         $this->assertArrayHasKey('time', $snap);
         $this->assertArrayHasKey('paths', $snap);
         $this->assertArrayHasKey('summary', $snap);
-        $this->assertArrayHasKey('total_size', $snap['summary']);
+        $this->assertArrayHasKey('total_bytes_processed', $snap['summary']);
     }
 
     public function testGetSnapshot(): void
