@@ -163,6 +163,7 @@ class MaintenanceController
             'repo' => $repo,
             'isLoggedIn' => $auth->isLoggedIn(),
             'username' => $user,
+            'dryRun' => $policy['dry_run'],
         ]);
     }
 

@@ -876,6 +876,17 @@ button:hover,
     margin-bottom: 12px;
     font-weight: 600;
 }
+.result-info {
+    padding: 10px 16px;
+    border-radius: 4px;
+    background: #d1ecf1;
+    color: #0c5460;
+    margin-bottom: 12px;
+    font-weight: 600;
+}
+.maintenance-stderr-info {
+    color: #856404;
+}
 
 /* Key table */
 .key-table {

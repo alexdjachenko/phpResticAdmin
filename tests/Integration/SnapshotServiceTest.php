@@ -102,9 +102,10 @@ class SnapshotServiceTest extends TestCase
 
         $this->assertNotEmpty($snapshots);
         $snapId = $snapshots[0]['id'];
+        $shortId = $snapshots[0]['short_id'] ?? '';
 
-        // Add tag
-        $result = $service->addTag($this->repo, $snapId, 'test-tag-xyz');
+        // Add tag using short_id (restic tag prefers short IDs)
+        $result = $service->addTag($this->repo, $shortId, 'test-tag-xyz');
         $this->assertTrue($result['ok'], 'Add tag should succeed: ' . ($result['error'] ?? ''));
 
         // Verify tag is present
@@ -113,14 +114,22 @@ class SnapshotServiceTest extends TestCase
         $tags = $snapshots[0]['tags'] ?? [];
         $this->assertContains('test-tag-xyz', $tags, 'Tag should be present after add');
 
-        // Remove tag
-        $result = $service->removeTag($this->repo, $snapId, 'test-tag-xyz');
+        // Remove tag using short_id
+        $result = $service->removeTag($this->repo, $shortId, 'test-tag-xyz');
         $this->assertTrue($result['ok'], 'Remove tag should succeed: ' . ($result['error'] ?? ''));
 
-        // Verify tag is removed
+        // Verify tag is removed - find snapshot by ID explicitly
         $snapshots = $service->listSnapshots($this->repo);
         $this->assertNotEmpty($snapshots, 'Should still have snapshots after tag remove');
-        $tags = $snapshots[0]['tags'] ?? [];
+        $found = null;
+        foreach ($snapshots as $s) {
+            if (($s['id'] ?? '') === $snapId || ($s['short_id'] ?? '') === $shortId) {
+                $found = $s;
+                break;
+            }
+        }
+        $this->assertNotNull($found, 'Should find the snapshot after tag remove');
+        $tags = $found['tags'] ?? [];
         $this->assertNotContains('test-tag-xyz', $tags, 'Tag should be removed');
     }
 

@@ -6,6 +6,10 @@
 
 <h2><?= htmlspecialchars(__('maint.result_title', ['{action}' => $action]), ENT_QUOTES, 'UTF-8') ?></h2>
 
+<?php if (!empty($dryRun)): ?>
+    <div class="result-info"><?= htmlspecialchars(__('maint.dry_run_note'), ENT_QUOTES, 'UTF-8') ?></div>
+<?php endif ?>
+
 <?php if ($result['ok']): ?>
     <div class="result-ok"><?= htmlspecialchars(__('maint.status_ok'), ENT_QUOTES, 'UTF-8') ?></div>
 <?php else: ?>
@@ -18,6 +22,5 @@
 <?php endif ?>
 
 <?php if (!empty($result['error'])): ?>
-    <h3><?= htmlspecialchars(__('maint.status_error'), ENT_QUOTES, 'UTF-8') ?></h3>
-    <pre class="maintenance-output"><?= htmlspecialchars($result['error'], ENT_QUOTES, 'UTF-8') ?></pre>
+    <pre class="maintenance-output<?= $result['ok'] ? ' maintenance-stderr-info' : '' ?>"><?= htmlspecialchars($result['error'], ENT_QUOTES, 'UTF-8') ?></pre>
 <?php endif ?>

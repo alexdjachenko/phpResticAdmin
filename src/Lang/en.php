@@ -128,6 +128,7 @@ return [
     'maint.keep_last'    => 'Keep Last',
     'maint.prune_after'  => 'Prune after forget',
     'maint.dry_run'      => 'Dry run (preview only)',
+    'maint.dry_run_note' => 'This was a dry run. No snapshots were actually deleted. Uncheck "Dry run" to apply.',
     'maint.run'          => 'Run',
     'maint.back'         => 'Back to maintenance',
     'maint.back_repo'    => 'Back to repository',
