@@ -107,19 +107,21 @@ class SnapshotServiceTest extends TestCase
         $result = $service->addTag($this->repo, $snapId, 'test-tag-xyz');
         $this->assertTrue($result['ok'], 'Add tag should succeed: ' . ($result['error'] ?? ''));
 
-        // Verify tag is present
-        $snapshots = $service->listSnapshots($this->repo);
-        $tags = $snapshots[0]['tags'] ?? [];
-        $this->assertContains('test-tag-xyz', $tags);
+        // Verify tag is present — use getSnapshot to ensure we query the correct snapshot
+        $snap = $service->getSnapshot($this->repo, $snapId);
+        $this->assertNotNull($snap, 'getSnapshot should find the snapshot');
+        $tags = $snap['tags'] ?? [];
+        $this->assertContains('test-tag-xyz', $tags, 'Tag should be present after add');
 
         // Remove tag
         $result = $service->removeTag($this->repo, $snapId, 'test-tag-xyz');
         $this->assertTrue($result['ok'], 'Remove tag should succeed: ' . ($result['error'] ?? ''));
 
         // Verify tag is removed
-        $snapshots = $service->listSnapshots($this->repo);
-        $tags = $snapshots[0]['tags'] ?? [];
-        $this->assertNotContains('test-tag-xyz', $tags);
+        $snap = $service->getSnapshot($this->repo, $snapId);
+        $this->assertNotNull($snap, 'getSnapshot should find the snapshot after remove');
+        $tags = $snap['tags'] ?? [];
+        $this->assertNotContains('test-tag-xyz', $tags, 'Tag should be removed');
     }
 
     private function removeDir(string $dir): void

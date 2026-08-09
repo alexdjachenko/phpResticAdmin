@@ -133,8 +133,8 @@ class SnapshotEndToEndTest extends TestCase
         $this->assertIsArray($allStats);
 
         // restic 0.19+ returns tree/blob breakdown + snapshots; filter for snapshot entries only
-        $snapStats = array_values(array_filter($allStats, function (array $e): bool {
-            return !empty($e['snapshot_id'] ?? '');
+        $snapStats = array_values(array_filter($allStats, function ($e): bool {
+            return is_array($e) && !empty($e['snapshot_id'] ?? '');
         }));
         $this->assertCount(3, $snapStats, 'Stats should return 3 snapshot entries');
 
@@ -166,6 +166,9 @@ class SnapshotEndToEndTest extends TestCase
 
         $sizes = [];
         foreach ($allStats as $entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
             $sid = $entry['snapshot_id'] ?? '';
             if ($sid !== '' && isset($entry['total_size'])) {
                 $sizes[$sid] = $entry['total_size'];
