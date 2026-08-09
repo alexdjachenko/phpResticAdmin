@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.2](https://github.com/alexdjachenko/phpResticAdmin/compare/v0.4.1...v0.4.2) (2026-08-09)
+
+
+### Bug Fixes
+
+* вторая попытка добиться, чтобы образ метился тегом релиза ([c392095](https://github.com/alexdjachenko/phpResticAdmin/commit/c392095043dd761e20440fef2920cb010f703526))
+
 ## [0.4.1](https://github.com/alexdjachenko/phpResticAdmin/compare/v0.4.0...v0.4.1) (2026-08-09)
 
 
