@@ -1,5 +1,11 @@
 <?php
 
+/**
+ * phpResticAdmin — Web UI for restic backup repositories.
+ * Copyright (c) 2026 Alex Djachenko (Алексей Дьяченко)
+ * Licensed under the Apache License, Version 2.0.
+ */
+
 namespace App\Tests\Integration;
 
 use App\Restic\CommandRunner;
@@ -73,7 +79,7 @@ class SnapshotServiceTest extends TestCase
         $this->assertArrayHasKey('time', $snap);
         $this->assertArrayHasKey('paths', $snap);
         $this->assertArrayHasKey('summary', $snap);
-        $this->assertArrayHasKey('total_size', $snap['summary']);
+        $this->assertArrayHasKey('total_bytes_processed', $snap['summary']);
     }
 
     public function testGetSnapshot(): void
@@ -93,27 +99,30 @@ class SnapshotServiceTest extends TestCase
     {
         $service = new SnapshotService(new CommandRunner());
         $snapshots = $service->listSnapshots($this->repo);
-
         $this->assertNotEmpty($snapshots);
+
+        // Restic tag changes snapshot ID, so we must use the full ID
+        // and re-fetch after each tag operation.
         $snapId = $snapshots[0]['id'];
 
         // Add tag
         $result = $service->addTag($this->repo, $snapId, 'test-tag-xyz');
         $this->assertTrue($result['ok'], 'Add tag should succeed: ' . ($result['error'] ?? ''));
 
-        // Verify tag is present
+        // Re-fetch: tag operation changes snapshot ID, only one snapshot exists
         $snapshots = $service->listSnapshots($this->repo);
+        $snapId = $snapshots[0]['id'];
         $tags = $snapshots[0]['tags'] ?? [];
-        $this->assertContains('test-tag-xyz', $tags);
+        $this->assertContains('test-tag-xyz', $tags, 'Tag should be present after add');
 
-        // Remove tag
+        // Remove tag using the fresh ID
         $result = $service->removeTag($this->repo, $snapId, 'test-tag-xyz');
         $this->assertTrue($result['ok'], 'Remove tag should succeed: ' . ($result['error'] ?? ''));
 
-        // Verify tag is removed
+        // Re-fetch and verify
         $snapshots = $service->listSnapshots($this->repo);
         $tags = $snapshots[0]['tags'] ?? [];
-        $this->assertNotContains('test-tag-xyz', $tags);
+        $this->assertNotContains('test-tag-xyz', $tags, 'Tag should be removed');
     }
 
     private function removeDir(string $dir): void

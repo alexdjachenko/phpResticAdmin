@@ -11,7 +11,7 @@ PHPResticAdmin — **бесфреймворковое** PHP-приложение
 - **Репозиторий**: `alexdjachenko/PHPResticAdmin` на GitHub
 - **VCS**: Git, хостинг GitHub. Работаем через feature-ветки и Pull Requests
 - **CI**: GitHub Actions — тесты запускаются только там. Ориентируемся на статусы сборок на GitHub, локально проект не запускаем
-- **Текущий этап**: Stage 4 (Снепшоты, Browse, страница репозитория, backup, механика текущего репозитория) — завершён, в доработке
+- **Текущий этап**: Stage 5 (Export, Maintenance, Keys) — реализован
 
 ---
 
@@ -99,15 +99,20 @@ src/
     ConfigStorage.php    # Чтение PHP-конфигов из data/cfg/ (users.php, settings.php)
     RepositoryStorage.php # CRUD (save/delete/move/update) + три категории: public/private/session
   Restic/
-    CommandRunner.php    # run() + runStream() — обёртка proc_open()
-    RepositoryService.php # testConnection(), init(), backup()
+    CommandRunner.php    # run() + runStream() + runStreamWithHeaders() — обёртка proc_open()
+    RepositoryService.php # testConnection(), init(), backup(), backupSync()
     SnapshotService.php   # listSnapshots(), getSnapshot(), addTag(), removeTag()
+    MaintenanceService.php # check(), prune(), rebuildIndex(), unlock(), forget()
+    KeyService.php         # listKeys(), addKey(), removeKey(), changePassword()
   Controllers/
     DashboardController.php  # GET / → дашборд, POST /cache/invalidate
     AuthController.php       # GET/POST /login, GET /logout
     RepositoryController.php # list, addForm/add, detail, editForm/edit, check, delete, move, backup, select
     SnapshotController.php   # GET /snapshots, POST /snapshots/tag (AJAX-теги)
     BrowseController.php     # GET /browse — дерево файлов + хлебные крошки
+    ExportController.php     # GET /download, GET /export — скачивание файлов и снепшотов
+    MaintenanceController.php # GET /maintenance, POST /maintenance/* — обслуживание
+    KeyController.php        # GET /keys, POST /keys/* — управление ключами
 templates/
   layout.php             # Шапка, dropdown репозиториев, навигация, flash, <main>
   login.php              # Форма входа
@@ -118,9 +123,14 @@ templates/
     detail.php           # Страница деталей: инфо + Check/Backup/Snapshots/Edit/Move/Delete
     edit.php             # Форма редактирования с backup_paths и S3
   snapshots/
-    list.php             # Таблица снепшотов + AJAX-тегирование + Browse
+    list.php             # Таблица снепшотов + AJAX-тегирование + Browse + Export
   browse/
-    tree.php             # Дерево файлов/папок + хлебные крошки
+    tree.php             # Дерево файлов/папок + хлебные крошки + Download
+  maintenance/
+    index.php            # Формы обслуживания (check/prune/rebuild-index/unlock/forget)
+    result.php           # Результат операции обслуживания
+  keys/
+    list.php             # Таблица ключей + формы add/remove/passwd
 data/
   cfg/
     users.php            # Новый формат: password, api_tokens, repos (use/edit по категориям)
@@ -128,8 +138,11 @@ data/
   data/
     repositories.yaml    # YAML public-репозиториев
     repositories_{user}.yaml  # YAML private-репозиториев (создаётся автоматически)
-  tests/
-  bootstrap.php          # composer autoload
+  tests/Unit/Restic/MaintenanceServiceTest.php
+  tests/Unit/Restic/KeyServiceTest.php
+  tests/Integration/ExportEndToEndTest.php
+  tests/Integration/MaintenanceEndToEndTest.php
+  tests/Integration/KeyEndToEndTest.php
   Unit/
     Core/SessionTest.php
     Core/SecurityTest.php
@@ -194,6 +207,18 @@ docker/
 | GET   | `/browse`              | BrowseController::tree             | user != null + canUse |
 | POST  | `/language`            | App (inline handler)               | Нет |
 | POST  | `/cache/invalidate`    | DashboardController::invalidateCache | isLoggedIn + debug |
+| GET   | `/download`            | ExportController::file             | user != null + canUse |
+| GET   | `/export`              | ExportController::snapshot         | user != null + canUse |
+| GET   | `/maintenance`         | MaintenanceController::index       | isLoggedIn + canEdit |
+| POST  | `/maintenance/check`   | MaintenanceController::check       | isLoggedIn + canEdit |
+| POST  | `/maintenance/prune`   | MaintenanceController::prune       | isLoggedIn + canEdit |
+| POST  | `/maintenance/rebuild-index` | MaintenanceController::rebuildIndex | isLoggedIn + canEdit |
+| POST  | `/maintenance/unlock`  | MaintenanceController::unlock      | isLoggedIn + canEdit |
+| POST  | `/maintenance/forget`  | MaintenanceController::forget      | isLoggedIn + canEdit |
+| GET   | `/keys`                | KeyController::list                | isLoggedIn + canEdit |
+| POST  | `/keys/add`            | KeyController::add                 | isLoggedIn + canEdit |
+| POST  | `/keys/remove`         | KeyController::remove              | isLoggedIn + canEdit |
+| POST  | `/keys/passwd`         | KeyController::passwd              | isLoggedIn + canEdit |
 
 ### Логика аутентификации
 
@@ -326,14 +351,24 @@ Fallback-правила:
 
 ### CI / GitHub Actions
 
-- **GitHub-агент НЕ имеет доступа к Actions API** (логи джобов, `gh run view`). Для получения логов CI просить пользователя скинуть вывод или дать прямую ссылку на PR Checks.
-- **PR-образы тегируются `pr-{номер}`** при каждом пуше (workflow `build-and-publish.yml`). `latest` ставится только на версионные теги `v*`, не на push в main.
+- **GitHub-агент НЕ имеет доступа к Actions API** (логи джобов, `gh run view`). Он работает через GitHub REST API (PR checks, files, статусы коммитов). Commit status endpoint (`/commits/{sha}/status`) возвращает только legacy-статусы, НЕ check runs от GitHub Actions.
+- **Как ставить задачу GitHub-агенту для проверки CI:**
+  1. Просить **прочитать PR** (`GET /repos/{owner}/{repo}/pulls/{number}`) — состояние (open/closed/merged)
+  2. Просить **список файлов PR** (`GET /repos/{owner}/{repo}/pulls/{number}/files`) — какие файлы изменены. **Важно:** API возвращает максимум 30 файлов по умолчанию, для больших PR просить `per_page=100`
+  3. Для статуса проверок — просить пользователя дать вывод из вкладки Checks, НЕ пытаться получить через агента. Агент не может достучаться до Check Runs API
+  4. **НИКОГДА не домысливать результат CI.** Если агент не дал статусов — так и говорить: «статусы CI недоступны агенту, попроси пользователя скинуть вывод»
+- **Проверено экспериментально:** даже с конкретными run ID и job ID из URL Actions (например, `.../actions/runs/31315459347/job/93249843228`) агент НЕ может получить статусы — у него нет MCP-инструмента для Actions REST API. Единственный способ узнать результат CI — пользователь смотрит вкладку Checks и передаёт вывод.
+- **Интеграционные тесты требуют restic в PATH.** В workflow `test.yml` restic устанавливается на раннер отдельным шагом (через curl). Без этого все restic-зависимые тесты скипаются через `markTestSkipped`
+- **PR-образы тегируются `pr-{номер}`** при каждом пуше (workflow `build-and-publish.yml`). `latest` и версионные теги (`vX`, `vX.Y`) ставятся при публикации релиза (триггер `release: published`), а не на push в main
+- **Релизный workflow (`build-and-publish.yml`)** использует триггер `release: types: [published]` вместо `tags: ['v*']`, потому что `release-please` создаёт тег через `GITHUB_TOKEN`, а GitHub Actions не пропускает триггеры от собственного токена (защита от бесконечных циклов)
 
 ### Интерфейс
 
 - **`current_repo` в сессии переживает между вкладками.** При открытии новой вкладки дашборд показывает данные последнего выбранного репо. Дашборд делает `redirect('/repositories')`, сбрасывая `current_repo`.
 - **Стриминг (`Content-Type: text/plain`) даёт чёрную страницу без навигации.** Для backup используется синхронный `backupSync()` + рендеринг в шаблоне `repositories/backup.php`.
-- **Языковой переключатель в layout НЕ проверяет CSRF** (роут `/language` не вызывает `validateCsrf`). Токен убран из формы, чтобы не расходовать впустую.
+- **`restic dump /` создаёт tar-архив**, который нужно отдавать с `Content-Type: application/x-tar`
+- **`restic key add` и `restic key passwd` требуют подтверждения пароля через stdin** (два ввода)
+- **`restic check` может быть долгим** — для CI использовать `--read-data-subset=1/100`
 
 ---
 
@@ -448,6 +483,7 @@ repositories:
 
 - [x] **Stage 3: CRUD репозиториев**
 - [x] **Stage 4: Снепшоты, Browse, страница репозитория, backup**
+- [x] **Stage 5: Export, Maintenance, Keys, копирайты**
 - [ ] **Демо-данные**: при установке не создаётся `repositories.yaml` с примерами
 - [ ] **Валидация `users.php`**: лишняя запятая в массиве ломает парсинг
 - [ ] **Интеграционный тест `POST /cache/invalidate`**

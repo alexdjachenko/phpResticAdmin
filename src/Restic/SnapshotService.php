@@ -1,5 +1,11 @@
 <?php
 
+/**
+ * phpResticAdmin — Web UI for restic backup repositories.
+ * Copyright (c) 2026 Alex Djachenko (Алексей Дьяченко)
+ * Licensed under the Apache License, Version 2.0.
+ */
+
 namespace App\Restic;
 
 class SnapshotService
@@ -104,7 +110,7 @@ class SnapshotService
     private function tagOperation(array $repository, string $snapId, string $tag, string $operation): array
     {
         $command = $this->buildCommand(
-            ['tag', '--repo', $repository['path'], $operation, $tag, $snapId],
+            ['tag', $operation, $tag, $snapId],
             $repository
         );
         $env = $this->buildEnv($repository);

@@ -1,5 +1,11 @@
 <?php
 
+/**
+ * phpResticAdmin — Web UI for restic backup repositories.
+ * Copyright (c) 2026 Alex Djachenko (Алексей Дьяченко)
+ * Licensed under the Apache License, Version 2.0.
+ */
+
 namespace App\Controllers;
 
 use App\Core\App;
@@ -9,7 +15,42 @@ class DashboardController
 {
     public function index(): void
     {
-        App::response()->redirect('/repositories');
+        $auth = App::auth();
+        $user = $auth->user();
+
+        if ($user === null) {
+            App::response()->redirect('/login');
+            return;
+        }
+
+        $repositories = App::repoStorage()->loadAll($user);
+        $currentRepoId = App::session()->get('current_repo');
+        $repo = null;
+        $latestSnapshots = [];
+        $repoCount = count($repositories);
+
+        if ($currentRepoId !== null) {
+            foreach ($repositories as $r) {
+                if (($r['id'] ?? '') === $currentRepoId) {
+                    $category = $r['category'] ?? 'public';
+                    if ($auth->canUse($category)) {
+                        $repo = $r;
+                    }
+                    break;
+                }
+            }
+
+            if ($repo !== null) {
+                $allSnapshots = App::snapshotService()->listSnapshots($repo);
+                $latestSnapshots = array_slice($allSnapshots, 0, 5);
+            }
+        }
+
+        echo App::response()->render('dashboard.php', [
+            'repo' => $repo,
+            'latestSnapshots' => $latestSnapshots,
+            'repoCount' => $repoCount,
+        ]);
     }
 
     public function invalidateCache(): void

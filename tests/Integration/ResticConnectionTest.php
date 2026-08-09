@@ -1,5 +1,11 @@
 <?php
 
+/**
+ * phpResticAdmin — Web UI for restic backup repositories.
+ * Copyright (c) 2026 Alex Djachenko (Алексей Дьяченко)
+ * Licensed under the Apache License, Version 2.0.
+ */
+
 namespace App\Tests\Integration;
 
 use App\Restic\CommandRunner;
@@ -56,7 +62,7 @@ class ResticConnectionTest extends TestCase
 
         // Load via RepositoryStorage
         $storage = new RepositoryStorage($yamlFile);
-        $loaded = $storage->loadAll();
+        $loaded = $storage->loadAll('test');
 
         $this->assertCount(1, $loaded);
         $this->assertSame('test123', $loaded[0]['id']);

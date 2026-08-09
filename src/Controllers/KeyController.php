@@ -11,10 +11,10 @@ namespace App\Controllers;
 use App\Core\App;
 use App\Core\Request;
 
-class SnapshotController
+class KeyController
 {
     /**
-     * GET /snapshots — список снепшотов.
+     * GET /keys — список ключей репозитория.
      */
     public function list(): void
     {
@@ -30,12 +30,8 @@ class SnapshotController
         $repoId = $this->resolveRepoId($request);
 
         if ($repoId === null) {
-            echo App::response()->render('snapshots/list.php', [
-                'snapshots' => [],
-                'repo' => null,
-                'isLoggedIn' => $auth->isLoggedIn(),
-                'username' => $user,
-            ]);
+            App::session()->flash('success', __('flash.select_repo'));
+            App::response()->redirect('/repositories');
             return;
         }
 
@@ -54,27 +50,27 @@ class SnapshotController
         }
 
         $category = $repo['category'] ?? 'public';
-        if (!$auth->canUse($category)) {
+        if (!$auth->canEdit($category)) {
             App::response()->error(403, __('error.forbidden'));
             return;
         }
 
-        $snapshots = App::snapshotService()->listSnapshots($repo);
+        $keys = App::keyService()->listKeys($repo);
         $csrfToken = App::security()->csrfToken();
 
-        echo App::response()->render('snapshots/list.php', [
-            'snapshots' => $snapshots,
+        echo App::response()->render('keys/list.php', [
             'repo' => $repo,
+            'keys' => $keys,
+            'csrfToken' => $csrfToken,
             'isLoggedIn' => $auth->isLoggedIn(),
             'username' => $user,
-            'csrfToken' => $csrfToken,
         ]);
     }
 
     /**
-     * GET /snapshots/detail — страница снепшота со сводкой и кнопкой «Stats».
+     * POST /keys/add
      */
-    public function detail(): void
+    public function add(): void
     {
         $auth = App::auth();
         $user = $auth->user();
@@ -85,11 +81,20 @@ class SnapshotController
         }
 
         $request = new Request();
-        $repoId = $request->get('repo', '');
-        $snapId = $request->get('snapshot', '');
+        $security = App::security();
 
-        if ($repoId === '' || $snapId === '') {
-            App::response()->redirect('/snapshots');
+        $token = $request->post('_csrf_token', '');
+        if (!$security->validateCsrf($token)) {
+            App::response()->error(403, __('flash.csrf_error'));
+            return;
+        }
+
+        $repoId = $request->post('repo_id', '');
+        $newPassword = $request->post('new_password', '');
+
+        if ($repoId === '' || $newPassword === '') {
+            App::session()->flash('error', __('keys.add_error'));
+            App::response()->redirect('/keys?repo=' . urlencode($repoId));
             return;
         }
 
@@ -104,149 +109,148 @@ class SnapshotController
 
         if ($repo === null) {
             App::response()->error(404, __('flash.not_found'));
-            return;
-        }
-
-        $category = $repo['category'] ?? 'public';
-        if (!$auth->canUse($category)) {
-            App::response()->error(403, __('error.forbidden'));
-            return;
-        }
-
-        $snap = App::snapshotService()->getSnapshot($repo, $snapId);
-        if ($snap === null) {
-            App::response()->error(404, __('flash.not_found'));
-            return;
-        }
-
-        $csrfToken = App::security()->csrfToken();
-
-        echo App::response()->render('snapshots/detail.php', [
-            'repo' => $repo,
-            'snap' => $snap,
-            'csrfToken' => $csrfToken,
-            'isLoggedIn' => $auth->isLoggedIn(),
-            'username' => $user,
-        ]);
-    }
-
-    /**
-     * POST /snapshots/stats — загрузить полную статистику (AJAX).
-     */
-    public function stats(): void
-    {
-        $auth = App::auth();
-        $user = $auth->user();
-
-        if ($user === null) {
-            App::response()->json(['ok' => false, 'error' => 'Authentication required', '_csrf_token' => App::security()->csrfToken()], 403);
-            return;
-        }
-
-        $request = new Request();
-        $security = App::security();
-
-        $token = $request->post('_csrf_token', '');
-        if (!$security->validateCsrf($token)) {
-            App::response()->json(['ok' => false, 'error' => __('flash.csrf_error'), '_csrf_token' => App::security()->csrfToken()], 403);
-            return;
-        }
-
-        $repoId = $request->post('repo_id', '');
-        $snapId = $request->post('snap_id', '');
-
-        if ($repoId === '' || $snapId === '') {
-            App::response()->json(['ok' => false, 'error' => 'Missing parameters', '_csrf_token' => App::security()->csrfToken()], 400);
-            return;
-        }
-
-        $repositories = App::repoStorage()->loadAll($user);
-        $repo = null;
-        foreach ($repositories as $r) {
-            if (($r['id'] ?? '') === $repoId) {
-                $repo = $r;
-                break;
-            }
-        }
-
-        if ($repo === null) {
-            App::response()->json(['ok' => false, 'error' => __('flash.not_found'), '_csrf_token' => App::security()->csrfToken()], 404);
-            return;
-        }
-
-        $category = $repo['category'] ?? 'public';
-        if (!$auth->canUse($category)) {
-            App::response()->json(['ok' => false, 'error' => __('error.forbidden'), '_csrf_token' => App::security()->csrfToken()], 403);
-            return;
-        }
-
-        $stats = App::snapshotService()->getStats($repo, $snapId);
-
-        App::response()->json([
-            'ok' => $stats !== null,
-            'stats' => $stats,
-            '_csrf_token' => App::security()->csrfToken(),
-        ]);
-    }
-
-    /**
-     * POST /snapshots/tag — тегирование (AJAX).
-     */
-    public function tag(): void
-    {
-        $auth = App::auth();
-        $user = $auth->user();
-
-        if ($user === null) {
-            App::response()->json(['ok' => false, 'error' => 'Authentication required', '_csrf_token' => App::security()->csrfToken()], 403);
-            return;
-        }
-
-        $request = new Request();
-        $security = App::security();
-
-        $token = $request->post('_csrf_token', '');
-        if (!$security->validateCsrf($token)) {
-            App::response()->json(['ok' => false, 'error' => __('flash.csrf_error'), '_csrf_token' => App::security()->csrfToken()], 403);
-            return;
-        }
-
-        $repoId = $request->post('repo_id', '');
-        $snapId = $request->post('snap_id', '');
-        $tag = $request->post('tag', '');
-        $action = $request->post('action', 'add');
-
-        if ($repoId === '' || $snapId === '' || $tag === '') {
-            App::response()->json(['ok' => false, 'error' => 'Missing parameters', '_csrf_token' => App::security()->csrfToken()], 400);
-            return;
-        }
-
-        $repositories = App::repoStorage()->loadAll($user);
-        $repo = null;
-        foreach ($repositories as $r) {
-            if (($r['id'] ?? '') === $repoId) {
-                $repo = $r;
-                break;
-            }
-        }
-
-        if ($repo === null) {
-            App::response()->json(['ok' => false, 'error' => __('flash.not_found'), '_csrf_token' => App::security()->csrfToken()], 404);
             return;
         }
 
         $category = $repo['category'] ?? 'public';
         if (!$auth->canEdit($category)) {
-            App::response()->json(['ok' => false, 'error' => __('error.forbidden'), '_csrf_token' => App::security()->csrfToken()], 403);
+            App::response()->error(403, __('error.forbidden'));
             return;
         }
 
-        $result = $action === 'remove'
-            ? App::snapshotService()->removeTag($repo, $snapId, $tag)
-            : App::snapshotService()->addTag($repo, $snapId, $tag);
+        $result = App::keyService()->addKey($repo, $newPassword);
 
-        $result['_csrf_token'] = App::security()->csrfToken();
-        App::response()->json($result);
+        if ($result['ok']) {
+            App::session()->flash('success', __('keys.added'));
+        } else {
+            App::session()->flash('error', __('keys.add_error') . ': ' . $result['error']);
+        }
+
+        App::response()->redirect('/keys?repo=' . urlencode($repoId));
+    }
+
+    /**
+     * POST /keys/remove
+     */
+    public function remove(): void
+    {
+        $auth = App::auth();
+        $user = $auth->user();
+
+        if ($user === null) {
+            App::response()->redirect('/login');
+            return;
+        }
+
+        $request = new Request();
+        $security = App::security();
+
+        $token = $request->post('_csrf_token', '');
+        if (!$security->validateCsrf($token)) {
+            App::response()->error(403, __('flash.csrf_error'));
+            return;
+        }
+
+        $repoId = $request->post('repo_id', '');
+        $keyId = $request->post('key_id', '');
+
+        if ($repoId === '' || $keyId === '') {
+            App::response()->redirect('/keys?repo=' . urlencode($repoId));
+            return;
+        }
+
+        $repositories = App::repoStorage()->loadAll($user);
+        $repo = null;
+        foreach ($repositories as $r) {
+            if (($r['id'] ?? '') === $repoId) {
+                $repo = $r;
+                break;
+            }
+        }
+
+        if ($repo === null) {
+            App::response()->error(404, __('flash.not_found'));
+            return;
+        }
+
+        $category = $repo['category'] ?? 'public';
+        if (!$auth->canEdit($category)) {
+            App::response()->error(403, __('error.forbidden'));
+            return;
+        }
+
+        $result = App::keyService()->removeKey($repo, $keyId);
+
+        if ($result['ok']) {
+            App::session()->flash('success', __('keys.removed'));
+        } else {
+            App::session()->flash('error', __('keys.add_error') . ': ' . $result['error']);
+        }
+
+        App::response()->redirect('/keys?repo=' . urlencode($repoId));
+    }
+
+    /**
+     * POST /keys/passwd
+     */
+    public function passwd(): void
+    {
+        $auth = App::auth();
+        $user = $auth->user();
+
+        if ($user === null) {
+            App::response()->redirect('/login');
+            return;
+        }
+
+        $request = new Request();
+        $security = App::security();
+
+        $token = $request->post('_csrf_token', '');
+        if (!$security->validateCsrf($token)) {
+            App::response()->error(403, __('flash.csrf_error'));
+            return;
+        }
+
+        $repoId = $request->post('repo_id', '');
+        $keyId = $request->post('key_id', '');
+        $newPassword = $request->post('new_password', '');
+
+        if ($repoId === '' || $keyId === '' || $newPassword === '') {
+            App::session()->flash('error', __('keys.add_error'));
+            App::response()->redirect('/keys?repo=' . urlencode($repoId));
+            return;
+        }
+
+        $repositories = App::repoStorage()->loadAll($user);
+        $repo = null;
+        foreach ($repositories as $r) {
+            if (($r['id'] ?? '') === $repoId) {
+                $repo = $r;
+                break;
+            }
+        }
+
+        if ($repo === null) {
+            App::response()->error(404, __('flash.not_found'));
+            return;
+        }
+
+        $category = $repo['category'] ?? 'public';
+        if (!$auth->canEdit($category)) {
+            App::response()->error(403, __('error.forbidden'));
+            return;
+        }
+
+        $result = App::keyService()->changePassword($repo, $keyId, $newPassword);
+
+        if ($result['ok']) {
+            App::session()->flash('success', __('keys.passwd_changed'));
+        } else {
+            App::session()->flash('error', __('keys.add_error') . ': ' . $result['error']);
+        }
+
+        App::response()->redirect('/keys?repo=' . urlencode($repoId));
     }
 
     private function resolveRepoId(Request $request): ?string

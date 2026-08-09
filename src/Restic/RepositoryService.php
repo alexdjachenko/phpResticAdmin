@@ -1,5 +1,11 @@
 <?php
 
+/**
+ * phpResticAdmin — Web UI for restic backup repositories.
+ * Copyright (c) 2026 Alex Djachenko (Алексей Дьяченко)
+ * Licensed under the Apache License, Version 2.0.
+ */
+
 namespace App\Restic;
 
 class RepositoryService
@@ -82,17 +88,17 @@ class RepositoryService
         }
 
         $this->runner->runStream($command, $env);
-        }
+    }
 
-        /**
-        * Запускает restic backup и возвращает результат (без стриминга).
-        *
-        * @param array<string, mixed> $repository
-        * @param array<int, string> $backupPaths
-        * @return array{ok: bool, output: string, error: string}
-        */
-        public function backupSync(array $repository, array $backupPaths): array
-        {
+    /**
+     * Запускает restic backup и возвращает результат (без стриминга).
+     *
+     * @param array<string, mixed> $repository
+     * @param array<int, string> $backupPaths
+     * @return array{ok: bool, output: string, error: string}
+     */
+    public function backupSync(array $repository, array $backupPaths): array
+    {
         $command = ['restic', 'backup', '--repo', $repository['path'], ...$backupPaths];
 
         $env = $repository['env'] ?? [];
@@ -110,5 +116,5 @@ class RepositoryService
             'output' => $result['stdout'],
             'error' => $result['stderr'],
         ];
-        }
-        }
+    }
+}

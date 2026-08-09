@@ -21,6 +21,7 @@ COPY htdocs/ /var/www/html/
 COPY src/ /var/www/src/
 COPY templates/ /var/www/templates/
 COPY data/ /var/www/data/
+COPY version.txt /var/www/version.txt
 
 # restic cache dir — создаём на этапе сборки с правами www-data
 RUN mkdir -p /tmp/phpresticadmin/restic-cache \
