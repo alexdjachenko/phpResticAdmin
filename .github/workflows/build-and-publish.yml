@@ -27,20 +27,28 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0    # Скачивает всю историю коммитов
+          fetch-tags: true  # Принудительно скачивает все Git-теги с сервера
 
       - name: Docker meta
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository }}
+          # flavor автоматически управляет тегом latest
+          flavor: |
+            latest=auto
           tags: |
-            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            # 1. Если это релиз/тег vX.X.X, соберутся теги: v1, v1.2, v1.2.3 и latest
             type=ref,event=tag
             type=semver,pattern=v{{major}}
             type=semver,pattern=v{{major}}.{{minor}}
+            type=semver,pattern={{version}}
+            # 2. Если это коммит в main (включая мердж релиза), соберется sha-xxxxxx
             type=sha,prefix=sha-
+            # 3. Если это Pull Request, соберется тег pr-XXX
             type=raw,value=pr-${{ github.event.pull_request.number }},enable=${{ github.event_name == 'pull_request' }}
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
