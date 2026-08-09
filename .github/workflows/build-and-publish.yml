@@ -3,6 +3,9 @@ name: Build and Publish
 on:
   push:
     branches: [main]
+    # Физический триггер для сборки релиза. Когда релиз-плиз создаст тег vX.X.X,
+    # GitHub сам запустит этот workflow отдельно для сборки Docker-образа с этим тегом.
+    tags: ['v*']
   pull_request:
     branches: [main]
   release:
@@ -18,12 +21,6 @@ jobs:
   release-please:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    # ШАГ 1: Объявляем выходы из джобы, чтобы их увидела сборка Docker
-    outputs:
-      releases_created: ${{ steps.release.outputs.releases_created }}
-      tag_name: ${{ steps.release.outputs.tag_name }}
-      major: ${{ steps.release.outputs.major }}
-      minor: ${{ steps.release.outputs.minor }}
     steps:
       - uses: googleapis/release-please-action@v4
         with:
@@ -31,11 +28,8 @@ jobs:
 
   build-and-publish:
     runs-on: ubuntu-latest
-    # ШАГ 2: Связываем джобы через needs, чтобы Docker мог прочитать переменные из release-please
-    needs: release-please
-    steps:
 
-      # Возвращаем на место чекаут, который я случайно удалил:
+    steps:
       - uses: actions/checkout@v4
       
       - name: Docker meta
