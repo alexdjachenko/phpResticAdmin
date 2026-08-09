@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/alexdjachenko/phpResticAdmin/compare/v0.4.0...v0.4.1) (2026-08-09)
+
+
+### Bug Fixes
+
+* пытаюсь добиться простановки тегов для релизов и не поламать сборки и теги для pr ([0d320d1](https://github.com/alexdjachenko/phpResticAdmin/commit/0d320d125fff1ac82fff537c8c2fbd4aded0f01b))
+
 ## [0.4.0](https://github.com/alexdjachenko/phpResticAdmin/compare/v0.3.0...v0.4.0) (2026-08-09)
 
 
