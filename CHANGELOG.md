@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.4.0](https://github.com/alexdjachenko/phpResticAdmin/compare/v0.3.0...v0.4.0) (2026-08-09)
+
+
+### Features
+
+* **stage5:** export, maintenance, keys, copyrights, and comprehensiv… ([0a9b930](https://github.com/alexdjachenko/phpResticAdmin/commit/0a9b930e2f41c59b886a3f7f59bd782904669713))
+* **stage5:** export, maintenance, keys, copyrights, and comprehensive tests ([d29dc7e](https://github.com/alexdjachenko/phpResticAdmin/commit/d29dc7e11988ebd76ebbde063df401788fbbd9dd))
+
+
+### Bug Fixes
+
+* fixed skipping autotest ([207e938](https://github.com/alexdjachenko/phpResticAdmin/commit/207e938dd0189d511a8997cb9ced37fe08defc0a))
+* **restic:** update snapshot ID after tag operations ([11bc098](https://github.com/alexdjachenko/phpResticAdmin/commit/11bc098a0a6cb757c1b8f41ef6433a4f5007460b))
+* **restic:** use --add=/--remove=&lt;tag&gt; syntax for tag operations ([7969a2e](https://github.com/alexdjachenko/phpResticAdmin/commit/7969a2e85de79f7dabfc7886357dbec5c2689f5f))
+* **stage5:** call restic stats per-snapshot, not multi-ID ([6694a5f](https://github.com/alexdjachenko/phpResticAdmin/commit/6694a5fbc165ac02727a6cd0034c0f1b7bc97a8b))
+* **stage5:** normalize IDs to short form before comparing in stats tests ([8ae25cd](https://github.com/alexdjachenko/phpResticAdmin/commit/8ae25cd44ce1158bfe1f2864b010c5ef9071e962))
+* **stage5:** relax stats assertions, fix tag test, and improve maintenance UX ([da784ce](https://github.com/alexdjachenko/phpResticAdmin/commit/da784ce7f259f122c3311efee8822b105a830563))
+* **stage5:** resolve 12 test failures and 3 production bugs found in CI ([8876178](https://github.com/alexdjachenko/phpResticAdmin/commit/88761789dcaf7b214d557bcda330be6eea1a8443))
+* **stage5:** resolve remaining integration test failures from restic 0.19 ([73a79a7](https://github.com/alexdjachenko/phpResticAdmin/commit/73a79a758b171e0817259d90ef815b1360194ec0))
+* **stage5:** restic 0.19 tag expects snapshot ID before --add/--remove flags ([90075a5](https://github.com/alexdjachenko/phpResticAdmin/commit/90075a5b7e227a7d9877bf9604e42a2034167b44))
+* **stage5:** three root-cause fixes for remaining integration test failures ([87c7272](https://github.com/alexdjachenko/phpResticAdmin/commit/87c72727bd7e96ad31cc7469995a9cc56719ff41))
+* **stage5:** use decoded[0] pattern from SnapshotService for restic stats parsing ([1a3b5cb](https://github.com/alexdjachenko/phpResticAdmin/commit/1a3b5cb0504911e10c835e52e8097cf04da3c4db))
+* testAddAndRemoveTag ([558966f](https://github.com/alexdjachenko/phpResticAdmin/commit/558966ff3098532f7fb90c474b0c61599c51a8ee))
+
 ## [0.3.0](https://github.com/alexdjachenko/phpResticAdmin/compare/v0.2.0...v0.3.0) (2026-08-08)
 
 
