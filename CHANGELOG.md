@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.4.4](https://github.com/alexdjachenko/phpResticAdmin/compare/v0.4.3...v0.4.4) (2026-08-09)
+
+
+### Bug Fixes
+
+* очередная попытка добиться тега на релизном образе ([851fd12](https://github.com/alexdjachenko/phpResticAdmin/commit/851fd12b5b674b54a68fc4be570c0a413875b0a0))
+* прошлым фиксом поломал сборку совсем ([f0cf22c](https://github.com/alexdjachenko/phpResticAdmin/commit/f0cf22c442ec87d02b7bbc09674745bc62e5b030))
+* пытаюсь починить теперь сборку :) ([420509a](https://github.com/alexdjachenko/phpResticAdmin/commit/420509a133a347578e46b0772ae5da97cd3b3a22))
+
 ## [0.4.3](https://github.com/alexdjachenko/phpResticAdmin/compare/v0.4.2...v0.4.3) (2026-08-09)
 
 
