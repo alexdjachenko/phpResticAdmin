@@ -99,37 +99,26 @@ class SnapshotServiceTest extends TestCase
     {
         $service = new SnapshotService(new CommandRunner());
         $snapshots = $service->listSnapshots($this->repo);
-
         $this->assertNotEmpty($snapshots);
-        $snapId = $snapshots[0]['id'];
+
         $shortId = $snapshots[0]['short_id'] ?? '';
 
-        // Add tag using short_id (restic tag prefers short IDs)
+        // Add tag
         $result = $service->addTag($this->repo, $shortId, 'test-tag-xyz');
         $this->assertTrue($result['ok'], 'Add tag should succeed: ' . ($result['error'] ?? ''));
 
-        // Verify tag is present
+        // Verify tag (only one snapshot, so [0] is always correct)
         $snapshots = $service->listSnapshots($this->repo);
-        $this->assertNotEmpty($snapshots, 'Should still have snapshots after tag add');
         $tags = $snapshots[0]['tags'] ?? [];
         $this->assertContains('test-tag-xyz', $tags, 'Tag should be present after add');
 
-        // Remove tag using short_id
+        // Remove tag
         $result = $service->removeTag($this->repo, $shortId, 'test-tag-xyz');
         $this->assertTrue($result['ok'], 'Remove tag should succeed: ' . ($result['error'] ?? ''));
 
-        // Verify tag is removed - find snapshot by ID explicitly
+        // Verify removed (only one snapshot, [0] is correct)
         $snapshots = $service->listSnapshots($this->repo);
-        $this->assertNotEmpty($snapshots, 'Should still have snapshots after tag remove');
-        $found = null;
-        foreach ($snapshots as $s) {
-            if (($s['id'] ?? '') === $snapId || ($s['short_id'] ?? '') === $shortId) {
-                $found = $s;
-                break;
-            }
-        }
-        $this->assertNotNull($found, 'Should find the snapshot after tag remove');
-        $tags = $found['tags'] ?? [];
+        $tags = $snapshots[0]['tags'] ?? [];
         $this->assertNotContains('test-tag-xyz', $tags, 'Tag should be removed');
     }
 

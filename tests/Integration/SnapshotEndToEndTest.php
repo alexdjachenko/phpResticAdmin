@@ -131,14 +131,14 @@ class SnapshotEndToEndTest extends TestCase
             $decoded = json_decode($result['stdout'], true);
             $entry = is_array($decoded) ? ($decoded[0] ?? $decoded) : $decoded;
             $this->assertIsArray($entry, "Stats for snapshot " . ($snap['short_id'] ?? '?') . " should be an array");
-            $sid = $entry['snapshot_id'] ?? '';
+            $sid = $this->shortId($entry['snapshot_id'] ?? '');
             $seenIds[] = $sid;
             $this->assertArrayHasKey('total_size', $entry, "Stats entry should have total_size");
             $this->assertGreaterThan(0, $entry['total_size'], "Snapshot should have non-zero size");
         }
 
         foreach ($this->snapshots as $snap) {
-            $this->assertContains($snap['id'], $seenIds, 'Stats should include snapshot ' . ($snap['short_id'] ?? '?'));
+            $this->assertContains($snap['short_id'], $seenIds, 'Stats should include snapshot ' . ($snap['short_id'] ?? '?'));
         }
     }
 
@@ -351,6 +351,11 @@ class SnapshotEndToEndTest extends TestCase
             }
         }
         return $files;
+    }
+
+    private function shortId(string $id): string
+    {
+        return substr($id, 0, 8);
     }
 
     private function removeDir(string $dir): void
