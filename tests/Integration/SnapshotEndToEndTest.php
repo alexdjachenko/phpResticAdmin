@@ -121,16 +121,24 @@ class SnapshotEndToEndTest extends TestCase
 
     public function testAllSnapshotsHaveNonZeroSize(): void
     {
+        $seenIds = [];
         foreach ($this->snapshots as $snap) {
             $result = $this->runner->run(
                 ['restic', 'stats', '--json', '--mode', 'raw-data', '--repo', $this->repoDir, '--insecure-no-password', $snap['id']],
                 ['RESTIC_PASSWORD' => '']
             );
             $this->assertSame(0, $result['exitCode'], 'Stats should succeed: ' . $result['stderr']);
-            $entry = json_decode($result['stdout'], true);
+            $decoded = json_decode($result['stdout'], true);
+            $entry = is_array($decoded) ? ($decoded[0] ?? $decoded) : $decoded;
             $this->assertIsArray($entry, "Stats for snapshot " . ($snap['short_id'] ?? '?') . " should be an array");
+            $sid = $entry['snapshot_id'] ?? '';
+            $seenIds[] = $sid;
             $this->assertArrayHasKey('total_size', $entry, "Stats entry should have total_size");
             $this->assertGreaterThan(0, $entry['total_size'], "Snapshot should have non-zero size");
+        }
+
+        foreach ($this->snapshots as $snap) {
+            $this->assertContains($snap['id'], $seenIds, 'Stats should include snapshot ' . ($snap['short_id'] ?? '?'));
         }
     }
 
@@ -143,7 +151,8 @@ class SnapshotEndToEndTest extends TestCase
                 ['RESTIC_PASSWORD' => '']
             );
             $this->assertSame(0, $result['exitCode'], 'Stats should succeed');
-            $entry = json_decode($result['stdout'], true);
+            $decoded = json_decode($result['stdout'], true);
+            $entry = is_array($decoded) ? ($decoded[0] ?? $decoded) : $decoded;
             $this->assertIsArray($entry);
             $sizes[$snap['id']] = $entry['total_size'] ?? 0;
         }
