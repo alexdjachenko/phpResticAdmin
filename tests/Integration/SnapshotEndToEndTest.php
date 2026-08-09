@@ -121,25 +121,15 @@ class SnapshotEndToEndTest extends TestCase
 
     public function testAllSnapshotsHaveNonZeroSize(): void
     {
-        $ids = array_map(fn($s) => $s['id'], $this->snapshots);
-        $command = array_merge(
-            ['restic', 'stats', '--json', '--mode', 'raw-data', '--repo', $this->repoDir, '--insecure-no-password'],
-            $ids
-        );
-        $result = $this->runner->run($command, ['RESTIC_PASSWORD' => '']);
-
-        $this->assertSame(0, $result['exitCode'], 'Stats should succeed: ' . $result['stderr']);
-        $allStats = json_decode($result['stdout'], true);
-        $this->assertIsArray($allStats);
-
-        // restic 0.19+ returns tree/blob breakdown + snapshots; filter for snapshot entries only
-        $snapStats = array_values(array_filter($allStats, function ($e): bool {
-            return is_array($e) && !empty($e['snapshot_id'] ?? '');
-        }));
-        $this->assertCount(3, $snapStats, 'Stats should return 3 snapshot entries');
-
         $seenIds = [];
-        foreach ($snapStats as $entry) {
+        foreach ($this->snapshots as $snap) {
+            $result = $this->runner->run(
+                ['restic', 'stats', '--json', '--mode', 'raw-data', '--repo', $this->repoDir, '--insecure-no-password', $snap['id']],
+                ['RESTIC_PASSWORD' => '']
+            );
+            $this->assertSame(0, $result['exitCode'], 'Stats should succeed: ' . $result['stderr']);
+            $entry = json_decode($result['stdout'], true);
+            $this->assertIsArray($entry, "Stats for snapshot should be an array");
             $sid = $entry['snapshot_id'] ?? '';
             $seenIds[] = $sid;
             $this->assertArrayHasKey('total_size', $entry, "Stats entry should have total_size");
@@ -153,31 +143,21 @@ class SnapshotEndToEndTest extends TestCase
 
     public function testSnapshotSizesIncreaseWithNewData(): void
     {
-        $ids = array_map(fn($s) => $s['id'], $this->snapshots);
-        $command = array_merge(
-            ['restic', 'stats', '--json', '--mode', 'raw-data', '--repo', $this->repoDir, '--insecure-no-password'],
-            $ids
-        );
-        $result = $this->runner->run($command, ['RESTIC_PASSWORD' => '']);
-
-        $this->assertSame(0, $result['exitCode'], 'Stats should succeed');
-        $allStats = json_decode($result['stdout'], true);
-        $this->assertIsArray($allStats);
-
         $sizes = [];
-        foreach ($allStats as $entry) {
-            if (!is_array($entry)) {
-                continue;
-            }
-            $sid = $entry['snapshot_id'] ?? '';
-            if ($sid !== '' && isset($entry['total_size'])) {
-                $sizes[$sid] = $entry['total_size'];
-            }
+        foreach ($this->snapshots as $snap) {
+            $result = $this->runner->run(
+                ['restic', 'stats', '--json', '--mode', 'raw-data', '--repo', $this->repoDir, '--insecure-no-password', $snap['id']],
+                ['RESTIC_PASSWORD' => '']
+            );
+            $this->assertSame(0, $result['exitCode'], 'Stats should succeed');
+            $entry = json_decode($result['stdout'], true);
+            $this->assertIsArray($entry);
+            $sizes[$snap['id']] = $entry['total_size'] ?? 0;
         }
 
-        $size1 = $sizes[$this->snapshots[0]['id']] ?? null;
-        $size2 = $sizes[$this->snapshots[1]['id']] ?? null;
-        $size3 = $sizes[$this->snapshots[2]['id']] ?? null;
+        $size1 = $sizes[$this->snapshots[0]['id']];
+        $size2 = $sizes[$this->snapshots[1]['id']];
+        $size3 = $sizes[$this->snapshots[2]['id']];
 
         $this->assertNotNull($size1, 'Backup 1 should have stats');
         $this->assertGreaterThan(0, $size1, 'Backup 1 should have non-zero size');
