@@ -351,8 +351,15 @@ Fallback-правила:
 
 ### CI / GitHub Actions
 
-- **GitHub-агент НЕ имеет доступа к Actions API** (логи джобов, `gh run view`). Для получения логов CI просить пользователя скинуть вывод или дать прямую ссылку на PR Checks.
-- **PR-образы тегируются `pr-{номер}`** при каждом пуше (workflow `build-and-publish.yml`). `latest` ставится только на версионные теги `v*`, не на push в main.
+- **GitHub-агент НЕ имеет доступа к Actions API** (логи джобов, `gh run view`). Он работает через GitHub REST API (PR checks, files, статусы коммитов). Commit status endpoint (`/commits/{sha}/status`) возвращает только legacy-статусы, НЕ check runs от GitHub Actions.
+- **Как ставить задачу GitHub-агенту для проверки CI:**
+  1. Просить **прочитать PR** (`GET /repos/{owner}/{repo}/pulls/{number}`) — состояние (open/closed/merged)
+  2. Просить **список файлов PR** (`GET /repos/{owner}/{repo}/pulls/{number}/files`) — какие файлы изменены
+  3. Для статуса проверок — просить пользователя дать вывод из вкладки Checks, НЕ пытаться получить через агента. Агент не может достучаться до Check Runs API
+  4. **НИКОГДА не домысливать результат CI.** Если агент не дал статусов — так и говорить: «статусы CI недоступны агенту, попроси пользователя скинуть вывод»
+- **Интеграционные тесты требуют restic в PATH.** В workflow `test.yml` restic устанавливается на раннер отдельным шагом (через curl). Без этого все restic-зависимые тесты скипаются через `markTestSkipped`
+- **PR-образы тегируются `pr-{номер}`** при каждом пуше (workflow `build-and-publish.yml`). `latest` и версионные теги (`vX`, `vX.Y`) ставятся при публикации релиза (триггер `release: published`), а не на push в main
+- **Релизный workflow (`build-and-publish.yml`)** использует триггер `release: types: [published]` вместо `tags: ['v*']`, потому что `release-please` создаёт тег через `GITHUB_TOKEN`, а GitHub Actions не пропускает триггеры от собственного токена (защита от бесконечных циклов)
 
 ### Интерфейс
 
