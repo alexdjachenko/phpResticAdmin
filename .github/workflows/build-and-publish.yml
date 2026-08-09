@@ -47,14 +47,12 @@ jobs:
           flavor: |
             latest=auto
           tags: |
-            # Если это тег vX.X.X, соберутся версии v1, v1.2, v1.2.3
             type=semver,pattern=v{{major}}
             type=semver,pattern=v{{major}}.{{minor}}
             type=semver,pattern={{version}}
-            # Сборка по SHA для каждого коммита в main (ваша отладка)
             type=sha,prefix=sha-
-            # Сборка по номеру PR (ваша отладка до мерджа)
-            type=raw,value=pr-${{ github.event.pull_request.number }},enab
+            type=raw,value=pr-${{ github.event.pull_request.number }},enable=${{ github.event_name == 'pull_request' }}
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
