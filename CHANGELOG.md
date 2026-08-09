@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.6](https://github.com/alexdjachenko/phpResticAdmin/compare/v0.4.5...v0.4.6) (2026-08-09)
+
+
+### Bug Fixes
+
+* пытаюсь наладить билдер ([f957ec1](https://github.com/alexdjachenko/phpResticAdmin/commit/f957ec14569579037c0b0791ab84a90f39005ae8))
+
 ## [0.4.5](https://github.com/alexdjachenko/phpResticAdmin/compare/v0.4.4...v0.4.5) (2026-08-09)
 
 
