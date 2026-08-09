@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.3](https://github.com/alexdjachenko/phpResticAdmin/compare/v0.4.2...v0.4.3) (2026-08-09)
+
+
+### Bug Fixes
+
+* еще одна попытка добиться авто-проставления тегов релизова ([9743619](https://github.com/alexdjachenko/phpResticAdmin/commit/974361986b6557d26bdcf472b7549c585777ab4e))
+
 ## [0.4.2](https://github.com/alexdjachenko/phpResticAdmin/compare/v0.4.1...v0.4.2) (2026-08-09)
 
 
