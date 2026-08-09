@@ -25,6 +25,14 @@ jobs:
 
   build-and-publish:
     runs-on: ubuntu-latest
+
+    # ХИТРОСТЬ ТУТ: Если это пуш в main, мы принудительно заставляем джобу 
+    # подождать, пока завершится release-please и создаст тег на сервере.
+    # Если это Pull Request, она запустится сразу же (так как для PR джоба release-please пропускается)
+    needs: [release-please]
+    if: always() && (needs.release-please.result == 'success' || needs.release-please.result == 'skipped')
+    
+    
     steps:
       - uses: actions/checkout@v4
         with:
