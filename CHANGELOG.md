@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.5](https://github.com/alexdjachenko/phpResticAdmin/compare/v0.4.4...v0.4.5) (2026-08-09)
+
+
+### Bug Fixes
+
+* опечатка в тегах сборки ([afccf8a](https://github.com/alexdjachenko/phpResticAdmin/commit/afccf8ae35fdec40cbdd8194514eb7c3016d0324))
+
 ## [0.4.4](https://github.com/alexdjachenko/phpResticAdmin/compare/v0.4.3...v0.4.4) (2026-08-09)
 
 
