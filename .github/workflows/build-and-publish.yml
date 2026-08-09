@@ -43,18 +43,14 @@ jobs:
           flavor: |
             latest=auto
           tags: |
-            # 1. Если release-please только что создал релиз, берем теги прямо из его результатов!
-            type=raw,value=latest,enable=${{ needs.release-please.outputs.releases_created == 'true' }}
-            type=raw,value=${{ needs.release-please.outputs.tag_name }},enable=${{ needs.release-please.outputs.releases_created == 'true' }}
-            type=raw,value=v${{ needs.release-please.outputs.major }},enable=${{ needs.release-please.outputs.releases_created == 'true' }}
-            type=raw,value=v${{ needs.release-please.outputs.major }}.${{ needs.release-please.outputs.minor }},enable=${{ needs.release-please.outputs.releases_created == 'true' }}
-            
-            # 2. Ваши стандартные отладочные сборки (на каждый пуш в main собирается sha)
+            # Если это тег vX.X.X, соберутся версии v1, v1.2, v1.2.3
+            type=semver,pattern=v{{major}}
+            type=semver,pattern=v{{major}}.{{minor}}
+            type=semver,pattern={{version}}
+            # Сборка по SHA для каждого коммита в main (ваша отладка)
             type=sha,prefix=sha-
-            
-            # 3. Ваша отладка в Pull Request
-            type=raw,value=pr-${{ github.event.pull_request.number }},enable=${{ github.event_name == 'pull_request' }}
-
+            # Сборка по номеру PR (ваша отладка до мерджа)
+            type=raw,value=pr-${{ github.event.pull_request.number }},enab
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
