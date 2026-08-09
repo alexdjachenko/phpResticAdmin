@@ -34,6 +34,10 @@ jobs:
     # ШАГ 2: Связываем джобы через needs, чтобы Docker мог прочитать переменные из release-please
     needs: release-please
     steps:
+
+      # Возвращаем на место чекаут, который я случайно удалил:
+      - uses: actions/checkout@v4
+      
       - name: Docker meta
         id: meta
         uses: docker/metadata-action@v5
