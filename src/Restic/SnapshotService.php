@@ -109,9 +109,8 @@ class SnapshotService
      */
     private function tagOperation(array $repository, string $snapId, string $tag, string $operation): array
     {
-        // restic 0.19 expects snapshot ID before flags
         $command = $this->buildCommand(
-            ['tag', $snapId, $operation, $tag],
+            ['tag', $operation, $tag, $snapId],
             $repository
         );
         $env = $this->buildEnv($repository);
