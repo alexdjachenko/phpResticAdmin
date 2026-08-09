@@ -48,14 +48,19 @@ jobs:
           flavor: |
             latest=auto
           tags: |
-            # 1. Если это релиз/тег vX.X.X, соберутся теги: v1, v1.2, v1.2.3 и latest
-            type=ref,event=tag
-            type=semver,pattern=v{{major}}
-            type=semver,pattern=v{{major}}.{{minor}}
-            type=semver,pattern={{version}}
-            # 2. Если это коммит в main (включая мердж релиза), соберется sha-xxxxxx
+            # 1. Спрашиваем у локального Git, привязан ли к текущему коммиту какой-то тег.
+            # Если тег есть (например, v1.2.3), экшен подставит его сюда и сделает основным + создаст latest.
+            # Если тегов нет (обычный коммит или PR), эта строчка просто безопасно проигнорируется.
+            type=raw,value={{tag}},enable=${{ github.event_name == 'push' }}
+            
+            # 2. Ваши стандартные правила семантического версионирования (сработают, если на шаге 1 нашелся тег)
+            type=semver,pattern=v{{major}},enable=${{ github.event_name == 'push' }}
+            type=semver,pattern=v{{major}}.{{minor}},enable=${{ github.event_name == 'push' }}
+            
+            # 3. Если это коммит в main или PR, всегда собирается sha-xxxxxx для отладки
             type=sha,prefix=sha-
-            # 3. Если это Pull Request, соберется тег pr-XXX
+            
+            # 4. Если это Pull Request, соберется тег pr-XXX (ваша отладка)
             type=raw,value=pr-${{ github.event.pull_request.number }},enable=${{ github.event_name == 'pull_request' }}
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
