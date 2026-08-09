@@ -101,10 +101,10 @@ class SnapshotServiceTest extends TestCase
         $snapshots = $service->listSnapshots($this->repo);
         $this->assertNotEmpty($snapshots);
 
-        $shortId = $snapshots[0]['short_id'] ?? '';
+        $snapId = $snapshots[0]['id']; // full ID, 64 chars
 
         // Add tag
-        $result = $service->addTag($this->repo, $shortId, 'test-tag-xyz');
+        $result = $service->addTag($this->repo, $snapId, 'test-tag-xyz');
         $this->assertTrue($result['ok'], 'Add tag should succeed: ' . ($result['error'] ?? ''));
 
         // Verify tag (only one snapshot, so [0] is always correct)
@@ -113,7 +113,7 @@ class SnapshotServiceTest extends TestCase
         $this->assertContains('test-tag-xyz', $tags, 'Tag should be present after add');
 
         // Remove tag
-        $result = $service->removeTag($this->repo, $shortId, 'test-tag-xyz');
+        $result = $service->removeTag($this->repo, $snapId, 'test-tag-xyz');
         $this->assertTrue($result['ok'], 'Remove tag should succeed: ' . ($result['error'] ?? ''));
 
         // Verify removed (only one snapshot, [0] is correct)
