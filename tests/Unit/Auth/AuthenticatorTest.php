@@ -401,10 +401,26 @@ class AuthenticatorTest extends TestCase
 
     public function testLegacyAdminHasNoUseWrite(): void
     {
-        // Verify that the existing admin config (with old keys) does NOT get use_write
+        // Verify that a legacy config (old keys 'use'/'edit' only, no 'use_write') does NOT get use_write
         // This confirms use_write has no fallback
-        $auth = new Authenticator($this->configStorage, $this->session);
-        $auth->login('admin', 'secret123');
+        $passwordHash = password_hash('legacy', PASSWORD_DEFAULT);
+        file_put_contents(
+            $this->tmpDir . '/users.php',
+            '<?php return [
+                "legacy" => [
+                    "password" => ' . var_export($passwordHash, true) . ',
+                    "api_tokens" => [],
+                    "repos" => [
+                        "public" => ["use" => true, "edit" => true],
+                        "private" => ["use" => true, "edit" => true],
+                        "session" => ["use" => true, "edit" => true],
+                    ],
+                ],
+            ];'
+        );
+        $configStorage = new ConfigStorage($this->tmpDir);
+        $auth = new Authenticator($configStorage, $this->session);
+        $auth->login('legacy', 'legacy');
 
         $this->assertFalse($auth->canUseWrite('public'));
         $this->assertFalse($auth->canUseWrite('private'));

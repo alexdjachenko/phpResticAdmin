@@ -142,8 +142,6 @@ class SnapshotService
 
         if (!empty($sourceRepo['password'])) {
             $env['RESTIC_FROM_PASSWORD'] = $sourceRepo['password'];
-        } else {
-            $env['RESTIC_FROM_PASSWORD'] = '';
         }
 
         $result = $this->runner->run($cmd, $env);
