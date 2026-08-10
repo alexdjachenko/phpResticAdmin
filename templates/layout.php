@@ -15,8 +15,10 @@
                 <a href="/repositories"><?= htmlspecialchars(__('nav.repositories'), ENT_QUOTES, 'UTF-8') ?></a>
                 <?php if (!empty($currentRepoId ?? null)): ?>
                 <a href="/snapshots"><?= htmlspecialchars(__('nav.snapshots'), ENT_QUOTES, 'UTF-8') ?></a>
+                <?php if (!empty($currentRepoCanUseWrite ?? false)): ?>
                 <a href="/maintenance?repo=<?= htmlspecialchars(urlencode($currentRepoId), ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars(__('nav.maintenance'), ENT_QUOTES, 'UTF-8') ?></a>
                 <a href="/keys?repo=<?= htmlspecialchars(urlencode($currentRepoId), ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars(__('nav.keys'), ENT_QUOTES, 'UTF-8') ?></a>
+                <?php endif ?>
                 <?php endif ?>
             </span>
         </div>

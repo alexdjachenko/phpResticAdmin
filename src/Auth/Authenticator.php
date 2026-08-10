@@ -88,12 +88,40 @@ class Authenticator
         return $this->session->get('auth_user') !== null;
     }
 
+    /**
+     * Видимость репозитория в интерфейсе, базовые мета-данные.
+     * Старое право 'use' регрессирует в этот вариант.
+     */
     public function canUse(string $category): bool
     {
         $config = $this->getReposConfig();
         return $config[$category]['use'] ?? false;
     }
 
+    /**
+     * Право читать контент репозитория: навигация по снепшотам (browse),
+     * скачивание файлов и архивов (download, export), список ключей.
+     */
+    public function canUseRead(string $category): bool
+    {
+        $config = $this->getReposConfig();
+        return $config[$category]['use_read'] ?? false;
+    }
+
+    /**
+     * Право вносить изменения в restic-репозиторий (не в запись о нём):
+     * backup, tag, maintenance, keys add/remove/passwd, copy (как цель).
+     */
+    public function canUseWrite(string $category): bool
+    {
+        $config = $this->getReposConfig();
+        return $config[$category]['use_write'] ?? false;
+    }
+
+    /**
+     * Право изменять запись о репозитории (CRUD): имя, путь, пароль, удалить.
+     * Старое право 'edit' регрессирует в этот вариант.
+     */
     public function canEdit(string $category): bool
     {
         $config = $this->getReposConfig();
@@ -124,7 +152,7 @@ class Authenticator
     }
 
     /**
-     * @return array<string, array{use: bool, edit: bool}>
+     * @return array<string, array{use: bool, use_read: bool, use_write: bool, edit: bool}>
      */
     public function getReposConfig(): array
     {
@@ -132,15 +160,15 @@ class Authenticator
         $userData = $this->getUserData();
 
         $defaultFull = [
-            'public'  => ['use' => true, 'edit' => true],
-            'private' => ['use' => true, 'edit' => true],
-            'session' => ['use' => true, 'edit' => true],
+            'public'  => ['use' => true, 'use_read' => true, 'use_write' => true, 'edit' => true],
+            'private' => ['use' => true, 'use_read' => true, 'use_write' => true, 'edit' => true],
+            'session' => ['use' => true, 'use_read' => true, 'use_write' => true, 'edit' => true],
         ];
 
         $defaultGuest = [
-            'public'  => ['use' => true,  'edit' => false],
-            'private' => ['use' => false, 'edit' => false],
-            'session' => ['use' => false, 'edit' => false],
+            'public'  => ['use' => true, 'use_read' => true,  'use_write' => false, 'edit' => false],
+            'private' => ['use' => false, 'use_read' => false, 'use_write' => false, 'edit' => false],
+            'session' => ['use' => false, 'use_read' => false, 'use_write' => false, 'edit' => false],
         ];
 
         if ($user === null) {
@@ -159,10 +187,31 @@ class Authenticator
 
         $result = [];
         foreach (['public', 'private', 'session'] as $category) {
-            $cat = $repos[$category] ?? ['use' => false, 'edit' => false];
+            $cat = $repos[$category] ?? ['use' => false, 'use_read' => false, 'use_write' => false, 'edit' => false];
+
+            // use (видимость) — старый ключ 'use'
+            $use = $cat['use'] ?? false;
+
+            // use_read (чтение контента) — новый ключ, без fallback'ов
+            $useRead = $cat['use_read'] ?? false;
+
+            // use_write (запись в restic) — новый ключ, без fallback'ов
+            $useWrite = $cat['use_write'] ?? false;
+
+            // edit (CRUD записи) — старый ключ 'edit'
             $edit = $cat['edit'] ?? false;
-            $use = $edit || ($cat['use'] ?? false);
-            $result[$category] = ['use' => $use, 'edit' => $edit];
+
+            // use_write подразумевает use_read
+            if ($useWrite) {
+                $useRead = true;
+            }
+
+            $result[$category] = [
+                'use'       => $use,
+                'use_read'  => $useRead,
+                'use_write' => $useWrite,
+                'edit'      => $edit,
+            ];
         }
 
         return $result;

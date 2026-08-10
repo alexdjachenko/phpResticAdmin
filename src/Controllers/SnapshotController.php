@@ -54,7 +54,7 @@ class SnapshotController
         }
 
         $category = $repo['category'] ?? 'public';
-        if (!$auth->canUse($category)) {
+        if (!$auth->canUseRead($category)) {
             App::response()->error(403, __('error.forbidden'));
             return;
         }
@@ -108,7 +108,7 @@ class SnapshotController
         }
 
         $category = $repo['category'] ?? 'public';
-        if (!$auth->canUse($category)) {
+        if (!$auth->canUseRead($category)) {
             App::response()->error(403, __('error.forbidden'));
             return;
         }
@@ -121,10 +121,19 @@ class SnapshotController
 
         $csrfToken = App::security()->csrfToken();
 
+        $destRepos = [];
+        foreach ($repositories as $r) {
+            $cat = $r['category'] ?? 'public';
+            if (($r['id'] ?? '') !== $repoId && $auth->canUseWrite($cat)) {
+                $destRepos[] = ['id' => $r['id'], 'name' => $r['name']];
+            }
+        }
+
         echo App::response()->render('snapshots/detail.php', [
             'repo' => $repo,
             'snap' => $snap,
             'csrfToken' => $csrfToken,
+            'destRepos' => $destRepos,
             'isLoggedIn' => $auth->isLoggedIn(),
             'username' => $user,
         ]);
@@ -175,7 +184,7 @@ class SnapshotController
         }
 
         $category = $repo['category'] ?? 'public';
-        if (!$auth->canUse($category)) {
+        if (!$auth->canUseRead($category)) {
             App::response()->json(['ok' => false, 'error' => __('error.forbidden'), '_csrf_token' => App::security()->csrfToken()], 403);
             return;
         }
@@ -236,7 +245,7 @@ class SnapshotController
         }
 
         $category = $repo['category'] ?? 'public';
-        if (!$auth->canEdit($category)) {
+        if (!$auth->canUseWrite($category)) {
             App::response()->json(['ok' => false, 'error' => __('error.forbidden'), '_csrf_token' => App::security()->csrfToken()], 403);
             return;
         }
@@ -245,6 +254,74 @@ class SnapshotController
             ? App::snapshotService()->removeTag($repo, $snapId, $tag)
             : App::snapshotService()->addTag($repo, $snapId, $tag);
 
+        $result['_csrf_token'] = App::security()->csrfToken();
+        App::response()->json($result);
+    }
+
+    /**
+     * POST /snapshots/copy — копирование снепшота в другой репозиторий (AJAX).
+     */
+    public function copy(): void
+    {
+        $auth = App::auth();
+        $user = $auth->user();
+        if ($user === null) {
+            App::response()->json(['ok' => false, 'error' => 'Authentication required', '_csrf_token' => App::security()->csrfToken()], 403);
+            return;
+        }
+
+        $request = new Request();
+        $security = App::security();
+        $token = $request->post('_csrf_token', '');
+        if (!$security->validateCsrf($token)) {
+            App::response()->json(['ok' => false, 'error' => __('flash.csrf_error'), '_csrf_token' => App::security()->csrfToken()], 403);
+            return;
+        }
+
+        $sourceRepoId = $request->post('source_repo_id', '');
+        $destRepoId = $request->post('dest_repo_id', '');
+        $snapId = $request->post('snap_id', '');
+
+        if ($sourceRepoId === '' || $destRepoId === '' || $snapId === '') {
+            App::response()->json(['ok' => false, 'error' => 'Missing parameters', '_csrf_token' => App::security()->csrfToken()], 400);
+            return;
+        }
+
+        if ($sourceRepoId === $destRepoId) {
+            App::response()->json(['ok' => false, 'error' => __('snap.copy_same_repo'), '_csrf_token' => App::security()->csrfToken()], 400);
+            return;
+        }
+
+        $repositories = App::repoStorage()->loadAll($user);
+        $sourceRepo = null;
+        $destRepo = null;
+        foreach ($repositories as $r) {
+            if (($r['id'] ?? '') === $sourceRepoId) {
+                $sourceRepo = $r;
+            }
+            if (($r['id'] ?? '') === $destRepoId) {
+                $destRepo = $r;
+            }
+        }
+
+        if ($sourceRepo === null || $destRepo === null) {
+            App::response()->json(['ok' => false, 'error' => __('flash.not_found'), '_csrf_token' => App::security()->csrfToken()], 404);
+            return;
+        }
+
+        $sourceCategory = $sourceRepo['category'] ?? 'public';
+        $destCategory = $destRepo['category'] ?? 'public';
+        if (!$auth->canUseRead($sourceCategory)) {
+            App::response()->json(['ok' => false, 'error' => __('error.forbidden'), '_csrf_token' => App::security()->csrfToken()], 403);
+            return;
+        }
+        if (!$auth->canUseWrite($destCategory)) {
+            App::response()->json(['ok' => false, 'error' => __('error.forbidden'), '_csrf_token' => App::security()->csrfToken()], 403);
+            return;
+        }
+
+        set_time_limit(0);
+        $result = App::snapshotService()->copy($sourceRepo, $destRepo, $snapId);
         $result['_csrf_token'] = App::security()->csrfToken();
         App::response()->json($result);
     }

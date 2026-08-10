@@ -194,31 +194,34 @@ docker/
 | GET   | `/repositories`        | RepositoryController::list         | user != null |
 | GET   | `/repositories/add`    | RepositoryController::addForm      | isLoggedIn + canEdit |
 | POST  | `/repositories/add`    | RepositoryController::add          | isLoggedIn + canEdit |
-| GET   | `/repositories/detail` | RepositoryController::detail       | user != null + canUse |
+| GET   | `/repositories/detail` | RepositoryController::detail       | user != null + canUseRead |
 | GET   | `/repositories/edit`   | RepositoryController::editForm     | isLoggedIn + canEdit |
 | POST  | `/repositories/edit`   | RepositoryController::edit         | isLoggedIn + canEdit |
 | POST  | `/repositories/check`  | RepositoryController::check        | isLoggedIn |
 | POST  | `/repositories/delete` | RepositoryController::delete       | isLoggedIn + canDelete |
 | POST  | `/repositories/move`   | RepositoryController::move         | isLoggedIn + canMove |
-| POST  | `/repositories/backup` | RepositoryController::backup       | isLoggedIn + canEdit |
+| POST  | `/repositories/backup` | RepositoryController::backup       | isLoggedIn + canUseWrite |
 | POST  | `/repositories/select` | RepositoryController::select       | user != null |
-| GET   | `/snapshots`           | SnapshotController::list           | user != null + canUse |
-| POST  | `/snapshots/tag`       | SnapshotController::tag            | isLoggedIn + canEdit |
-| GET   | `/browse`              | BrowseController::tree             | user != null + canUse |
+| GET   | `/snapshots`           | SnapshotController::list           | user != null + canUseRead |
+| GET   | `/snapshots/detail`    | SnapshotController::detail         | user != null + canUseRead |
+| POST  | `/snapshots/stats`     | SnapshotController::stats          | user != null + canUseRead |
+| POST  | `/snapshots/tag`       | SnapshotController::tag            | isLoggedIn + canUseWrite |
+| POST  | `/snapshots/copy`      | SnapshotController::copy           | isLoggedIn + canUseRead(src) + canUseWrite(dest) |
+| GET   | `/browse`              | BrowseController::tree             | user != null + canUseRead |
 | POST  | `/language`            | App (inline handler)               | Нет |
 | POST  | `/cache/invalidate`    | DashboardController::invalidateCache | isLoggedIn + debug |
-| GET   | `/download`            | ExportController::file             | user != null + canUse |
-| GET   | `/export`              | ExportController::snapshot         | user != null + canUse |
-| GET   | `/maintenance`         | MaintenanceController::index       | isLoggedIn + canEdit |
-| POST  | `/maintenance/check`   | MaintenanceController::check       | isLoggedIn + canEdit |
-| POST  | `/maintenance/prune`   | MaintenanceController::prune       | isLoggedIn + canEdit |
-| POST  | `/maintenance/rebuild-index` | MaintenanceController::rebuildIndex | isLoggedIn + canEdit |
-| POST  | `/maintenance/unlock`  | MaintenanceController::unlock      | isLoggedIn + canEdit |
-| POST  | `/maintenance/forget`  | MaintenanceController::forget      | isLoggedIn + canEdit |
-| GET   | `/keys`                | KeyController::list                | isLoggedIn + canEdit |
-| POST  | `/keys/add`            | KeyController::add                 | isLoggedIn + canEdit |
-| POST  | `/keys/remove`         | KeyController::remove              | isLoggedIn + canEdit |
-| POST  | `/keys/passwd`         | KeyController::passwd              | isLoggedIn + canEdit |
+| GET   | `/download`            | ExportController::file             | user != null + canUseRead |
+| GET   | `/export`              | ExportController::snapshot         | user != null + canUseRead |
+| GET   | `/maintenance`         | MaintenanceController::index       | isLoggedIn + canUseWrite |
+| POST  | `/maintenance/check`   | MaintenanceController::check       | isLoggedIn + canUseWrite |
+| POST  | `/maintenance/prune`   | MaintenanceController::prune       | isLoggedIn + canUseWrite |
+| POST  | `/maintenance/rebuild-index` | MaintenanceController::rebuildIndex | isLoggedIn + canUseWrite |
+| POST  | `/maintenance/unlock`  | MaintenanceController::unlock      | isLoggedIn + canUseWrite |
+| POST  | `/maintenance/forget`  | MaintenanceController::forget      | isLoggedIn + canUseWrite |
+| GET   | `/keys`                | KeyController::list                | isLoggedIn + canUseRead |
+| POST  | `/keys/add`            | KeyController::add                 | isLoggedIn + canUseWrite |
+| POST  | `/keys/remove`         | KeyController::remove              | isLoggedIn + canUseWrite |
+| POST  | `/keys/passwd`         | KeyController::passwd              | isLoggedIn + canUseWrite |
 
 ### Логика аутентификации
 
@@ -241,20 +244,32 @@ docker/
 | `private`  | `data/data/repositories_{user}.yaml` | Личные репозитории пользователя |
 | `session`  | `$_SESSION['session_repos']`      | Временные, живут пока жива сессия |
 
-Модель прав (use/edit) для каждой категории задаётся в `users.php` в секции `repos`:
+Модель прав для каждой категории задаётся в `users.php` в секции `repos`:
 
-- `use` — видеть репозитории категории в списке (задаётся в `repos.{category}.use`)
-- `edit` — добавлять, удалять, редактировать. Подразумевает `use` (задаётся в `repos.{category}.edit`)
-- `init` — инициализировать новые restic-репозитории (глобальный флаг `can_init` на уровне пользователя)
+| Право | Метод | Смысл |
+|-------|-------|-------|
+| `use` | `canUse(cat)` | Видимость репозитория в интерфейсе, базовые мета-данные (старый ключ) |
+| `use_read` | `canUseRead(cat)` | Чтение контента: browse, download, export, список ключей (новый ключ) |
+| `use_write` | `canUseWrite(cat)` | Запись в restic: backup, tag, maintenance, keys, copy-цель (новый ключ) |
+| `edit` | `canEdit(cat)` | CRUD записи о репозитории: имя, путь, пароль, удалить (старый ключ) |
+
+Права независимы. Единственная импликация:
+- `use_write` ⇒ `use_read` (кто может писать, тот может и читать контент)
+
+Обратная совместимость и правила:
+- Старый ключ `use` — только видимость. НЕ даёт `use_read`.
+- Старый ключ `edit` — только CRUD. НЕ даёт `use_read`, НЕ даёт `use_write`.
+- `use_read` — без fallback'а. Не задан явно → `false`.
+- `use_write` — без fallback'а. Не задан явно → `false`.
+- `init` — глобальный флаг `can_init` на уровне пользователя
 - `delete` — удалять репозитории (глобальный флаг `can_delete` на уровне пользователя)
 - `canMove(from, to)` — требует `edit` на обе категории
 
 Fallback для `can_init`/`can_delete`: если флаг не указан — `isLoggedIn()` (true для вошедших, false для guest).
 
-Fallback-правила:
-- Пользователь с полной секцией `repos` — используются указанные права
-- Пользователь без секции `repos`: logged-in → полные права, guest → defaultGuest (public.use, без edit)
-- `edit: true` автоматически даёт `use: true`
+Fallback-правила для пользователей без секции `repos`:
+- logged-in → полные права (use/use_read/use_write/edit = true)
+- guest → public: use/use_read = true, use_write/edit = false; остальные категории: всё false
 
 ### CSRF-защита
 
@@ -406,9 +421,9 @@ return [
         'can_init' => true,
         'can_delete' => true,
         'repos' => [
-            'public'  => ['use' => true, 'edit' => true],
-            'private' => ['use' => true, 'edit' => true],
-            'session' => ['use' => true, 'edit' => true],
+            'public'  => ['use' => true, 'use_read' => true, 'use_write' => true, 'edit' => true],
+            'private' => ['use' => true, 'use_read' => true, 'use_write' => true, 'edit' => true],
+            'session' => ['use' => true, 'use_read' => true, 'use_write' => true, 'edit' => true],
         ],
     ],
     'guest' => [
@@ -417,15 +432,15 @@ return [
         'can_init' => false,
         'can_delete' => false,
         'repos' => [
-            'public'  => ['use' => true,  'edit' => false],
-            'private' => ['use' => false, 'edit' => false],
-            'session' => ['use' => false, 'edit' => false],
+            'public'  => ['use' => true, 'use_read' => true,  'use_write' => false, 'edit' => false],
+            'private' => ['use' => false, 'use_read' => false, 'use_write' => false, 'edit' => false],
+            'session' => ['use' => false, 'use_read' => false, 'use_write' => false, 'edit' => false],
         ],
     ],
 ];
 ```
 
-Legacy-формат поддерживается.
+Legacy-формат (только ключи `use`/`edit`, без `use_read`/`use_write`) поддерживается.
 
 ### `data/cfg/settings.php`
 

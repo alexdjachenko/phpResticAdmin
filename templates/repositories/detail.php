@@ -63,6 +63,9 @@ $backupPaths = $repo['backup_paths'] ?? [];
 
         <?php if ($canEdit): ?>
             <a href="/repositories/edit?repo=<?= htmlspecialchars(urlencode($repo['id'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" class="btn-edit"><?= htmlspecialchars(__('repo.edit'), ENT_QUOTES, 'UTF-8') ?></a>
+        <?php endif ?>
+
+        <?php if (!empty($canUseWrite)): ?>
             <a href="/maintenance?repo=<?= htmlspecialchars(urlencode($repo['id'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" class="btn-maintenance"><?= htmlspecialchars(__('nav.maintenance'), ENT_QUOTES, 'UTF-8') ?></a>
             <a href="/keys?repo=<?= htmlspecialchars(urlencode($repo['id'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" class="btn-keys"><?= htmlspecialchars(__('nav.keys'), ENT_QUOTES, 'UTF-8') ?></a>
         <?php endif ?>

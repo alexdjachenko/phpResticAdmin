@@ -155,4 +155,10 @@ return [
     'keys.cannot_remove_current' => 'Нельзя удалить текущий ключ.',
     'nav.keys'           => 'Ключи',
     'flash.select_repo'  => 'Сначала выберите репозиторий.',
+    'snap.copy_button'   => 'Перенести в другой репозиторий',
+    'snap.copy_title'    => 'Перенос снепшота',
+    'snap.copy_select_dest' => 'Выберите целевой репозиторий',
+    'snap.copy_success'  => 'Снепшот успешно скопирован.',
+    'snap.copy_failed'   => 'Ошибка копирования.',
+    'snap.copy_same_repo'=> 'Исходный и целевой репозиторий должны различаться.',
     ];

@@ -331,6 +331,11 @@ class App
             $controller->tag();
         });
 
+        $router->map('POST', '/snapshots/copy', function () {
+            $controller = new \App\Controllers\SnapshotController();
+            $controller->copy();
+        });
+
         $router->map('POST', '/snapshots/stats', function () {
             $controller = new \App\Controllers\SnapshotController();
             $controller->stats();

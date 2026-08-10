@@ -39,6 +39,18 @@ class Response
         $vars['appVersion'] = App::appVersion();
         $vars['resticVersion'] = App::resticVersion();
 
+        $vars['currentRepoCanUseWrite'] = false;
+        $currentRepoId = $vars['currentRepoId'];
+        if ($currentRepoId !== null && !empty($vars['repositories'])) {
+            foreach ($vars['repositories'] as $r) {
+                if (($r['id'] ?? '') === $currentRepoId) {
+                    $category = $r['category'] ?? 'public';
+                    $vars['currentRepoCanUseWrite'] = App::auth()->canUseWrite($category);
+                    break;
+                }
+            }
+        }
+
         return \App\Helpers\View::render($template, $vars, 'layout.php');
     }
 

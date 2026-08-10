@@ -50,7 +50,7 @@ class MaintenanceController
         }
 
         $category = $repo['category'] ?? 'public';
-        if (!$auth->canEdit($category)) {
+        if (!$auth->canUseWrite($category)) {
             App::response()->error(403, __('error.forbidden'));
             return;
         }
@@ -140,7 +140,7 @@ class MaintenanceController
         }
 
         $category = $repo['category'] ?? 'public';
-        if (!$auth->canEdit($category)) {
+        if (!$auth->canUseWrite($category)) {
             App::response()->error(403, __('error.forbidden'));
             return;
         }
@@ -207,7 +207,7 @@ class MaintenanceController
         }
 
         $category = $repo['category'] ?? 'public';
-        if (!$auth->canEdit($category)) {
+        if (!$auth->canUseWrite($category)) {
             App::response()->error(403, __('error.forbidden'));
             return;
         }

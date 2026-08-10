@@ -51,7 +51,7 @@ class ExportController
         }
 
         $category = $repo['category'] ?? 'public';
-        if (!$auth->canUse($category)) {
+        if (!$auth->canUseRead($category)) {
             App::response()->error(403, __('error.forbidden'));
             return;
         }
@@ -114,7 +114,7 @@ class ExportController
         }
 
         $category = $repo['category'] ?? 'public';
-        if (!$auth->canUse($category)) {
+        if (!$auth->canUseRead($category)) {
             App::response()->error(403, __('error.forbidden'));
             return;
         }

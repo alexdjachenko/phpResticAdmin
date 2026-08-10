@@ -39,9 +39,34 @@ $summary = $snap['summary'] ?? [];
             data-csrf="<?= htmlspecialchars($csrfToken ?? '', ENT_QUOTES, 'UTF-8') ?>">
         <?= htmlspecialchars(__('snap.stats_load'), ENT_QUOTES, 'UTF-8') ?>
     </button>
+    <?php if (!empty($destRepos)): ?>
+    <button id="btn-copy-snap"
+            data-repo-id="<?= htmlspecialchars($repo['id'] ?? '', ENT_QUOTES, 'UTF-8') ?>"
+            data-snap-id="<?= htmlspecialchars($snap['id'] ?? '', ENT_QUOTES, 'UTF-8') ?>"
+            data-csrf="<?= htmlspecialchars($csrfToken ?? '', ENT_QUOTES, 'UTF-8') ?>">
+        <?= htmlspecialchars(__('snap.copy_button'), ENT_QUOTES, 'UTF-8') ?>
+    </button>
+    <?php endif ?>
 </div>
 
 <div id="stats-result" class="stats-result"></div>
+
+<?php if (!empty($destRepos)): ?>
+<div id="copy-modal" class="modal" style="display:none">
+    <div class="modal-content">
+        <h3><?= htmlspecialchars(__('snap.copy_title'), ENT_QUOTES, 'UTF-8') ?></h3>
+        <p>
+            <label for="copy-dest-repo"><?= htmlspecialchars(__('snap.copy_select_dest'), ENT_QUOTES, 'UTF-8') ?></label>
+            <select id="copy-dest-repo"></select>
+        </p>
+        <div class="modal-actions">
+            <button id="btn-copy-confirm"><?= htmlspecialchars(__('form.submit'), ENT_QUOTES, 'UTF-8') ?></button>
+            <button id="btn-copy-cancel"><?= htmlspecialchars(__('form.cancel'), ENT_QUOTES, 'UTF-8') ?></button>
+        </div>
+        <div id="copy-result"></div>
+    </div>
+</div>
+<?php endif ?>
 
 <script>
 (function() {
@@ -100,5 +125,73 @@ $summary = $snap['summary'] ?? [];
         if (b < 1073741824) return (b / 1048576).toFixed(2) + ' MiB';
         return (b / 1073741824).toFixed(2) + ' GiB';
     }
-})();
-</script>
+    })();
+
+    <?php if (!empty($destRepos)): ?>
+    (function() {
+    var copyBtn = document.getElementById('btn-copy-snap');
+    var copyModal = document.getElementById('copy-modal');
+    var copyDestSelect = document.getElementById('copy-dest-repo');
+    var copyConfirm = document.getElementById('btn-copy-confirm');
+    var copyCancel = document.getElementById('btn-copy-cancel');
+    var copyResult = document.getElementById('copy-result');
+
+    if (!copyBtn || !copyModal) return;
+
+    var destRepos = <?= json_encode($destRepos) ?>;
+
+    copyBtn.addEventListener('click', function() {
+        copyDestSelect.innerHTML = '';
+        destRepos.forEach(function(r) {
+            var opt = document.createElement('option');
+            opt.value = r.id;
+            opt.textContent = r.name;
+            copyDestSelect.appendChild(opt);
+        });
+        copyResult.innerHTML = '';
+        copyModal.style.display = 'block';
+    });
+
+    copyCancel.addEventListener('click', function() {
+        copyModal.style.display = 'none';
+    });
+
+    copyConfirm.addEventListener('click', function() {
+        var destRepoId = copyDestSelect.value;
+        if (!destRepoId) return;
+
+        copyConfirm.disabled = true;
+        copyResult.innerHTML = '';
+
+        var formData = new URLSearchParams();
+        formData.append('source_repo_id', copyBtn.dataset.repoId);
+        formData.append('dest_repo_id', destRepoId);
+        formData.append('snap_id', copyBtn.dataset.snapId);
+        formData.append('_csrf_token', copyBtn.dataset.csrf);
+
+        fetch('/snapshots/copy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: formData.toString()
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data._csrf_token) {
+                copyBtn.dataset.csrf = data._csrf_token;
+            }
+            copyConfirm.disabled = false;
+
+            if (data.ok) {
+                copyResult.innerHTML = '<p class="flash flash-success">' + <?= json_encode(__('snap.copy_success')) ?> + '</p>';
+            } else {
+                copyResult.innerHTML = '<p class="flash flash-error">' + <?= json_encode(__('snap.copy_failed')) ?> + ' ' + (data.error || '') + '</p>';
+            }
+        })
+        .catch(function() {
+            copyConfirm.disabled = false;
+            copyResult.innerHTML = '<p class="flash flash-error">Network error</p>';
+        });
+    });
+    })();
+    <?php endif ?>
+    </script>

@@ -125,6 +125,56 @@ class SnapshotServiceTest extends TestCase
         $this->assertNotContains('test-tag-xyz', $tags, 'Tag should be removed');
     }
 
+    public function testCopySnapshot(): void
+    {
+        $runner = new CommandRunner();
+        $destDir = $this->tmpDir . '/dest-repo';
+        mkdir($destDir, 0777, true);
+
+        $initResult = $runner->run(
+            ['restic', 'init', '--repo', $destDir, '--insecure-no-password'],
+            ['RESTIC_PASSWORD' => '']
+        );
+
+        if ($initResult['exitCode'] !== 0) {
+            $this->markTestSkipped('Failed to init dest restic repo: ' . $initResult['stderr']);
+        }
+
+        $service = new SnapshotService($runner);
+        $snapshots = $service->listSnapshots($this->repo);
+        $this->assertNotEmpty($snapshots, 'Source repo should have at least one snapshot');
+        $snapId = $snapshots[0]['id'];
+
+        $destRepo = [
+            'id' => 'test-dest',
+            'name' => 'Dest',
+            'type' => 'local',
+            'path' => $destDir,
+            'password' => null,
+        ];
+
+        $result = $service->copy($this->repo, $destRepo, $snapId);
+        $this->assertTrue($result['ok'], 'Copy should succeed: ' . ($result['error'] ?? ''));
+
+        $destSnapshots = $service->listSnapshots($destRepo);
+        $this->assertNotEmpty($destSnapshots, 'Dest repo should have at least one snapshot after copy');
+    }
+
+    public function testCopySnapshotWithEmptyId(): void
+    {
+        $service = new SnapshotService(new CommandRunner());
+        $destRepo = [
+            'id' => 'test-dest',
+            'name' => 'Dest',
+            'type' => 'local',
+            'path' => '/nonexistent',
+            'password' => null,
+        ];
+
+        $result = $service->copy($this->repo, $destRepo, '');
+        $this->assertFalse($result['ok']);
+    }
+
     private function removeDir(string $dir): void
     {
         if (!is_dir($dir)) {

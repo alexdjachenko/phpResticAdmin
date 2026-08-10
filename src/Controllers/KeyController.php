@@ -50,7 +50,7 @@ class KeyController
         }
 
         $category = $repo['category'] ?? 'public';
-        if (!$auth->canEdit($category)) {
+        if (!$auth->canUseRead($category)) {
             App::response()->error(403, __('error.forbidden'));
             return;
         }
@@ -113,7 +113,7 @@ class KeyController
         }
 
         $category = $repo['category'] ?? 'public';
-        if (!$auth->canEdit($category)) {
+        if (!$auth->canUseWrite($category)) {
             App::response()->error(403, __('error.forbidden'));
             return;
         }
@@ -174,7 +174,7 @@ class KeyController
         }
 
         $category = $repo['category'] ?? 'public';
-        if (!$auth->canEdit($category)) {
+        if (!$auth->canUseWrite($category)) {
             App::response()->error(403, __('error.forbidden'));
             return;
         }
@@ -237,7 +237,7 @@ class KeyController
         }
 
         $category = $repo['category'] ?? 'public';
-        if (!$auth->canEdit($category)) {
+        if (!$auth->canUseWrite($category)) {
             App::response()->error(403, __('error.forbidden'));
             return;
         }

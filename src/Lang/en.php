@@ -155,4 +155,10 @@ return [
     'keys.cannot_remove_current' => 'Cannot remove the current key.',
     'nav.keys'           => 'Keys',
     'flash.select_repo'  => 'Select a repository first.',
+    'snap.copy_button'   => 'Copy to another repository',
+    'snap.copy_title'    => 'Copy Snapshot',
+    'snap.copy_select_dest' => 'Select destination repository',
+    'snap.copy_success'  => 'Snapshot copied successfully.',
+    'snap.copy_failed'   => 'Copy failed.',
+    'snap.copy_same_repo'=> 'Source and destination must be different.',
     ];

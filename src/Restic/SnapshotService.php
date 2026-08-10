@@ -104,6 +104,58 @@ class SnapshotService
     }
 
     /**
+     * Копирует снепшот из source-репозитория в destination-репозиторий.
+     *
+     * @param array{id: string, path: string, password: ?string, env?: array<string, string>} $sourceRepo
+     * @param array{id: string, path: string, password: ?string, env?: array<string, string>} $destRepo
+     * @return array{ok: bool, output: string, error: string}
+     */
+    public function copy(array $sourceRepo, array $destRepo, string $snapshotId): array
+    {
+        if ($snapshotId === '') {
+            return ['ok' => false, 'output' => '', 'error' => 'No snapshot ID provided'];
+        }
+
+        $cmd = ['restic'];
+
+        if (empty($destRepo['password'])) {
+            $cmd[] = '--insecure-no-password';
+        }
+
+        $cmd[] = '--repo';
+        $cmd[] = $destRepo['path'];
+        $cmd[] = 'copy';
+        $cmd[] = '--from-repo';
+        $cmd[] = $sourceRepo['path'];
+        $cmd[] = $snapshotId;
+
+        $env = $sourceRepo['env'] ?? [];
+        $destEnv = $destRepo['env'] ?? [];
+
+        foreach ($destEnv as $key => $value) {
+            $env[$key] = $value;
+        }
+
+        if (!empty($destRepo['password'])) {
+            $env['RESTIC_PASSWORD'] = $destRepo['password'];
+        }
+
+        if (!empty($sourceRepo['password'])) {
+            $env['RESTIC_FROM_PASSWORD'] = $sourceRepo['password'];
+        } else {
+            $env['RESTIC_FROM_PASSWORD'] = '';
+        }
+
+        $result = $this->runner->run($cmd, $env);
+
+        return [
+            'ok' => $result['exitCode'] === 0,
+            'output' => $result['stdout'],
+            'error' => $result['stderr'],
+        ];
+    }
+
+    /**
      * @param array<string, mixed> $repository
      * @return array{ok: bool, output: string, error: string}
      */

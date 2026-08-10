@@ -164,14 +164,15 @@ class RepositoryController
 
         $category = $repo['category'] ?? 'public';
 
-        if (!$auth->canUse($category)) {
+        if (!$auth->canUseRead($category)) {
             App::response()->error(403, __('error.forbidden'));
             return;
         }
 
         $canEdit = $auth->canEdit($category);
+        $canUseWrite = $auth->canUseWrite($category);
         $canDelete = $auth->canDelete();
-        $canBackup = $canEdit && !empty($repo['backup_paths']);
+        $canBackup = $canUseWrite && !empty($repo['backup_paths']);
 
         $availableCategories = [];
         foreach (['public', 'private', 'session'] as $cat) {
@@ -190,6 +191,7 @@ class RepositoryController
             'repo' => $repo,
             'category' => $category,
             'canEdit' => $canEdit,
+            'canUseWrite' => $canUseWrite,
             'canDelete' => $canDelete,
             'canBackup' => $canBackup,
             'canMove' => $canMove,
@@ -396,7 +398,7 @@ class RepositoryController
 
         $category = $repo['category'] ?? 'public';
 
-        if (!$auth->canEdit($category)) {
+        if (!$auth->canUseWrite($category)) {
             App::response()->error(403, __('error.forbidden'));
             return;
         }
