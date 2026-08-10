@@ -33,7 +33,7 @@ class RepositoryService
             $command[] = '--insecure-no-password';
         }
 
-        $result = $this->runner->run($command, $env);
+        $result = $this->runner->run($command, $env, null, 10);
 
         return [
             'ok' => $result['exitCode'] === 0,
@@ -109,7 +109,7 @@ class RepositoryService
             $command[] = '--insecure-no-password';
         }
 
-        $result = $this->runner->run($command, $env);
+        $result = $this->runner->run($command, $env, null, 0);
 
         return [
             'ok' => $result['exitCode'] === 0,

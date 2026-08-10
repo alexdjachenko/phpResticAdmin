@@ -39,7 +39,13 @@ $backupPaths = $repo['backup_paths'] ?? [];
             <td><code><?= htmlspecialchars(\App\Helpers\Format::truncate($repo['env']['AWS_ACCESS_KEY_ID'], 20), ENT_QUOTES, 'UTF-8') ?></code></td>
         </tr>
         <?php endif ?>
-    </table>
+        <?php if (!empty($repo['env']['AWS_ENDPOINT'])): ?>
+        <tr>
+            <th>S3 Endpoint</th>
+            <td><code><?= htmlspecialchars($repo['env']['AWS_ENDPOINT'], ENT_QUOTES, 'UTF-8') ?></code></td>
+        </tr>
+        <?php endif ?>
+        </table>
 
     <div class="repo-actions">
         <?php if ($isLoggedIn): ?>

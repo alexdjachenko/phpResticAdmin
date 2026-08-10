@@ -43,6 +43,11 @@
             <label for="s3-secret"><?= htmlspecialchars(__('repo.s3_secret'), ENT_QUOTES, 'UTF-8') ?></label>
             <input type="password" id="s3-secret" name="s3_secret">
         </div>
+        <div class="form-group">
+            <label for="s3-endpoint"><?= htmlspecialchars(__('repo.s3_endpoint'), ENT_QUOTES, 'UTF-8') ?></label>
+            <input type="text" id="s3-endpoint" name="s3_endpoint" placeholder="https://s3.amazonaws.com">
+            <span class="form-help"><?= htmlspecialchars(__('repo.s3_endpoint_help'), ENT_QUOTES, 'UTF-8') ?></span>
+        </div>
     </div>
 
     <div class="form-group">

@@ -13,9 +13,10 @@ class CommandRunner
     /**
      * @param array<int, string> $command
      * @param array<string, string> $env
+     * @param int $timeout Максимальное время выполнения в секундах (0 = без таймаута)
      * @return array{exitCode: int, stdout: string, stderr: string}
      */
-    public function run(array $command, array $env = [], ?string $stdin = null): array
+    public function run(array $command, array $env = [], ?string $stdin = null, int $timeout = 30): array
     {
         $env = $this->ensureEnv($env);
 
@@ -48,6 +49,30 @@ class CommandRunner
         }
         fclose($pipes[0]);
 
+        $timedOut = false;
+        $deadline = ($timeout > 0) ? microtime(true) + $timeout : PHP_FLOAT_MAX;
+
+        while (true) {
+            $status = proc_get_status($process);
+            if (!$status['running']) {
+                break;
+            }
+
+            if (microtime(true) >= $deadline) {
+                proc_terminate($process);
+                usleep(300000);
+                $status = proc_get_status($process);
+                if ($status['running']) {
+                    proc_terminate($process, 9);
+                    usleep(200000);
+                }
+                $timedOut = true;
+                break;
+            }
+
+            usleep(50000);
+        }
+
         $stdout = stream_get_contents($pipes[1]);
         fclose($pipes[1]);
 
@@ -55,6 +80,10 @@ class CommandRunner
         fclose($pipes[2]);
 
         $exitCode = proc_close($process);
+
+        if ($timedOut) {
+            $stderr = ($stderr !== false ? $stderr : '') . "\nCommand timed out after {$timeout} seconds";
+        }
 
         return [
             'exitCode' => $exitCode,

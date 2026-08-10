@@ -290,6 +290,7 @@ class RepositoryController
         $backupPathsRaw = $request->post('backup_paths', '');
         $s3Key = trim($request->post('s3_key', ''));
         $s3Secret = trim($request->post('s3_secret', ''));
+        $s3Endpoint = trim($request->post('s3_endpoint', ''));
 
         if ($name === '' || $path === '') {
             App::session()->flash('error', 'Name and path are required.');
@@ -349,6 +350,11 @@ class RepositoryController
             }
             if ($s3Secret !== '') {
                 $env['AWS_SECRET_ACCESS_KEY'] = $s3Secret;
+            }
+            if ($s3Endpoint !== '') {
+                $env['AWS_ENDPOINT'] = $s3Endpoint;
+            } else {
+                unset($env['AWS_ENDPOINT']);
             }
             $newData['env'] = !empty($env) ? $env : null;
         }
@@ -492,6 +498,7 @@ class RepositoryController
         $backupPathsRaw = $request->post('backup_paths', '');
         $s3Key = trim($request->post('s3_key', ''));
         $s3Secret = trim($request->post('s3_secret', ''));
+        $s3Endpoint = trim($request->post('s3_endpoint', ''));
 
         if ($name === '' || $path === '') {
             App::session()->flash('error', 'Name and path are required.');
@@ -528,13 +535,16 @@ class RepositoryController
             $repository['backup_paths'] = $backupPaths;
         }
 
-        if ($s3Key !== '' || $s3Secret !== '') {
+        if ($s3Key !== '' || $s3Secret !== '' || $s3Endpoint !== '') {
             $repository['env'] = [];
             if ($s3Key !== '') {
                 $repository['env']['AWS_ACCESS_KEY_ID'] = $s3Key;
             }
             if ($s3Secret !== '') {
                 $repository['env']['AWS_SECRET_ACCESS_KEY'] = $s3Secret;
+            }
+            if ($s3Endpoint !== '') {
+                $repository['env']['AWS_ENDPOINT'] = $s3Endpoint;
             }
         }
 
