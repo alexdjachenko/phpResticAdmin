@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.8](https://github.com/alexdjachenko/phpResticAdmin/compare/v0.4.7...v0.4.8) (2026-08-10)
+
+
+### Bug Fixes
+
+* debugging release workflow ([7039788](https://github.com/alexdjachenko/phpResticAdmin/commit/7039788d49102f4185419d73c2678d061ce737ae))
+
 ## [0.4.7](https://github.com/alexdjachenko/phpResticAdmin/compare/v0.4.6...v0.4.7) (2026-08-10)
 
 
