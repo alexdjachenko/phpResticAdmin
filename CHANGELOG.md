@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.7](https://github.com/alexdjachenko/phpResticAdmin/compare/v0.4.6...v0.4.7) (2026-08-10)
+
+
+### Bug Fixes
+
+* next trying to fix image tags ([6b7fdc4](https://github.com/alexdjachenko/phpResticAdmin/commit/6b7fdc405c295bb8863710fd16daf5136ef15c17))
+
 ## [0.4.6](https://github.com/alexdjachenko/phpResticAdmin/compare/v0.4.5...v0.4.6) (2026-08-09)
 
 
