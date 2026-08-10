@@ -37,15 +37,17 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository }}
-          # flavor автоматически управляет тегом latest
-          flavor: |
-            latest=auto
           tags: |
-            type=semver,pattern=v{{major}}
-            type=semver,pattern=v{{major}}.{{minor}}
-            type=semver,pattern={{version}}
-            type=sha,prefix=sha-
+            # 1. latest — для коммитов в main и для релизов
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || github.event_name == 'release' }}
+            # 2. pr-XXX — только для pull_request
             type=raw,value=pr-${{ github.event.pull_request.number }},enable=${{ github.event_name == 'pull_request' }}
+            # 3. Семантические теги — только для релизов или push тегов v*
+            type=semver,pattern=v{{major}},enable=${{ github.event_name == 'release' || startsWith(github.ref, 'refs/tags/v') }}
+            type=semver,pattern=v{{major}}.{{minor}},enable=${{ github.event_name == 'release' || startsWith(github.ref, 'refs/tags/v') }}
+            type=semver,pattern={{version}},enable=${{ github.event_name == 'release' || startsWith(github.ref, 'refs/tags/v') }}
+            # 4. sha-... — всегда, как fallback
+            type=sha,prefix=sha-
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
