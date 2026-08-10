@@ -353,6 +353,8 @@ class RepositoryController
             }
             if ($s3Endpoint !== '') {
                 $env['AWS_ENDPOINT'] = $s3Endpoint;
+            } else {
+                unset($env['AWS_ENDPOINT']);
             }
             $newData['env'] = !empty($env) ? $env : null;
         }
