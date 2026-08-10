@@ -100,7 +100,8 @@ class ResticConnectionTest extends TestCase
     public function testInitRepository(): void
     {
         $initDir = $this->tmpDir . '/init-repo';
-        mkdir($initDir, 0777, true);
+        // Directory does NOT exist before init — restic should create it.
+        // Previous version pre-created the directory, masking init failures.
 
         $repository = [
             'path' => $initDir,
@@ -111,6 +112,7 @@ class ResticConnectionTest extends TestCase
         $result = $service->init($repository);
 
         $this->assertTrue($result['ok'], 'Init should succeed: ' . ($result['error'] ?? ''));
+        $this->assertDirectoryExists($initDir, 'restic init should create the repository directory');
 
         // Verify connection works on newly initialized repo
         $connResult = $service->testConnection([
@@ -122,6 +124,67 @@ class ResticConnectionTest extends TestCase
         ]);
 
         $this->assertTrue($connResult['ok'], 'Connection after init should succeed: ' . ($connResult['error'] ?? ''));
+    }
+
+    public function testInitRepositoryFailsForAlreadyInitializedRepo(): void
+    {
+        // repoDir is already initialized in setUp()
+        $repository = [
+            'path' => $this->repoDir,
+            'password' => null,
+        ];
+
+        $service = new RepositoryService(new CommandRunner());
+        $result = $service->init($repository);
+
+        $this->assertFalse($result['ok'], 'Init on already-initialized repo should fail');
+        $this->assertNotEmpty($result['error'], 'Error message should not be empty');
+    }
+
+    public function testInitRepositoryWithPassword(): void
+    {
+        $initDir = $this->tmpDir . '/init-password-repo';
+
+        $repository = [
+            'path' => $initDir,
+            'password' => 'testSecret123',
+        ];
+
+        $service = new RepositoryService(new CommandRunner());
+        $result = $service->init($repository);
+
+        $this->assertTrue($result['ok'], 'Init with password should succeed: ' . ($result['error'] ?? ''));
+
+        // Verify connection works with password
+        $connResult = $service->testConnection([
+            'id' => 'test',
+            'name' => 'Test',
+            'type' => 'local',
+            'path' => $initDir,
+            'password' => 'testSecret123',
+        ]);
+
+        $this->assertTrue($connResult['ok'], 'Connection after init with password should succeed: ' . ($connResult['error'] ?? ''));
+    }
+
+    public function testInitRepositoryFailsForNonWritableParent(): void
+    {
+        $parentDir = $this->tmpDir . '/readonly-parent';
+        mkdir($parentDir, 0555, true);
+
+        $repository = [
+            'path' => $parentDir . '/subdir-repo',
+            'password' => null,
+        ];
+
+        $service = new RepositoryService(new CommandRunner());
+        $result = $service->init($repository);
+
+        $this->assertFalse($result['ok'], 'Init with non-writable parent should fail');
+        $this->assertNotEmpty($result['error'], 'Error message should not be empty for permission failure');
+
+        // Restore writable so tearDown can clean up
+        chmod($parentDir, 0777);
     }
 
     private function removeDir(string $dir): void

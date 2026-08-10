@@ -62,10 +62,16 @@ class RepositoryService
 
         $result = $this->runner->run($command, $env);
 
+        // Если init упал, а stderr пуст — берём ошибку из stdout.
+        // Некоторые ошибки restic (например, предупреждения) попадают в stdout
+        // при использовании --json-флагов. CommandRunner также добавляет
+        // fallback-сообщение при exitCode != 0 и пустых stdout/stderr.
+        $error = $result['stderr'] !== '' ? $result['stderr'] : $result['stdout'];
+
         return [
             'ok' => $result['exitCode'] === 0,
             'output' => $result['stdout'],
-            'error' => $result['stderr'],
+            'error' => $error,
         ];
     }
 

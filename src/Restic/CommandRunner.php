@@ -81,14 +81,32 @@ class CommandRunner
 
         $exitCode = proc_close($process);
 
+        $stdout = $stdout !== false ? $stdout : '';
+        $stderr = $stderr !== false ? $stderr : '';
+
         if ($timedOut) {
-            $stderr = ($stderr !== false ? $stderr : '') . "\nCommand timed out after {$timeout} seconds";
+            $stderr = rtrim($stderr) . "\nCommand timed out after {$timeout} seconds";
+        }
+
+        // Когда proc_open с массивом аргументов (без оболочки shell) не может
+        // найти или запустить бинарник, execvp() завершается молча:
+        // stderr пуст, а exitCode 126/127 или другой ненулевой.
+        // Даём осмысленное сообщение вместо пустой строки.
+        if ($exitCode !== 0 && $stderr === '' && $stdout === '') {
+            $cmdName = $command[0] ?? 'command';
+            if ($exitCode === 127) {
+                $stderr = "Command not found: {$cmdName}";
+            } elseif ($exitCode === 126) {
+                $stderr = "Command not executable: {$cmdName}";
+            } else {
+                $stderr = "Command exited with code {$exitCode}: {$cmdName}";
+            }
         }
 
         return [
             'exitCode' => $exitCode,
-            'stdout' => $stdout !== false ? $stdout : '',
-            'stderr' => $stderr !== false ? $stderr : '',
+            'stdout' => $stdout,
+            'stderr' => $stderr,
         ];
     }
 
