@@ -29,6 +29,8 @@ return [
     'repo.password_help' => 'Оставьте пустым для репозитория без пароля.',
     'repo.s3_key'        => 'AWS Access Key ID',
     'repo.s3_secret'     => 'AWS Secret Access Key',
+    'repo.s3_endpoint'   => 'S3 Endpoint URL',
+    'repo.s3_endpoint_help' => 'Оставьте пустым для AWS S3. Для совместимых серверов укажите URL (например, https://s3.example.com).',
     'repo.type_local'    => 'Локальный',
     'repo.type_s3'       => 'Amazon S3',
     'repo.type_sftp'     => 'SFTP',

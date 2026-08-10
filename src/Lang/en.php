@@ -29,6 +29,8 @@ return [
     'repo.password_help' => 'Leave empty for password-less repository.',
     'repo.s3_key'        => 'AWS Access Key ID',
     'repo.s3_secret'     => 'AWS Secret Access Key',
+    'repo.s3_endpoint'   => 'S3 Endpoint URL',
+    'repo.s3_endpoint_help' => 'Leave empty for AWS S3. For S3-compatible servers, specify the endpoint URL (e.g., https://s3.example.com).',
     'repo.type_local'    => 'Local',
     'repo.type_s3'       => 'Amazon S3',
     'repo.type_sftp'     => 'SFTP',
