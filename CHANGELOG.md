@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/alexdjachenko/phpResticAdmin/compare/v0.4.8...v0.5.0) (2026-08-10)
+
+
+### Features
+
+* **auth,snapshots:** implement snapshot copy between repositories with new permission model ([8df857d](https://github.com/alexdjachenko/phpResticAdmin/commit/8df857d64913b012402ebc164a210ed1a3ce427d))
+
 ## [0.4.8](https://github.com/alexdjachenko/phpResticAdmin/compare/v0.4.7...v0.4.8) (2026-08-10)
 
 
