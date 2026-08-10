@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.5.0](https://github.com/alexdjachenko/phpResticAdmin/compare/v0.4.8...v0.5.0) (2026-08-10)
+
+
+### Features
+
+* **auth,snapshots:** implement snapshot copy between repositories with new permission model ([8df857d](https://github.com/alexdjachenko/phpResticAdmin/commit/8df857d64913b012402ebc164a210ed1a3ce427d))
+
+
+### Bug Fixes
+
+* --from-insecure-no-password ([071e62b](https://github.com/alexdjachenko/phpResticAdmin/commit/071e62bf65b99f19b4054037473f28aaf9469996))
+* App\Tests\Unit\Auth\AuthenticatorTest::testLegacyAdminHasNoUseWrite ([8bf5e3c](https://github.com/alexdjachenko/phpResticAdmin/commit/8bf5e3cfee4f0b95187a7d78bbbb997d30b68bb8))
+* **SnapshotService:** add --from-insecure-no-password after "copy" subcommand ([4d74a2c](https://github.com/alexdjachenko/phpResticAdmin/commit/4d74a2ca202b56ba2966248418cb86bca8ea9cbc))
+
 ## [0.4.8](https://github.com/alexdjachenko/phpResticAdmin/compare/v0.4.7...v0.4.8) (2026-08-10)
 
 
