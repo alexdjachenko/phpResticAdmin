@@ -122,6 +122,10 @@ class SnapshotService
             $cmd[] = '--insecure-no-password';
         }
 
+        if (empty($sourceRepo['password'])) {
+            $cmd[] = '--from-insecure-no-password';
+        }
+
         $cmd[] = '--repo';
         $cmd[] = $destRepo['path'];
         $cmd[] = 'copy';
