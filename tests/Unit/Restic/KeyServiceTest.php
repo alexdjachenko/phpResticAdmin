@@ -1,3 +1,5 @@
+<?php
+
 /**
  * phpResticAdmin — Web UI for restic backup repositories.
  * Copyright (c) 2026 Alex Djachenko (Алексей Дьяченко)
