@@ -111,17 +111,17 @@ class KeyServiceTest extends TestCase
     {
         $capturedStdin = null;
         $mock = $this->createMock(CommandRunner::class);
-        $mock->expects($this->once())
+        $mock->expects($this->exactly(2))
             ->method('run')
-            ->with(
-                $this->anything(),
-                $this->anything(),
-                $this->callback(function (?string $stdin) use (&$capturedStdin) {
-                    $capturedStdin = $stdin;
-                    return true;
-                })
-            )
-            ->willReturn(['exitCode' => 0, 'stdout' => '', 'stderr' => '']);
+            ->willReturnCallback(function ($cmd, $env = [], $stdin = null, $timeout = null) use (&$capturedStdin) {
+                if ($capturedStdin === null && in_array('snapshots', $cmd, true)) {
+                    // verifyKey: пароль не дубликат
+                    return ['exitCode' => 1, 'stdout' => '', 'stderr' => 'wrong password'];
+                }
+                // addKey
+                $capturedStdin = $stdin;
+                return ['exitCode' => 0, 'stdout' => '', 'stderr' => ''];
+            });
 
         $service = new KeyService($mock);
         $result = $service->addKey($this->repo, 'secret123');
@@ -196,22 +196,22 @@ class KeyServiceTest extends TestCase
         $repoWithPassword = array_merge($this->repo, ['password' => 'secret123']);
         $capturedEnv = null;
         $capturedCommand = null;
+        $callCount = 0;
 
         $mock = $this->createMock(CommandRunner::class);
-        $mock->expects($this->once())
+        $mock->expects($this->exactly(2))
             ->method('run')
-            ->with(
-                $this->callback(function (array $cmd) use (&$capturedCommand) {
-                    $capturedCommand = $cmd;
-                    return true;
-                }),
-                $this->callback(function (array $env) use (&$capturedEnv) {
-                    $capturedEnv = $env;
-                    return true;
-                }),
-                $this->anything()
-            )
-            ->willReturn(['exitCode' => 0, 'stdout' => '', 'stderr' => '']);
+            ->willReturnCallback(function ($cmd, $env = [], $stdin = null, $timeout = null) use (&$capturedCommand, &$capturedEnv, &$callCount) {
+                $callCount++;
+                if ($callCount === 1) {
+                    // verifyKey: пароль не дубликат
+                    return ['exitCode' => 1, 'stdout' => '', 'stderr' => 'wrong password'];
+                }
+                // addKey
+                $capturedCommand = $cmd;
+                $capturedEnv = $env;
+                return ['exitCode' => 0, 'stdout' => '', 'stderr' => ''];
+            });
 
         $service = new KeyService($mock);
         $result = $service->addKey($repoWithPassword, 'secret123');
@@ -227,21 +227,25 @@ class KeyServiceTest extends TestCase
     public function testAddKeyWithoutPasswordUsesInsecureFlag(): void
     {
         $capturedCommand = null;
+        $callCount = 0;
 
         $mock = $this->createMock(CommandRunner::class);
-        $mock->expects($this->once())
+        $mock->expects($this->exactly(2))
             ->method('run')
-            ->with(
-                $this->callback(function (array $cmd) use (&$capturedCommand) {
-                    $capturedCommand = $cmd;
-                    return true;
-                }),
-                $this->callback(function (array $env) {
-                    return !isset($env['RESTIC_PASSWORD']);
-                }),
-                $this->anything()
-            )
-            ->willReturn(['exitCode' => 0, 'stdout' => '', 'stderr' => '']);
+            ->willReturnCallback(function ($cmd, $env = [], $stdin = null, $timeout = null) use (&$capturedCommand, &$callCount) {
+                $callCount++;
+                if ($callCount === 1) {
+                    // verifyKey: пароль не дубликат
+                    return ['exitCode' => 1, 'stdout' => '', 'stderr' => 'wrong password'];
+                }
+                // addKey
+                $capturedCommand = $cmd;
+                // Проверяем что RESTIC_PASSWORD НЕ передаётся (репо без пароля)
+                if (isset($env['RESTIC_PASSWORD'])) {
+                    return ['exitCode' => 99, 'stdout' => '', 'stderr' => 'RESTIC_PASSWORD should not be set'];
+                }
+                return ['exitCode' => 0, 'stdout' => '', 'stderr' => ''];
+            });
 
         $service = new KeyService($mock);
         $result = $service->addKey($this->repo, 'secret123');
