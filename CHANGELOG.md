@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.6.0](https://github.com/alexdjachenko/phpResticAdmin/compare/v0.5.0...v0.6.0) (2026-08-11)
+
+
+### Features
+
+* **keys:** add verifyKey core method, UI button, and duplicate detection ([890add7](https://github.com/alexdjachenko/phpResticAdmin/commit/890add72f41450e0e176aa1b852ce7470941bb2c))
+* tool for init at maintenance page ([897a904](https://github.com/alexdjachenko/phpResticAdmin/commit/897a9046541c7c5b9cee6d7878dd4c773980765a))
+
+
+### Bug Fixes
+
+* fix:  ([85494c9](https://github.com/alexdjachenko/phpResticAdmin/commit/85494c91cd8f0573ebbf891af6d81872554844cc))
+* fix:  ([716931a](https://github.com/alexdjachenko/phpResticAdmin/commit/716931aa800cd03e6e2df8aedec1a8317c4d2523))
+* absolute path to the console utils ([fe63444](https://github.com/alexdjachenko/phpResticAdmin/commit/fe63444f0eb57b37ceddc6728225dc04f4cc667c))
+* change shell utils to php ([75b31b4](https://github.com/alexdjachenko/phpResticAdmin/commit/75b31b45f82fcc34d3ff04be1f1ed139cf4f8499))
+* **core:** use proc_get_status exitcode instead of proc_close in CommandRunner ([0e522cf](https://github.com/alexdjachenko/phpResticAdmin/commit/0e522cfdf49f216965783f192fb01a2fbe7d55f9))
+* refactirong auth test ([6cb7ac9](https://github.com/alexdjachenko/phpResticAdmin/commit/6cb7ac97177dd1875e19e1159d782d9c7cb4b1e4))
+* **restic:** correct flag order in RepositoryService, add buildCommand/buildEnv ([32c4666](https://github.com/alexdjachenko/phpResticAdmin/commit/32c466613782ababf8aeb76c6023d6847ad14a0a))
+* **restic:** provide meaningful error when restic init fails with empty stderr ([9f727b7](https://github.com/alexdjachenko/phpResticAdmin/commit/9f727b7a8a4433b54cd526740d336b032e7240be))
+* syntax error "&lt;?php tag" ([bf0b7fc](https://github.com/alexdjachenko/phpResticAdmin/commit/bf0b7fc99139967fda2a3c1b2c3be689d9db13e4))
+* Понял. `addKey()` теперь вызывает `verifyKey()` перед добавлением — старые моки ожидают один вызов `run()`, а получают два. Исправляю все три. ([0211b04](https://github.com/alexdjachenko/phpResticAdmin/commit/0211b047ef0f0017187996af47ab64d88a5f9853))
+* Ты прав. Виноват — поменял на `PHP_BINARY` наугад, не проверив. Давай по порядку. ([d9d7fbf](https://github.com/alexdjachenko/phpResticAdmin/commit/d9d7fbf833438aef554f4f35d0181ef10081eec4))
+
 ## [0.5.0](https://github.com/alexdjachenko/phpResticAdmin/compare/v0.4.8...v0.5.0) (2026-08-10)
 
 
