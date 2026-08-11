@@ -1,3 +1,5 @@
+<?php
+
 /**
  * phpResticAdmin — Web UI for restic backup repositories.
  * Copyright (c) 2026 Alex Djachenko (Алексей Дьяченко)
@@ -50,33 +52,31 @@ class AuthenticatorTest extends TestCase
         $passwordHash = password_hash('secret123', PASSWORD_DEFAULT);
 
         // Базовый конфиг: admin с полными правами, guest с ограниченными
-        file_put_contents(
-            $this->tmpDir . '/users.php',
-            '<?php return [
-                "admin" => [
-                    "password" => ' . var_export($passwordHash, true) . ',
-                    "api_tokens" => [],
-                    "can_init" => true,
-                    "can_delete" => true,
-                    "repos" => [
-                        "public" => ["use" => true, "use_read" => true, "use_write" => true, "edit" => true],
-                        "private" => ["use" => true, "use_read" => true, "use_write" => true, "edit" => true],
-                        "session" => ["use" => true, "use_read" => true, "use_write" => true, "edit" => true],
-                    ],
+        $usersConfig = [
+            'admin' => [
+                'password' => $passwordHash,
+                'api_tokens' => [],
+                'can_init' => true,
+                'can_delete' => true,
+                'repos' => [
+                    'public' => ['use' => true, 'use_read' => true, 'use_write' => true, 'edit' => true],
+                    'private' => ['use' => true, 'use_read' => true, 'use_write' => true, 'edit' => true],
+                    'session' => ['use' => true, 'use_read' => true, 'use_write' => true, 'edit' => true],
                 ],
-                "guest" => [
-                    "password" => null,
-                    "api_tokens" => [],
-                    "can_init" => false,
-                    "can_delete" => false,
-                    "repos" => [
-                        "public" => ["use" => true, "edit" => false],
-                        "private" => ["use" => false, "edit" => false],
-                        "session" => ["use" => false, "edit" => false],
-                    ],
+            ],
+            'guest' => [
+                'password' => null,
+                'api_tokens' => [],
+                'can_init' => false,
+                'can_delete' => false,
+                'repos' => [
+                    'public' => ['use' => true, 'edit' => false],
+                    'private' => ['use' => false, 'edit' => false],
+                    'session' => ['use' => false, 'edit' => false],
                 ],
-            ];'
-        );
+            ],
+        ];
+        $this->writeUsersConfig($this->tmpDir, $usersConfig);
 
         // settings.php: guest_user = null (гостевой доступ выключен)
         file_put_contents(
@@ -252,12 +252,9 @@ class AuthenticatorTest extends TestCase
     public function testFallbackFullRightsForLegacyUser(): void
     {
         $passwordHash = password_hash('legacy', PASSWORD_DEFAULT);
-        file_put_contents(
-            $this->tmpDir . '/users.php',
-            '<?php return [
-                "legacy" => ["password" => ' . var_export($passwordHash, true) . '],
-            ];'
-        );
+        $this->writeUsersConfig($this->tmpDir, [
+            'legacy' => ['password' => $passwordHash],
+        ]);
 
         $configStorage = new ConfigStorage($this->tmpDir);
         $auth = new Authenticator($configStorage, $this->session);
@@ -275,12 +272,9 @@ class AuthenticatorTest extends TestCase
     /** Гость без секции repos: публичные — только use, без use_read/use_write/edit. */
     public function testGuestDefaultRights(): void
     {
-        file_put_contents(
-            $this->tmpDir . '/users.php',
-            '<?php return [
-                "guest" => ["password" => null],
-            ];'
-        );
+        $this->writeUsersConfig($this->tmpDir, [
+            'guest' => ['password' => null],
+        ]);
         file_put_contents(
             $this->tmpDir . '/settings.php',
             '<?php return ["guest_user" => "guest", "tmp_dir" => "/tmp", "log_dir" => "/var/log", "timezone" => "UTC"];'
@@ -361,20 +355,17 @@ class AuthenticatorTest extends TestCase
     public function testCanUseWriteTrueWhenExplicitlySet(): void
     {
         $passwordHash = password_hash('writer', PASSWORD_DEFAULT);
-        file_put_contents(
-            $this->tmpDir . '/users.php',
-            '<?php return [
-                "writer" => [
-                    "password" => ' . var_export($passwordHash, true) . ',
-                    "api_tokens" => [],
-                    "repos" => [
-                        "public" => ["use_read" => true, "use_write" => true, "edit" => false],
-                        "private" => ["use_read" => false, "use_write" => false, "edit" => false],
-                        "session" => ["use_read" => false, "use_write" => false, "edit" => false],
-                    ],
+        $this->writeUsersConfig($this->tmpDir, [
+            'writer' => [
+                'password' => $passwordHash,
+                'api_tokens' => [],
+                'repos' => [
+                    'public' => ['use_read' => true, 'use_write' => true, 'edit' => false],
+                    'private' => ['use_read' => false, 'use_write' => false, 'edit' => false],
+                    'session' => ['use_read' => false, 'use_write' => false, 'edit' => false],
                 ],
-            ];'
-        );
+            ],
+        ]);
         $configStorage = new ConfigStorage($this->tmpDir);
         $auth = new Authenticator($configStorage, $this->session);
         $auth->login('writer', 'writer');
@@ -387,20 +378,17 @@ class AuthenticatorTest extends TestCase
     public function testCanUseWriteImpliesCanUseRead(): void
     {
         $passwordHash = password_hash('writer', PASSWORD_DEFAULT);
-        file_put_contents(
-            $this->tmpDir . '/users.php',
-            '<?php return [
-                "writer" => [
-                    "password" => ' . var_export($passwordHash, true) . ',
-                    "api_tokens" => [],
-                    "repos" => [
-                        "public" => ["use_write" => true, "edit" => false],
-                        "private" => ["use_read" => false, "use_write" => false, "edit" => false],
-                        "session" => ["use_read" => false, "use_write" => false, "edit" => false],
-                    ],
+        $this->writeUsersConfig($this->tmpDir, [
+            'writer' => [
+                'password' => $passwordHash,
+                'api_tokens' => [],
+                'repos' => [
+                    'public' => ['use_write' => true, 'edit' => false],
+                    'private' => ['use_read' => false, 'use_write' => false, 'edit' => false],
+                    'session' => ['use_read' => false, 'use_write' => false, 'edit' => false],
                 ],
-            ];'
-        );
+            ],
+        ]);
         $configStorage = new ConfigStorage($this->tmpDir);
         $auth = new Authenticator($configStorage, $this->session);
         $auth->login('writer', 'writer');
@@ -414,20 +402,17 @@ class AuthenticatorTest extends TestCase
     public function testUseReadDoesNotFallBackToEdit(): void
     {
         $passwordHash = password_hash('editor', PASSWORD_DEFAULT);
-        file_put_contents(
-            $this->tmpDir . '/users.php',
-            '<?php return [
-                "editor" => [
-                    "password" => ' . var_export($passwordHash, true) . ',
-                    "api_tokens" => [],
-                    "repos" => [
-                        "public" => ["edit" => true],
-                        "private" => ["use" => false, "use_read" => false, "use_write" => false, "edit" => false],
-                        "session" => ["use" => false, "use_read" => false, "use_write" => false, "edit" => false],
-                    ],
+        $this->writeUsersConfig($this->tmpDir, [
+            'editor' => [
+                'password' => $passwordHash,
+                'api_tokens' => [],
+                'repos' => [
+                    'public' => ['edit' => true],
+                    'private' => ['use' => false, 'use_read' => false, 'use_write' => false, 'edit' => false],
+                    'session' => ['use' => false, 'use_read' => false, 'use_write' => false, 'edit' => false],
                 ],
-            ];'
-        );
+            ],
+        ]);
         $configStorage = new ConfigStorage($this->tmpDir);
         $auth = new Authenticator($configStorage, $this->session);
         $auth->login('editor', 'editor');
@@ -441,20 +426,17 @@ class AuthenticatorTest extends TestCase
     public function testUseReadDoesNotFallBackToOldUseKey(): void
     {
         $passwordHash = password_hash('legacy', PASSWORD_DEFAULT);
-        file_put_contents(
-            $this->tmpDir . '/users.php',
-            '<?php return [
-                "legacy" => [
-                    "password" => ' . var_export($passwordHash, true) . ',
-                    "api_tokens" => [],
-                    "repos" => [
-                        "public" => ["use" => true, "edit" => false],
-                        "private" => ["use" => false, "edit" => false],
-                        "session" => ["use" => false, "edit" => false],
-                    ],
+        $this->writeUsersConfig($this->tmpDir, [
+            'legacy' => [
+                'password' => $passwordHash,
+                'api_tokens' => [],
+                'repos' => [
+                    'public' => ['use' => true, 'edit' => false],
+                    'private' => ['use' => false, 'edit' => false],
+                    'session' => ['use' => false, 'edit' => false],
                 ],
-            ];'
-        );
+            ],
+        ]);
         $configStorage = new ConfigStorage($this->tmpDir);
         $auth = new Authenticator($configStorage, $this->session);
         $auth->login('legacy', 'legacy');
@@ -468,20 +450,17 @@ class AuthenticatorTest extends TestCase
     public function testLegacyAdminHasNoUseWrite(): void
     {
         $passwordHash = password_hash('legacy', PASSWORD_DEFAULT);
-        file_put_contents(
-            $this->tmpDir . '/users.php',
-            '<?php return [
-                "legacy" => [
-                    "password" => ' . var_export($passwordHash, true) . ',
-                    "api_tokens" => [],
-                    "repos" => [
-                        "public" => ["use" => true, "edit" => true],
-                        "private" => ["use" => true, "edit" => true],
-                        "session" => ["use" => true, "edit" => true],
-                    ],
+        $this->writeUsersConfig($this->tmpDir, [
+            'legacy' => [
+                'password' => $passwordHash,
+                'api_tokens' => [],
+                'repos' => [
+                    'public' => ['use' => true, 'edit' => true],
+                    'private' => ['use' => true, 'edit' => true],
+                    'session' => ['use' => true, 'edit' => true],
                 ],
-            ];'
-        );
+            ],
+        ]);
         $configStorage = new ConfigStorage($this->tmpDir);
         $auth = new Authenticator($configStorage, $this->session);
         $auth->login('legacy', 'legacy');
@@ -490,6 +469,19 @@ class AuthenticatorTest extends TestCase
         $this->assertFalse($auth->canUseWrite('public'));
         $this->assertFalse($auth->canUseWrite('private'));
         $this->assertFalse($auth->canUseWrite('session'));
+    }
+
+    /**
+     * Записывает PHP-конфиг users.php через var_export.
+     * @param string $dir Директория для сохранения
+     * @param array $users Массив пользователей
+     */
+    private function writeUsersConfig(string $dir, array $users): void
+    {
+        file_put_contents(
+            $dir . '/users.php',
+            '<?php return ' . var_export($users, true) . ';'
+        );
     }
 
     private function removeDir(string $dir): void
