@@ -220,7 +220,7 @@ class MaintenanceController
             'keep_yearly' => (int) $request->post('keep_yearly', '0'),
             'keep_last' => (int) $request->post('keep_last', '0'),
             'prune' => $request->post('prune', '0') === '1',
-            'dry_run' => $request->post('dry_run', '1') === '1',
+            'dry_run' => $request->post('dry_run', '0') === '1',
         ];
 
         $result = App::maintenanceService()->forget($repo, $policy);
