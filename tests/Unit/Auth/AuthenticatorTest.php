@@ -1,5 +1,3 @@
-<?php
-
 /**
  * phpResticAdmin — Web UI for restic backup repositories.
  * Copyright (c) 2026 Alex Djachenko (Алексей Дьяченко)
@@ -13,18 +11,45 @@ use App\Core\Session;
 use App\Storage\ConfigStorage;
 use PHPUnit\Framework\TestCase;
 
+/**
+ * Юнит-тест Authenticator (аутентификация и модель прав).
+ *
+ * Цель: проверить все аспекты аутентификации: resolve (гость/пользователь/null),
+ *       login/logout, isGuest/isLoggedIn, и полную матрицу прав
+ *       (canUse, canUseRead, canUseWrite, canEdit, canInit, canDelete, canMove)
+ *       включая обратную совместимость с legacy-конфигурациями.
+ *
+ * Сценарий:
+ *   - resolve: null без гостя и без входа, гость при guest_user, пользователь при входе.
+ *   - login: успех с правильным паролем, провал с неправильным/неизвестным.
+ *   - logout: очистка сессии.
+ *   - Права: admin имеет все права, guest — ограниченные.
+ *   - Legacy: пользователь без секции repos получает полные права.
+ *   - Гранулярность: use_read не наследуется из use и edit.
+ *   - Импликация: use_write ⇒ use_read.
+ *   - canMove требует edit на обеих категориях.
+ *
+ * Критерий успеха: все assert проходят.
+ */
 class AuthenticatorTest extends TestCase
 {
+    /** @var string Временная директория для конфигов */
     private string $tmpDir;
+    /** @var Session */
     private Session $session;
+    /** @var ConfigStorage Хранилище конфигов (users.php, settings.php) */
     private ConfigStorage $configStorage;
 
     protected function setUp(): void
     {
+        // Создаём временную директорию с тестовыми конфигами
         $this->tmpDir = sys_get_temp_dir() . '/phpresticadmin_auth_test_' . uniqid();
         mkdir($this->tmpDir, 0777, true);
 
+        // Генерируем bcrypt-хеш пароля
         $passwordHash = password_hash('secret123', PASSWORD_DEFAULT);
+
+        // Базовый конфиг: admin с полными правами, guest с ограниченными
         file_put_contents(
             $this->tmpDir . '/users.php',
             '<?php return [
@@ -52,11 +77,14 @@ class AuthenticatorTest extends TestCase
                 ],
             ];'
         );
+
+        // settings.php: guest_user = null (гостевой доступ выключен)
         file_put_contents(
             $this->tmpDir . '/settings.php',
             '<?php return ["guest_user" => null, "tmp_dir" => "/tmp", "log_dir" => "/var/log", "timezone" => "UTC"];'
         );
 
+        // Инициализируем сессию
         $this->session = new Session();
         if (session_status() === PHP_SESSION_NONE) {
             @session_start();
@@ -75,12 +103,16 @@ class AuthenticatorTest extends TestCase
         $this->removeDir($this->tmpDir);
     }
 
+    // === resolve: определение текущего пользователя ===
+
+    /** Без входа и без guest_user → resolve() возвращает null. */
     public function testResolveReturnsNullWhenNoAuthAndNoGuest(): void
     {
         $auth = new Authenticator($this->configStorage, $this->session);
         $this->assertNull($auth->resolve());
     }
 
+    /** С настроенным guest_user → resolve() возвращает гостя. */
     public function testResolveReturnsGuestUserWhenConfigured(): void
     {
         file_put_contents(
@@ -93,6 +125,9 @@ class AuthenticatorTest extends TestCase
         $this->assertSame('guest', $auth->resolve());
     }
 
+    // === login / logout ===
+
+    /** Успешный вход с правильным паролем. */
     public function testLoginSucceedsWithCorrectPassword(): void
     {
         $auth = new Authenticator($this->configStorage, $this->session);
@@ -103,6 +138,7 @@ class AuthenticatorTest extends TestCase
         $this->assertSame('admin', $auth->user());
     }
 
+    /** Вход с неправильным паролем → false, isLoggedIn = false. */
     public function testLoginFailsWithWrongPassword(): void
     {
         $auth = new Authenticator($this->configStorage, $this->session);
@@ -112,6 +148,7 @@ class AuthenticatorTest extends TestCase
         $this->assertFalse($auth->isLoggedIn());
     }
 
+    /** Вход с несуществующим пользователем → false. */
     public function testLoginFailsWithUnknownUser(): void
     {
         $auth = new Authenticator($this->configStorage, $this->session);
@@ -120,6 +157,7 @@ class AuthenticatorTest extends TestCase
         $this->assertFalse($result);
     }
 
+    /** logout очищает сессию. */
     public function testLogoutClearsSession(): void
     {
         $auth = new Authenticator($this->configStorage, $this->session);
@@ -131,6 +169,9 @@ class AuthenticatorTest extends TestCase
         $this->assertFalse($auth->isLoggedIn());
     }
 
+    // === isGuest ===
+
+    /** Гость определяется как isGuest = true. */
     public function testIsGuestReturnsTrueForGuestUser(): void
     {
         file_put_contents(
@@ -143,6 +184,7 @@ class AuthenticatorTest extends TestCase
         $this->assertTrue($auth->isGuest());
     }
 
+    /** Вошедший пользователь — не гость. */
     public function testIsGuestReturnsFalseForLoggedInUser(): void
     {
         $auth = new Authenticator($this->configStorage, $this->session);
@@ -151,6 +193,9 @@ class AuthenticatorTest extends TestCase
         $this->assertFalse($auth->isGuest());
     }
 
+    // === Права: canUse, canEdit, canMove ===
+
+    /** Admin имеет canUse на всех категориях. */
     public function testCanUseReturnsTrueForAllowedCategory(): void
     {
         $auth = new Authenticator($this->configStorage, $this->session);
@@ -161,6 +206,7 @@ class AuthenticatorTest extends TestCase
         $this->assertTrue($auth->canUse('session'));
     }
 
+    /** Гость: canUse('public') = true, canEdit('public') = false, private = false. */
     public function testCanEditReturnsFalseForUseOnlyCategory(): void
     {
         file_put_contents(
@@ -176,6 +222,7 @@ class AuthenticatorTest extends TestCase
         $this->assertFalse($auth->canEdit('private'));
     }
 
+    /** canMove требует edit на обеих категориях. */
     public function testCanMoveRequiresEditOnBothCategories(): void
     {
         $auth = new Authenticator($this->configStorage, $this->session);
@@ -185,6 +232,7 @@ class AuthenticatorTest extends TestCase
         $this->assertTrue($auth->canMove('private', 'session'));
     }
 
+    /** Гость не может перемещать репозитории. */
     public function testGuestCannotMove(): void
     {
         file_put_contents(
@@ -198,6 +246,9 @@ class AuthenticatorTest extends TestCase
         $this->assertFalse($auth->canMove('public', 'public'));
     }
 
+    // === Legacy / fallback ===
+
+    /** Legacy-пользователь без секции repos получает полные права. */
     public function testFallbackFullRightsForLegacyUser(): void
     {
         $passwordHash = password_hash('legacy', PASSWORD_DEFAULT);
@@ -216,11 +267,12 @@ class AuthenticatorTest extends TestCase
         $this->assertTrue($auth->canEdit('public'));
         $this->assertTrue($auth->canUse('private'));
         $this->assertTrue($auth->canEdit('private'));
-        // Legacy user gets init/delete because isLoggedIn() is true and no explicit can_init/can_delete
+        // Без явных can_init/can_delete → true (isLoggedIn = true)
         $this->assertTrue($auth->canInit());
         $this->assertTrue($auth->canDelete());
     }
 
+    /** Гость без секции repos: публичные — только use, без use_read/use_write/edit. */
     public function testGuestDefaultRights(): void
     {
         file_put_contents(
@@ -241,11 +293,14 @@ class AuthenticatorTest extends TestCase
         $this->assertFalse($auth->canEdit('public'));
         $this->assertFalse($auth->canUse('private'));
         $this->assertFalse($auth->canEdit('private'));
-        // Guest without explicit can_init/can_delete defaults to false (not logged in)
+        // Гость не может init/delete
         $this->assertFalse($auth->canInit());
         $this->assertFalse($auth->canDelete());
     }
 
+    // === canInit / canDelete ===
+
+    /** Admin может init и delete. */
     public function testCanInitReturnsTrueForAdmin(): void
     {
         $auth = new Authenticator($this->configStorage, $this->session);
@@ -254,6 +309,7 @@ class AuthenticatorTest extends TestCase
         $this->assertTrue($auth->canInit());
     }
 
+    /** Гость не может init. */
     public function testGuestCannotInit(): void
     {
         file_put_contents(
@@ -266,6 +322,7 @@ class AuthenticatorTest extends TestCase
         $this->assertFalse($auth->canInit());
     }
 
+    /** Admin может delete. */
     public function testCanDeleteReturnsTrueForAdmin(): void
     {
         $auth = new Authenticator($this->configStorage, $this->session);
@@ -274,6 +331,7 @@ class AuthenticatorTest extends TestCase
         $this->assertTrue($auth->canDelete());
     }
 
+    /** Гость не может delete. */
     public function testGuestCannotDelete(): void
     {
         file_put_contents(
@@ -286,6 +344,9 @@ class AuthenticatorTest extends TestCase
         $this->assertFalse($auth->canDelete());
     }
 
+    // === canUseRead / canUseWrite (гранулярные права) ===
+
+    /** Admin имеет canUseRead на всех категориях. */
     public function testCanUseReadReturnsTrue(): void
     {
         $auth = new Authenticator($this->configStorage, $this->session);
@@ -296,6 +357,7 @@ class AuthenticatorTest extends TestCase
         $this->assertTrue($auth->canUseRead('session'));
     }
 
+    /** canUseWrite работает только где явно задан. */
     public function testCanUseWriteTrueWhenExplicitlySet(): void
     {
         $passwordHash = password_hash('writer', PASSWORD_DEFAULT);
@@ -321,6 +383,7 @@ class AuthenticatorTest extends TestCase
         $this->assertFalse($auth->canUseWrite('private'));
     }
 
+    /** Импликация: use_write ⇒ use_read (use_read можно не задавать явно). */
     public function testCanUseWriteImpliesCanUseRead(): void
     {
         $passwordHash = password_hash('writer', PASSWORD_DEFAULT);
@@ -342,11 +405,12 @@ class AuthenticatorTest extends TestCase
         $auth = new Authenticator($configStorage, $this->session);
         $auth->login('writer', 'writer');
 
-        // use_write=true and use_read not set → use_read auto-true
+        // use_write=true и use_read не задан → use_read = true (авто)
         $this->assertTrue($auth->canUseRead('public'));
         $this->assertTrue($auth->canUseWrite('public'));
     }
 
+    /** use_read НЕ наследуется из edit. */
     public function testUseReadDoesNotFallBackToEdit(): void
     {
         $passwordHash = password_hash('editor', PASSWORD_DEFAULT);
@@ -368,11 +432,12 @@ class AuthenticatorTest extends TestCase
         $auth = new Authenticator($configStorage, $this->session);
         $auth->login('editor', 'editor');
 
-        // use_read is independent: edit does NOT give use_read
+        // edit=true НЕ даёт use_read
         $this->assertTrue($auth->canEdit('public'));
         $this->assertFalse($auth->canUseRead('public'));
     }
 
+    /** use_read НЕ наследуется из старого ключа use. */
     public function testUseReadDoesNotFallBackToOldUseKey(): void
     {
         $passwordHash = password_hash('legacy', PASSWORD_DEFAULT);
@@ -394,15 +459,14 @@ class AuthenticatorTest extends TestCase
         $auth = new Authenticator($configStorage, $this->session);
         $auth->login('legacy', 'legacy');
 
-        // Old 'use' key only gives visibility, NOT content reading
+        // Старый ключ use даёт только видимость, НЕ чтение контента
         $this->assertTrue($auth->canUse('public'));
         $this->assertFalse($auth->canUseRead('public'));
     }
 
+    /** Legacy-конфиг (use/edit) НЕ даёт use_write. */
     public function testLegacyAdminHasNoUseWrite(): void
     {
-        // Verify that a legacy config (old keys 'use'/'edit' only, no 'use_write') does NOT get use_write
-        // This confirms use_write has no fallback
         $passwordHash = password_hash('legacy', PASSWORD_DEFAULT);
         file_put_contents(
             $this->tmpDir . '/users.php',
@@ -422,6 +486,7 @@ class AuthenticatorTest extends TestCase
         $auth = new Authenticator($configStorage, $this->session);
         $auth->login('legacy', 'legacy');
 
+        // use_write не задан явно → false (без fallback'а)
         $this->assertFalse($auth->canUseWrite('public'));
         $this->assertFalse($auth->canUseWrite('private'));
         $this->assertFalse($auth->canUseWrite('session'));

@@ -1,5 +1,3 @@
-<?php
-
 /**
  * phpResticAdmin — Web UI for restic backup repositories.
  * Copyright (c) 2026 Alex Djachenko (Алексей Дьяченко)
@@ -11,8 +9,25 @@ namespace App\Tests\Unit\Storage;
 use App\Storage\RepositoryStorage;
 use PHPUnit\Framework\TestCase;
 
+/**
+ * Юнит-тест RepositoryStorage (CRUD репозиториев в YAML и сессии).
+ *
+ * Цель: проверить парсинг YAML, автосоздание файла, сохранение/загрузку
+ *       по категориям, удаление, перемещение, session-репозитории, update.
+ *
+ * Сценарий:
+ *   - loadAll: парсинг YAML, автосоздание файла при отсутствии, пустой/невалидный YAML.
+ *   - save/load по категориям (public, private).
+ *   - delete: удаление из категории.
+ *   - move: перемещение между категориями.
+ *   - session: загрузка, удаление, сохранение.
+ *   - update: изменение полей (имя, тип, путь, backup_paths).
+ *
+ * Критерий успеха: все assert проходят.
+ */
 class RepositoryStorageTest extends TestCase
 {
+    /** @var string Временная директория */
     private string $tmpDir;
 
     protected function setUp(): void
@@ -26,6 +41,7 @@ class RepositoryStorageTest extends TestCase
         $this->removeDir($this->tmpDir);
     }
 
+    /** Парсинг валидного YAML с двумя репозиториями. */
     public function testLoadAllParsesYaml(): void
     {
         $yaml = <<<YAML
@@ -55,6 +71,7 @@ YAML;
         $this->assertSame('secret', $repos[1]['password']);
     }
 
+    /** Отсутствующий файл → автосоздание с шаблоном, возврат пустого массива. */
     public function testLoadAllReturnsEmptyArrayWhenFileMissing(): void
     {
         $path = $this->tmpDir . '/nonexistent.yaml';
@@ -64,7 +81,7 @@ YAML;
         $this->assertIsArray($repos);
         $this->assertEmpty($repos);
 
-        // File must be auto-created with a template comment
+        // Файл должен быть автосоздан с шаблонным комментарием
         $this->assertFileExists($path);
         $content = file_get_contents($path);
         $this->assertIsString($content);
@@ -72,6 +89,7 @@ YAML;
         $this->assertStringContainsString('#   - id:', $content);
     }
 
+    /** Пустой YAML → пустой массив. */
     public function testLoadAllReturnsEmptyArrayForEmptyYaml(): void
     {
         file_put_contents($this->tmpDir . '/repositories.yaml', '');
@@ -82,6 +100,7 @@ YAML;
         $this->assertEmpty($repos);
     }
 
+    /** Не-массив в YAML (скаляр) → пустой массив (защита). */
     public function testLoadAllReturnsEmptyArrayForNonArrayYaml(): void
     {
         file_put_contents($this->tmpDir . '/repositories.yaml', '42');
@@ -92,11 +111,12 @@ YAML;
         $this->assertEmpty($repos);
     }
 
+    /** Сохранение в public и private, загрузка всех через loadAll. */
     public function testSaveAndLoadByCategory(): void
     {
         $storage = new RepositoryStorage($this->tmpDir . '/repositories.yaml');
 
-        // Save a public repo
+        // Сохраняем public-репо
         $repo = [
             'id' => 'pub1',
             'name' => 'Public Repo',
@@ -106,7 +126,7 @@ YAML;
         ];
         $storage->save('public', $repo, 'testuser');
 
-        // Save a private repo
+        // Сохраняем private-репо
         $repo2 = [
             'id' => 'priv1',
             'name' => 'Private Repo',
@@ -116,11 +136,11 @@ YAML;
         ];
         $storage->save('private', $repo2, 'testuser');
 
-        // Load all
+        // loadAll должен вернуть оба
         $all = $storage->loadAll('testuser');
         $this->assertCount(2, $all);
 
-        // Check categories
+        // Проверяем категории
         $categories = [];
         foreach ($all as $r) {
             $categories[] = $r['category'];
@@ -129,6 +149,7 @@ YAML;
         $this->assertContains('private', $categories);
     }
 
+    /** Удаление репозитория из категории. */
     public function testDeleteRemovesFromCorrectStorage(): void
     {
         $storage = new RepositoryStorage($this->tmpDir . '/repositories.yaml');
@@ -139,6 +160,7 @@ YAML;
         $all = $storage->loadAll('testuser');
         $this->assertCount(2, $all);
 
+        // Удаляем один
         $storage->delete('public', 'del1', 'testuser');
 
         $all = $storage->loadAll('testuser');
@@ -146,13 +168,14 @@ YAML;
         $this->assertSame('keep1', $all[0]['id']);
     }
 
+    /** Перемещение репозитория между категориями. */
     public function testMoveTransfersBetweenCategories(): void
     {
         $storage = new RepositoryStorage($this->tmpDir . '/repositories.yaml');
 
         $storage->save('public', ['id' => 'move1', 'name' => 'Move Me', 'type' => 'local', 'path' => '/tmp/move', 'password' => null], 'testuser');
 
-        // Move from public to private
+        // Перемещаем public → private
         $storage->move('move1', 'public', 'private', 'testuser');
 
         $all = $storage->loadAll('testuser');
@@ -162,11 +185,11 @@ YAML;
         $this->assertSame('Move Me', $all[0]['name']);
     }
 
+    /** Загрузка session-репозиториев из $_SESSION. */
     public function testSessionReposAreLoaded(): void
     {
         $storage = new RepositoryStorage($this->tmpDir . '/repositories.yaml');
 
-        // Manually set session repos
         $_SESSION['session_repos'] = [
             ['id' => 'sess1', 'name' => 'Session Repo', 'type' => 'local', 'path' => '/tmp/sess', 'password' => null],
         ];
@@ -176,10 +199,10 @@ YAML;
         $this->assertSame('session', $all[0]['category']);
         $this->assertSame('sess1', $all[0]['id']);
 
-        // Clean up
         unset($_SESSION['session_repos']);
     }
 
+    /** Удаление session-репозитория. */
     public function testSessionReposDeleted(): void
     {
         $storage = new RepositoryStorage($this->tmpDir . '/repositories.yaml');
@@ -198,6 +221,7 @@ YAML;
         unset($_SESSION['session_repos']);
     }
 
+    /** Сохранение session-репозитория. */
     public function testSaveSessionRepo(): void
     {
         $storage = new RepositoryStorage($this->tmpDir . '/repositories.yaml');
@@ -211,6 +235,7 @@ YAML;
         unset($_SESSION['session_repos']);
     }
 
+    /** update сохраняет id и изменяет указанные поля. */
     public function testUpdatePreservesId(): void
     {
         $storage = new RepositoryStorage($this->tmpDir . '/repositories.yaml');
@@ -227,6 +252,7 @@ YAML;
         $this->assertSame('/tmp/orig', $all[0]['path']);
     }
 
+    /** update изменяет name, type, path. */
     public function testUpdateChangesEditableFields(): void
     {
         $storage = new RepositoryStorage($this->tmpDir . '/repositories.yaml');
@@ -241,18 +267,20 @@ YAML;
         $this->assertSame('/new/path', $all[0]['path']);
     }
 
+    /** update backup_paths: добавление и удаление. */
     public function testUpdateBackupPaths(): void
     {
         $storage = new RepositoryStorage($this->tmpDir . '/repositories.yaml');
 
         $storage->save('public', ['id' => 'upd3', 'name' => 'BP Repo', 'type' => 'local', 'path' => '/tmp/bp', 'password' => null], 'testuser');
 
+        // Добавляем backup_paths
         $storage->update('public', 'upd3', ['backup_paths' => ['/home', '/etc']], 'testuser');
 
         $all = $storage->loadAll('testuser');
         $this->assertSame(['/home', '/etc'], $all[0]['backup_paths']);
 
-        // Update to remove backup_paths
+        // Удаляем backup_paths (null)
         $storage->update('public', 'upd3', ['backup_paths' => null], 'testuser');
 
         $all = $storage->loadAll('testuser');

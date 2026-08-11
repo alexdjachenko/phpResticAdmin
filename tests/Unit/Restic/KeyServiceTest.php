@@ -1,5 +1,3 @@
-<?php
-
 /**
  * phpResticAdmin — Web UI for restic backup repositories.
  * Copyright (c) 2026 Alex Djachenko (Алексей Дьяченко)
@@ -12,6 +10,20 @@ use App\Restic\CommandRunner;
 use App\Restic\KeyService;
 use PHPUnit\Framework\TestCase;
 
+/**
+ * Юнит-тест KeyService (управление ключами restic через моки CommandRunner).
+ *
+ * Цель: проверить listKeys, addKey, removeKey, changePassword —
+ *       без реального restic, через PHPUnit mocks.
+ *
+ * Сценарий:
+ *   - listKeys: валидный JSON, пустой вывод, невалидный JSON, ошибка (exitCode != 0).
+ *   - addKey: проверка пароля в stdin.
+ *   - removeKey: проверка аргументов команды.
+ *   - changePassword: проверка пароля в stdin и аргументов.
+ *
+ * Критерий успеха: моки проверяют переданные аргументы и stdin, сервис возвращает ожидаемые структуры.
+ */
 class KeyServiceTest extends TestCase
 {
     /** @var array{id: string, name: string, type: string, path: string, password: ?string} */
@@ -30,6 +42,7 @@ class KeyServiceTest extends TestCase
         ];
     }
 
+    /** listKeys парсит валидный JSON. */
     public function testListKeysParsesJson(): void
     {
         $json = '[{"id":"abc123","current":true,"userName":"host","created":"2025-01-01T00:00:00Z"}]';
@@ -47,6 +60,7 @@ class KeyServiceTest extends TestCase
         $this->assertTrue($keys[0]['current']);
     }
 
+    /** listKeys: пустой stdout → пустой массив. */
     public function testListKeysHandlesEmptyOutput(): void
     {
         $mock = $this->createMock(CommandRunner::class);
@@ -60,6 +74,7 @@ class KeyServiceTest extends TestCase
         $this->assertSame([], $keys);
     }
 
+    /** listKeys: невалидный JSON → пустой массив (защита). */
     public function testListKeysHandlesInvalidJson(): void
     {
         $mock = $this->createMock(CommandRunner::class);
@@ -73,6 +88,7 @@ class KeyServiceTest extends TestCase
         $this->assertSame([], $keys);
     }
 
+    /** listKeys: exitCode != 0 → пустой массив. */
     public function testListKeysHandlesErrorExitCode(): void
     {
         $mock = $this->createMock(CommandRunner::class);
@@ -86,6 +102,7 @@ class KeyServiceTest extends TestCase
         $this->assertSame([], $keys);
     }
 
+    /** addKey: пароль передаётся в stdin (с подтверждением). */
     public function testAddKeySendsPasswordToStdin(): void
     {
         $capturedStdin = null;
@@ -106,9 +123,11 @@ class KeyServiceTest extends TestCase
         $result = $service->addKey($this->repo, 'secret123');
 
         $this->assertTrue($result['ok']);
+        // restic key add требует двойного ввода пароля
         $this->assertSame("secret123\nsecret123\n", $capturedStdin);
     }
 
+    /** removeKey: в команде присутствуют remove, ID ключа и путь к репо. */
     public function testRemoveKeyBuildsCorrectCommand(): void
     {
         $capturedCommand = null;
@@ -135,6 +154,7 @@ class KeyServiceTest extends TestCase
         $this->assertContains($this->repoPath, $capturedCommand);
     }
 
+    /** changePassword: новый пароль передаётся в stdin, команда содержит passwd и ID. */
     public function testChangePasswordSendsNewPasswordToStdin(): void
     {
         $capturedStdin = null;
@@ -160,6 +180,7 @@ class KeyServiceTest extends TestCase
 
         $this->assertTrue($result['ok']);
         $this->assertNotNull($capturedStdin);
+        // Подтверждение нового пароля
         $this->assertSame("newpass456\nnewpass456\n", $capturedStdin);
         $this->assertContains('passwd', $capturedCommand);
         $this->assertContains('abc123', $capturedCommand);

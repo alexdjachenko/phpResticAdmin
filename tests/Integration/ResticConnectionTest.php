@@ -14,19 +14,46 @@ use App\Storage\RepositoryStorage;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Yaml\Yaml;
 
+/**
+ * Интеграционный тест соединения с restic-репозиторием.
+ *
+ * Цель: проверить работу RepositoryService при реальном взаимодействии
+ *       с restic CLI: проверка соединения, инициализация репозитория,
+ *       обработка ошибок (несуществующий репо, уже инициализированный,
+ *       недоступный для записи родительский каталог).
+ *
+ * Сценарий:
+ *   1. Инициализируется временный restic-репозиторий.
+ *   2. Проверяется testConnection для валидного и невалидного репозитория.
+ *   3. Проверяется init: успешный, повторный (должен упасть),
+ *      с паролем, с недоступным родительским каталогом.
+ *
+ * Критерий успеха:
+ *   - testConnection возвращает ok=true для существующего репо.
+ *   - testConnection возвращает ok=false для несуществующего пути.
+ *   - init возвращает ok=true и создаёт директорию.
+ *   - init на уже инициализированном репо возвращает ok=false.
+ *   - init с паролем: ok=true, testConnection с паролем подтверждает.
+ *   - init с не-writable родителем возвращает ok=false.
+ *
+ * Требует: restic в PATH.
+ */
 class ResticConnectionTest extends TestCase
 {
+    /** @var string Временная директория для всего теста */
     private string $tmpDir;
+    /** @var string Путь к основному тестовому restic-репозиторию */
     private string $repoDir;
 
     protected function setUp(): void
     {
+        // Создаём изолированную временную директорию
         $this->tmpDir = sys_get_temp_dir() . '/phpresticadmin_integration_' . uniqid();
         $this->repoDir = $this->tmpDir . '/restic-repo';
         mkdir($this->tmpDir, 0777, true);
         mkdir($this->repoDir, 0777, true);
 
-        // Initialize a restic repository without a password
+        // Инициализируем restic-репозиторий без пароля для всех тестов класса
         $runner = new CommandRunner();
         $result = $runner->run(
             ['restic', 'init', '--repo', $this->repoDir, '--insecure-no-password'],
@@ -43,9 +70,16 @@ class ResticConnectionTest extends TestCase
         $this->removeDir($this->tmpDir);
     }
 
+    /**
+     * Проверяет успешное соединение с инициализированным репозиторием.
+     *
+     * Сценарий: создаётся YAML-конфиг репозитория, загружается через
+     *            RepositoryStorage, затем testConnection проверяет связь.
+     *            Ожидается: ok=true, output — валидный JSON (пустой массив).
+     */
     public function testConnectionToInitializedRepository(): void
     {
-        // Create a temporary repositories.yaml
+        // Arrange: создаём временный repositories.yaml с одним репозиторием
         $yamlFile = $this->tmpDir . '/repositories.yaml';
         $repos = [
             'repositories' => [
@@ -60,28 +94,33 @@ class ResticConnectionTest extends TestCase
         ];
         file_put_contents($yamlFile, Yaml::dump($repos));
 
-        // Load via RepositoryStorage
+        // Загружаем через RepositoryStorage (проверяем заодно парсинг YAML)
         $storage = new RepositoryStorage($yamlFile);
         $loaded = $storage->loadAll('test');
 
         $this->assertCount(1, $loaded);
         $this->assertSame('test123', $loaded[0]['id']);
 
-        // Test connection
+        // Act: проверяем соединение с репозиторием
         $service = new RepositoryService(new CommandRunner());
         $result = $service->testConnection($loaded[0]);
 
+        // Assert: соединение успешно
         $this->assertTrue($result['ok'], 'Connection should succeed: ' . ($result['error'] ?? ''));
         $this->assertJson($result['output']);
 
-        // Output should be a JSON array (snapshots), possibly empty
+        // Assert: output — JSON-массив снепшотов (пустой для нового репо)
         $snapshots = json_decode($result['output'], true);
         $this->assertIsArray($snapshots);
         $this->assertEmpty($snapshots, 'New repository should have no snapshots');
     }
 
+    /**
+     * Проверяет, что testConnection возвращает ошибку для несуществующего пути.
+     */
     public function testConnectionFailsForNonExistentRepository(): void
     {
+        // Arrange: репозиторий с заведомо несуществующим путём
         $repository = [
             'id' => 'nonexistent',
             'name' => 'Nonexistent',
@@ -90,31 +129,41 @@ class ResticConnectionTest extends TestCase
             'password' => null,
         ];
 
+        // Act
         $service = new RepositoryService(new CommandRunner());
         $result = $service->testConnection($repository);
 
+        // Assert: ok=false, сообщение об ошибке не пустое
         $this->assertFalse($result['ok'], 'Connection to nonexistent repo should fail');
         $this->assertNotEmpty($result['error']);
     }
 
+    /**
+     * Проверяет успешную инициализацию нового репозитория.
+     *
+     * Важно: директория НЕ должна существовать до init — restic должен
+     *        создать её сам. Предыдущая версия теста предсоздавала
+     *        директорию, маскируя возможные ошибки init.
+     */
     public function testInitRepository(): void
     {
+        // Arrange: путь к ещё не существующей директории
         $initDir = $this->tmpDir . '/init-repo';
-        // Directory does NOT exist before init — restic should create it.
-        // Previous version pre-created the directory, masking init failures.
 
         $repository = [
             'path' => $initDir,
             'password' => null,
         ];
 
+        // Act: инициализируем репозиторий
         $service = new RepositoryService(new CommandRunner());
         $result = $service->init($repository);
 
+        // Assert: init успешен, директория создана
         $this->assertTrue($result['ok'], 'Init should succeed: ' . ($result['error'] ?? ''));
         $this->assertDirectoryExists($initDir, 'restic init should create the repository directory');
 
-        // Verify connection works on newly initialized repo
+        // Дополнительно: проверяем, что testConnection работает после init
         $connResult = $service->testConnection([
             'id' => 'test',
             'name' => 'Test',
@@ -126,23 +175,36 @@ class ResticConnectionTest extends TestCase
         $this->assertTrue($connResult['ok'], 'Connection after init should succeed: ' . ($connResult['error'] ?? ''));
     }
 
+    /**
+     * Проверяет, что повторный init на уже инициализированном репозитории
+     * возвращает ошибку.
+     */
     public function testInitRepositoryFailsForAlreadyInitializedRepo(): void
     {
-        // repoDir is already initialized in setUp()
+        // Arrange: repoDir уже инициализирован в setUp()
         $repository = [
             'path' => $this->repoDir,
             'password' => null,
         ];
 
+        // Act: пытаемся инициализировать повторно
         $service = new RepositoryService(new CommandRunner());
         $result = $service->init($repository);
 
+        // Assert: ok=false, сообщение об ошибке содержит "already initialized"
         $this->assertFalse($result['ok'], 'Init on already-initialized repo should fail');
         $this->assertNotEmpty($result['error'], 'Error message should not be empty');
+        $this->assertStringContainsString('already initialized', $result['error'], 'Error should mention "already initialized"');
     }
 
+    /**
+     * Проверяет инициализацию репозитория с паролем.
+     *
+     * Сценарий: init с паролем, затем testConnection с тем же паролем.
+     */
     public function testInitRepositoryWithPassword(): void
     {
+        // Arrange: путь к новой директории
         $initDir = $this->tmpDir . '/init-password-repo';
 
         $repository = [
@@ -150,12 +212,14 @@ class ResticConnectionTest extends TestCase
             'password' => 'testSecret123',
         ];
 
+        // Act: init с паролем
         $service = new RepositoryService(new CommandRunner());
         $result = $service->init($repository);
 
+        // Assert: init успешен
         $this->assertTrue($result['ok'], 'Init with password should succeed: ' . ($result['error'] ?? ''));
 
-        // Verify connection works with password
+        // Дополнительно: testConnection с тем же паролем должен работать
         $connResult = $service->testConnection([
             'id' => 'test',
             'name' => 'Test',
@@ -167,8 +231,13 @@ class ResticConnectionTest extends TestCase
         $this->assertTrue($connResult['ok'], 'Connection after init with password should succeed: ' . ($connResult['error'] ?? ''));
     }
 
+    /**
+     * Проверяет, что init возвращает ошибку, если родительский каталог
+     * недоступен для записи.
+     */
     public function testInitRepositoryFailsForNonWritableParent(): void
     {
+        // Arrange: создаём родительский каталог только для чтения
         $parentDir = $this->tmpDir . '/readonly-parent';
         mkdir($parentDir, 0555, true);
 
@@ -177,13 +246,15 @@ class ResticConnectionTest extends TestCase
             'password' => null,
         ];
 
+        // Act: пытаемся init в недоступную директорию
         $service = new RepositoryService(new CommandRunner());
         $result = $service->init($repository);
 
+        // Assert: ok=false, ошибка не пустая
         $this->assertFalse($result['ok'], 'Init with non-writable parent should fail');
         $this->assertNotEmpty($result['error'], 'Error message should not be empty for permission failure');
 
-        // Restore writable so tearDown can clean up
+        // Восстанавливаем права для tearDown
         chmod($parentDir, 0777);
     }
 
