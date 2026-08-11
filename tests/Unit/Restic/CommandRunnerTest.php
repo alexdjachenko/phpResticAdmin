@@ -65,7 +65,7 @@ class CommandRunnerTest extends TestCase
     /** Успешная команда (echo) → stdout содержит вывод, stderr пуст. */
     public function testRunCapturesStdoutOnSuccess(): void
     {
-        $result = $this->runner->run(['echo', 'hello world']);
+        $result = $this->runner->run(['/bin/echo', 'hello world']);
 
         $this->assertSame(0, $result['exitCode']);
         $this->assertStringContainsString('hello world', $result['stdout']);
@@ -84,7 +84,7 @@ class CommandRunnerTest extends TestCase
     /** stdin передаётся в процесс (cat). */
     public function testRunWithStdin(): void
     {
-        $result = $this->runner->run(['cat'], [], "test input\n");
+        $result = $this->runner->run(['/bin/cat'], [], "test input\n");
 
         $this->assertSame(0, $result['exitCode']);
         $this->assertStringContainsString('test input', $result['stdout']);
@@ -103,7 +103,7 @@ class CommandRunnerTest extends TestCase
     public function testRunWithEnvPassesVariables(): void
     {
         $result = $this->runner->run(
-            ['sh', '-c', 'echo $TEST_VAR'],
+            ['/bin/sh', '-c', 'echo $TEST_VAR'],
             ['TEST_VAR' => 'phpResticAdminTestValue']
         );
 

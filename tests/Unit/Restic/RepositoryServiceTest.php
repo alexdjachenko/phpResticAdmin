@@ -36,7 +36,7 @@ class RepositoryServiceTest extends TestCase
         $mock = $this->createMock(CommandRunner::class);
         $mock->expects($this->once())
             ->method('run')
-            ->willReturn(['exitCode' => 0, 'stdout' => 'repository initialized', 'stderr' => '']);
+            ->willReturn(['exitCode' => 0, 'stdout' => '', 'stderr' => '']);
 
         $service = new RepositoryService($mock);
         $result = $service->init(['path' => '/tmp/test-repo', 'password' => null]);
