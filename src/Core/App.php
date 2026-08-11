@@ -376,6 +376,11 @@ class App
             $controller->index();
         });
 
+        $router->map('POST', '/maintenance/init', function () {
+            $controller = new \App\Controllers\MaintenanceController();
+            $controller->init();
+        });
+
         $router->map('POST', '/maintenance/check', function () {
             $controller = new \App\Controllers\MaintenanceController();
             $controller->check();

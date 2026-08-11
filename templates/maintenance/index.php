@@ -14,6 +14,19 @@
     </form>
 </div>
 
+<?php if (\App\Core\App::auth()->canInit()): ?>
+<div class="maintenance-section">
+    <h3><?= htmlspecialchars(__('maint.init'), ENT_QUOTES, 'UTF-8') ?></h3>
+    <p><?= htmlspecialchars(__('maint.init_desc'), ENT_QUOTES, 'UTF-8') ?></p>
+    <p class="maintenance-warn"><?= htmlspecialchars(__('maint.init_warn'), ENT_QUOTES, 'UTF-8') ?></p>
+    <form method="post" action="/maintenance/init">
+        <input type="hidden" name="_csrf_token" value="<?= htmlspecialchars($csrfToken ?? '', ENT_QUOTES, 'UTF-8') ?>">
+        <input type="hidden" name="repo_id" value="<?= htmlspecialchars($repo['id'] ?? '', ENT_QUOTES, 'UTF-8') ?>">
+        <button type="submit" class="btn-primary"><?= htmlspecialchars(__('maint.init_button'), ENT_QUOTES, 'UTF-8') ?></button>
+    </form>
+</div>
+<?php endif ?>
+
 <div class="maintenance-section">
     <h3><?= htmlspecialchars(__('maint.prune'), ENT_QUOTES, 'UTF-8') ?></h3>
     <p><?= htmlspecialchars(__('maint.prune_desc'), ENT_QUOTES, 'UTF-8') ?></p>
