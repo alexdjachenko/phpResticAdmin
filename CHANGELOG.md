@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.1](https://github.com/alexdjachenko/phpResticAdmin/compare/v0.6.0...v0.6.1) (2026-08-11)
+
+
+### Bug Fixes
+
+* dry run flag always used for cleaning ([5356809](https://github.com/alexdjachenko/phpResticAdmin/commit/53568099c38f31280d1f895d96544852cb8cdaca))
+* dry run flag always used for cleaning ([77467aa](https://github.com/alexdjachenko/phpResticAdmin/commit/77467aa81b06e288820fd9d2a41ee7c49bfa5042))
+
 ## [0.6.0](https://github.com/alexdjachenko/phpResticAdmin/compare/v0.5.0...v0.6.0) (2026-08-11)
 
 
