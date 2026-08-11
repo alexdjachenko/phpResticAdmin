@@ -4,7 +4,7 @@ if (!empty($repo['backup_paths'])) {
     $backupPathsStr = implode("\n", $repo['backup_paths']);
 }
 ?>
-<p><a href="/repositories/detail?repo=<?= htmlspecialchars(urlencode($repo['id'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" class="back-link"><?= htmlspecialchars(__('repo.detail_back'), ENT_QUOTES, 'UTF-8') ?></a></p>
+<p><a href="/repositories/detail?repo=<?= htmlspecialchars(urlencode($repo['id'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" class="back-link"><?= htmlspecialchars(__('maint.back_repo'), ENT_QUOTES, 'UTF-8') ?></a></p>
 
 <h2><?= htmlspecialchars(__('repo.edit_title'), ENT_QUOTES, 'UTF-8') ?></h2>
 
