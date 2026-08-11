@@ -18,6 +18,25 @@ class KeyService
     }
 
     /**
+     * Проверяет, что пароль соответствует одному из ключей репозитория.
+     *
+     * @param array<string, mixed> $repository
+     * @return array{ok: bool, error: string}
+     */
+    public function verifyKey(array $repository, string $password): array
+    {
+        $verifyRepo = array_merge($repository, ['password' => $password]);
+        $command = $this->buildCommand(['snapshots', '--json'], $verifyRepo);
+        $env = $this->buildEnv($verifyRepo);
+        $result = $this->runner->run($command, $env, null, 10);
+
+        return [
+            'ok' => $result['exitCode'] === 0,
+            'error' => $result['stderr'],
+        ];
+    }
+
+    /**
      * @param array<string, mixed> $repository
      * @return array<int, array{id: string, current: bool, userName: string, created: string}>
      */
@@ -46,6 +65,16 @@ class KeyService
      */
     public function addKey(array $repository, string $newPassword): array
     {
+        // Проверяем, нет ли уже ключа с таким паролем
+        $verifyResult = $this->verifyKey($repository, $newPassword);
+        if ($verifyResult['ok']) {
+            return [
+                'ok' => false,
+                'output' => '',
+                'error' => 'A key with this password already exists in the repository.',
+            ];
+        }
+
         $command = $this->buildCommand(['key', 'add'], $repository);
         $env = $this->buildEnv($repository);
         $stdin = $newPassword . "\n" . $newPassword . "\n";

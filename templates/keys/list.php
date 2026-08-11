@@ -49,6 +49,19 @@
 <?php endif ?>
 
 <div class="maintenance-section">
+    <h3><?= htmlspecialchars(__('keys.verify'), ENT_QUOTES, 'UTF-8') ?></h3>
+    <form method="post" action="/keys/verify">
+        <input type="hidden" name="_csrf_token" value="<?= htmlspecialchars($csrfToken ?? '', ENT_QUOTES, 'UTF-8') ?>">
+        <input type="hidden" name="repo_id" value="<?= htmlspecialchars($repo['id'] ?? '', ENT_QUOTES, 'UTF-8') ?>">
+        <div class="form-group">
+            <label><?= htmlspecialchars(__('keys.new_password'), ENT_QUOTES, 'UTF-8') ?></label>
+            <input type="password" name="password" required>
+        </div>
+        <button type="submit" class="btn-primary"><?= htmlspecialchars(__('keys.verify_button'), ENT_QUOTES, 'UTF-8') ?></button>
+    </form>
+</div>
+
+<div class="maintenance-section">
     <h3><?= htmlspecialchars(__('keys.add_key'), ENT_QUOTES, 'UTF-8') ?></h3>
     <form method="post" action="/keys/add">
         <input type="hidden" name="_csrf_token" value="<?= htmlspecialchars($csrfToken ?? '', ENT_QUOTES, 'UTF-8') ?>">

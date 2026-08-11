@@ -15,7 +15,7 @@ use PHPUnit\Framework\TestCase;
 /**
  * Юнит-тест KeyService (управление ключами restic через моки CommandRunner).
  *
- * Цель: проверить listKeys, addKey, removeKey, changePassword —
+ * Цель: проверить listKeys, addKey, removeKey, changePassword, verifyKey —
  *       без реального restic, через PHPUnit mocks.
  *
  * Сценарий:
@@ -24,6 +24,7 @@ use PHPUnit\Framework\TestCase;
  *     без пароля через --insecure-no-password.
  *   - removeKey: проверка аргументов команды.
  *   - changePassword: проверка пароля в stdin и аргументов.
+ *   - verifyKey: успех при exitCode=0, провал при exitCode!=0, пароль в env.
  *
  * Критерий успеха: моки проверяют переданные аргументы и stdin, сервис возвращает ожидаемые структуры.
  */
@@ -249,4 +250,76 @@ class KeyServiceTest extends TestCase
         $this->assertNotNull($capturedCommand);
         $this->assertContains('--insecure-no-password', $capturedCommand);
     }
-}
+
+    /** addKey: отказ если ключ с таким паролем уже существует. */
+    public function testAddKeyRejectsDuplicatePassword(): void
+    {
+        $mock = $this->createMock(CommandRunner::class);
+        // Первый вызов — verifyKey успешен (exitCode=0, пароль уже работает)
+        // addKey не должен вызываться вообще
+        $mock->expects($this->once())
+            ->method('run')
+            ->willReturn(['exitCode' => 0, 'stdout' => '[]', 'stderr' => '']);
+
+        $service = new KeyService($mock);
+        $result = $service->addKey($this->repo, 'existingPassword');
+
+        $this->assertFalse($result['ok'], 'addKey should fail when password already matches a key');
+        $this->assertStringContainsString('already exists', $result['error']);
+    }
+
+    /** verifyKey: успех при exitCode=0. */
+    public function testVerifyKeyReturnsTrueOnSuccess(): void
+    {
+        $mock = $this->createMock(CommandRunner::class);
+        $mock->expects($this->once())
+            ->method('run')
+            ->willReturn(['exitCode' => 0, 'stdout' => '[]', 'stderr' => '']);
+
+        $service = new KeyService($mock);
+        $result = $service->verifyKey($this->repo, 'secret123');
+
+        $this->assertTrue($result['ok']);
+    }
+
+    /** verifyKey: провал при exitCode!=0. */
+    public function testVerifyKeyReturnsFalseOnFailure(): void
+    {
+        $mock = $this->createMock(CommandRunner::class);
+        $mock->expects($this->once())
+            ->method('run')
+            ->willReturn(['exitCode' => 1, 'stdout' => '', 'stderr' => 'wrong password']);
+
+        $service = new KeyService($mock);
+        $result = $service->verifyKey($this->repo, 'wrongPassword');
+
+        $this->assertFalse($result['ok']);
+        $this->assertNotEmpty($result['error']);
+    }
+
+    /** verifyKey: пароль пробрасывается в env. */
+    public function testVerifyKeyPassesPasswordInEnv(): void
+    {
+        $capturedEnv = null;
+        $mock = $this->createMock(CommandRunner::class);
+        $mock->expects($this->once())
+            ->method('run')
+            ->with(
+                $this->anything(),
+                $this->callback(function (array $env) use (&$capturedEnv) {
+                    $capturedEnv = $env;
+                    return true;
+                }),
+                $this->anything(),
+                $this->anything()
+            )
+            ->willReturn(['exitCode' => 0, 'stdout' => '[]', 'stderr' => '']);
+
+        $service = new KeyService($mock);
+        $service->verifyKey($this->repo, 'secret123');
+
+        $this->assertNotNull($capturedEnv);
+        $this->assertArrayHasKey('RESTIC_PASSWORD', $capturedEnv);
+        $this->assertSame('secret123', $capturedEnv['RESTIC_PASSWORD']);
+    }
+    }

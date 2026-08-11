@@ -411,6 +411,11 @@ class App
             $controller->list();
         });
 
+        $router->map('POST', '/keys/verify', function () {
+            $controller = new \App\Controllers\KeyController();
+            $controller->verify();
+        });
+
         $router->map('POST', '/keys/add', function () {
             $controller = new \App\Controllers\KeyController();
             $controller->add();

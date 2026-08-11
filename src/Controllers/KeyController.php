@@ -68,6 +68,68 @@ class KeyController
     }
 
     /**
+     * POST /keys/verify
+     */
+    public function verify(): void
+    {
+        $auth = App::auth();
+        $user = $auth->user();
+
+        if ($user === null) {
+            App::response()->redirect('/login');
+            return;
+        }
+
+        $request = new Request();
+        $security = App::security();
+
+        $token = $request->post('_csrf_token', '');
+        if (!$security->validateCsrf($token)) {
+            App::response()->error(403, __('flash.csrf_error'));
+            return;
+        }
+
+        $repoId = $request->post('repo_id', '');
+        $password = $request->post('password', '');
+
+        if ($repoId === '' || $password === '') {
+            App::session()->flash('error', __('keys.verify_fail'));
+            App::response()->redirect('/keys?repo=' . urlencode($repoId));
+            return;
+        }
+
+        $repositories = App::repoStorage()->loadAll($user);
+        $repo = null;
+        foreach ($repositories as $r) {
+            if (($r['id'] ?? '') === $repoId) {
+                $repo = $r;
+                break;
+            }
+        }
+
+        if ($repo === null) {
+            App::response()->error(404, __('flash.not_found'));
+            return;
+        }
+
+        $category = $repo['category'] ?? 'public';
+        if (!$auth->canUseRead($category)) {
+            App::response()->error(403, __('error.forbidden'));
+            return;
+        }
+
+        $result = App::keyService()->verifyKey($repo, $password);
+
+        if ($result['ok']) {
+            App::session()->flash('success', __('keys.verify_ok'));
+        } else {
+            App::session()->flash('error', __('keys.verify_fail') . ': ' . $result['error']);
+        }
+
+        App::response()->redirect('/keys?repo=' . urlencode($repoId));
+    }
+
+    /**
      * POST /keys/add
      */
     public function add(): void
