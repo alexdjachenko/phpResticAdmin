@@ -376,6 +376,11 @@ class App
             $controller->index();
         });
 
+        $router->map('POST', '/maintenance/init', function () {
+            $controller = new \App\Controllers\MaintenanceController();
+            $controller->init();
+        });
+
         $router->map('POST', '/maintenance/check', function () {
             $controller = new \App\Controllers\MaintenanceController();
             $controller->check();
@@ -404,6 +409,11 @@ class App
         $router->map('GET', '/keys', function () {
             $controller = new \App\Controllers\KeyController();
             $controller->list();
+        });
+
+        $router->map('POST', '/keys/verify', function () {
+            $controller = new \App\Controllers\KeyController();
+            $controller->verify();
         });
 
         $router->map('POST', '/keys/add', function () {

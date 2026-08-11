@@ -11,8 +11,23 @@ namespace App\Tests\Unit\Storage;
 use App\Storage\ConfigStorage;
 use PHPUnit\Framework\TestCase;
 
+/**
+ * Юнит-тест ConfigStorage (загрузка users.php и settings.php).
+ *
+ * Цель: проверить парсинг PHP-конфигов, обработку отсутствующих файлов
+ *       и невалидного содержимого.
+ *
+ * Сценарий:
+ *   - Загрузка существующего users.php и settings.php.
+ *   - Отсутствующий файл → пустой массив.
+ *   - Файл возвращает не-массив → пустой массив (защита).
+ *   - Новый формат users.php с секцией repos.
+ *
+ * Критерий успеха: assertSame/assertArrayHasKey проходят.
+ */
 class ConfigStorageTest extends TestCase
 {
+    /** @var string Временная директория для конфигов */
     private string $tmpDir;
 
     protected function setUp(): void
@@ -26,6 +41,7 @@ class ConfigStorageTest extends TestCase
         $this->removeDir($this->tmpDir);
     }
 
+    /** Загрузка существующего users.php. */
     public function testLoadUsersReturnsArray(): void
     {
         file_put_contents(
@@ -41,6 +57,7 @@ class ConfigStorageTest extends TestCase
         $this->assertSame('hash123', $users['admin']['password']);
     }
 
+    /** Отсутствующий файл → пустой массив. */
     public function testLoadUsersReturnsEmptyArrayWhenFileMissing(): void
     {
         $storage = new ConfigStorage($this->tmpDir);
@@ -50,6 +67,7 @@ class ConfigStorageTest extends TestCase
         $this->assertEmpty($users);
     }
 
+    /** Загрузка settings.php. */
     public function testLoadSettingsReturnsArray(): void
     {
         file_put_contents(
@@ -65,6 +83,7 @@ class ConfigStorageTest extends TestCase
         $this->assertSame('UTC', $settings['timezone']);
     }
 
+    /** Отсутствующий settings.php → пустой массив. */
     public function testLoadSettingsReturnsEmptyArrayWhenFileMissing(): void
     {
         $storage = new ConfigStorage($this->tmpDir);
@@ -74,6 +93,7 @@ class ConfigStorageTest extends TestCase
         $this->assertEmpty($settings);
     }
 
+    /** Файл возвращает не-массив (null) → защита: пустой массив. */
     public function testLoadPhpFileReturnsEmptyArrayWhenFileReturnsNonArray(): void
     {
         file_put_contents(
@@ -88,6 +108,7 @@ class ConfigStorageTest extends TestCase
         $this->assertEmpty($users);
     }
 
+    /** Загрузка users.php в новом формате (с секциями repos). */
     public function testLoadUsersWithNewFormat(): void
     {
         file_put_contents(

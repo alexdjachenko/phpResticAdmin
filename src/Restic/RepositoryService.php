@@ -23,15 +23,8 @@ class RepositoryService
      */
     public function testConnection(array $repository): array
     {
-        $command = ['restic', 'snapshots', '--json', '--repo', $repository['path']];
-
-        $env = $repository['env'] ?? [];
-
-        if (!empty($repository['password'])) {
-            $env['RESTIC_PASSWORD'] = $repository['password'];
-        } else {
-            $command[] = '--insecure-no-password';
-        }
+        $command = $this->buildCommand(['snapshots', '--json'], $repository);
+        $env = $this->buildEnv($repository);
 
         $result = $this->runner->run($command, $env, null, 10);
 
@@ -50,22 +43,22 @@ class RepositoryService
      */
     public function init(array $repository): array
     {
-        $command = ['restic', 'init', '--repo', $repository['path']];
-
-        $env = $repository['env'] ?? [];
-
-        if (!empty($repository['password'])) {
-            $env['RESTIC_PASSWORD'] = $repository['password'];
-        } else {
-            $command[] = '--insecure-no-password';
-        }
+        $command = $this->buildCommand(['init'], $repository);
+        $env = $this->buildEnv($repository);
 
         $result = $this->runner->run($command, $env);
+
+        $error = $result['stderr'] !== '' ? $result['stderr'] : $result['stdout'];
+
+        // Fallback: если и stderr, и stdout пусты — даём осмысленное сообщение
+        if ($error === '' && $result['exitCode'] !== 0) {
+            $error = 'restic exited with code ' . $result['exitCode'] . ' (no output)';
+        }
 
         return [
             'ok' => $result['exitCode'] === 0,
             'output' => $result['stdout'],
-            'error' => $result['stderr'],
+            'error' => $error,
         ];
     }
 
@@ -77,15 +70,8 @@ class RepositoryService
      */
     public function backup(array $repository, array $backupPaths): void
     {
-        $command = ['restic', 'backup', '--repo', $repository['path'], ...$backupPaths];
-
-        $env = $repository['env'] ?? [];
-
-        if (!empty($repository['password'])) {
-            $env['RESTIC_PASSWORD'] = $repository['password'];
-        } else {
-            $command[] = '--insecure-no-password';
-        }
+        $command = $this->buildCommand(['backup', ...$backupPaths], $repository);
+        $env = $this->buildEnv($repository);
 
         $this->runner->runStream($command, $env);
     }
@@ -99,15 +85,8 @@ class RepositoryService
      */
     public function backupSync(array $repository, array $backupPaths): array
     {
-        $command = ['restic', 'backup', '--repo', $repository['path'], ...$backupPaths];
-
-        $env = $repository['env'] ?? [];
-
-        if (!empty($repository['password'])) {
-            $env['RESTIC_PASSWORD'] = $repository['password'];
-        } else {
-            $command[] = '--insecure-no-password';
-        }
+        $command = $this->buildCommand(['backup', ...$backupPaths], $repository);
+        $env = $this->buildEnv($repository);
 
         $result = $this->runner->run($command, $env, null, 0);
 
@@ -116,5 +95,42 @@ class RepositoryService
             'output' => $result['stdout'],
             'error' => $result['stderr'],
         ];
+    }
+
+    /**
+     * Строит команду restic. Глобальные флаги (--repo, --insecure-no-password)
+     * должны идти ДО подкоманды, иначе restic 0.19+ может их не распознать.
+     *
+     * @param array<int, string> $subcommandArgs
+     * @param array<string, mixed> $repository
+     * @return array<int, string>
+     */
+    private function buildCommand(array $subcommandArgs, array $repository): array
+    {
+        $cmd = ['restic'];
+
+        if (empty($repository['password'])) {
+            $cmd[] = '--insecure-no-password';
+        }
+
+        $cmd[] = '--repo';
+        $cmd[] = $repository['path'];
+
+        return array_merge($cmd, $subcommandArgs);
+    }
+
+    /**
+     * @param array<string, mixed> $repository
+     * @return array<string, string>
+     */
+    private function buildEnv(array $repository): array
+    {
+        $env = $repository['env'] ?? [];
+
+        if (!empty($repository['password'])) {
+            $env['RESTIC_PASSWORD'] = $repository['password'];
+        }
+
+        return $env;
     }
 }

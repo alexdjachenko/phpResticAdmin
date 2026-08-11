@@ -98,6 +98,74 @@ class MaintenanceController
     }
 
     /**
+     * POST /maintenance/init
+     */
+    public function init(): void
+    {
+        $auth = App::auth();
+        $user = $auth->user();
+
+        if ($user === null) {
+            App::response()->redirect('/login');
+            return;
+        }
+
+        if (!$auth->canInit()) {
+            App::response()->error(403, __('error.forbidden'));
+            return;
+        }
+
+        $request = new Request();
+        $security = App::security();
+
+        $token = $request->post('_csrf_token', '');
+        if (!$security->validateCsrf($token)) {
+            App::response()->error(403, __('flash.csrf_error'));
+            return;
+        }
+
+        $repoId = $request->post('repo_id', '');
+        if ($repoId === '') {
+            App::response()->error(400, 'Missing repository ID');
+            return;
+        }
+
+        $repositories = App::repoStorage()->loadAll($user);
+        $repo = null;
+        foreach ($repositories as $r) {
+            if (($r['id'] ?? '') === $repoId) {
+                $repo = $r;
+                break;
+            }
+        }
+
+        if ($repo === null) {
+            App::response()->error(404, __('flash.not_found'));
+            return;
+        }
+
+        $category = $repo['category'] ?? 'public';
+        if (!$auth->canUseWrite($category)) {
+            App::response()->error(403, __('error.forbidden'));
+            return;
+        }
+
+        $result = App::repoService()->init([
+            'path' => $repo['path'],
+            'password' => $repo['password'] ?? null,
+            'env' => $repo['env'] ?? [],
+        ]);
+
+        echo App::response()->render('maintenance/result.php', [
+            'action' => __('maint.init'),
+            'result' => $result,
+            'repo' => $repo,
+            'isLoggedIn' => $auth->isLoggedIn(),
+            'username' => $user,
+        ]);
+    }
+
+    /**
      * POST /maintenance/forget
      */
     public function forget(): void

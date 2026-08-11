@@ -12,6 +12,21 @@ use App\Restic\CommandRunner;
 use App\Restic\MaintenanceService;
 use PHPUnit\Framework\TestCase;
 
+/**
+ * Юнит-тест MaintenanceService (check, prune, rebuild-index, unlock, forget).
+ *
+ * Цель: проверить формирование команд restic для операций обслуживания,
+ *       передачу пароля через окружение и флаг --insecure-no-password.
+ *
+ * Сценарий:
+ *   - check/prune/rebuild-index/unlock: проверка аргументов команды.
+ *   - forget: проверка аргументов политики (keep-daily, keep-weekly, keep-last,
+ *     prune, dry-run), отсутствие --keep-last при keep_last=0.
+ *   - forget с паролем: RESTIC_PASSWORD в env.
+ *   - forget без пароля: --insecure-no-password в команде.
+ *
+ * Критерий успеха: моки проверяют аргументы, возвращается ok=true.
+ */
 class MaintenanceServiceTest extends TestCase
 {
     /** @var array{id: string, name: string, type: string, path: string, password: ?string} */
@@ -30,6 +45,7 @@ class MaintenanceServiceTest extends TestCase
         ];
     }
 
+    /** check вызывает restic check с путём к репо. */
     public function testCheckCallsResticCheck(): void
     {
         $mock = $this->createMock(CommandRunner::class);
@@ -49,6 +65,7 @@ class MaintenanceServiceTest extends TestCase
         $this->assertTrue($result['ok']);
     }
 
+    /** prune вызывает restic prune. */
     public function testPruneCallsResticPrune(): void
     {
         $mock = $this->createMock(CommandRunner::class);
@@ -68,6 +85,7 @@ class MaintenanceServiceTest extends TestCase
         $this->assertTrue($result['ok']);
     }
 
+    /** rebuild-index вызывает restic rebuild-index. */
     public function testRebuildIndexCallsResticRebuildIndex(): void
     {
         $mock = $this->createMock(CommandRunner::class);
@@ -87,6 +105,7 @@ class MaintenanceServiceTest extends TestCase
         $this->assertTrue($result['ok']);
     }
 
+    /** unlock вызывает restic unlock. */
     public function testUnlockCallsResticUnlock(): void
     {
         $mock = $this->createMock(CommandRunner::class);
@@ -106,6 +125,7 @@ class MaintenanceServiceTest extends TestCase
         $this->assertTrue($result['ok']);
     }
 
+    /** forget формирует правильные аргументы политики хранения. */
     public function testForgetBuildsCorrectCommand(): void
     {
         $capturedCommand = null;
@@ -124,7 +144,7 @@ class MaintenanceServiceTest extends TestCase
         $policy = [
             'keep_daily' => 7,
             'keep_weekly' => 4,
-            'keep_last' => 0,
+            'keep_last' => 0,   // 0 → флаг --keep-last не добавляется
             'prune' => true,
             'dry_run' => true,
         ];
@@ -140,9 +160,11 @@ class MaintenanceServiceTest extends TestCase
         $this->assertStringContainsString('--keep-weekly 4', $cmdStr);
         $this->assertStringContainsString('--prune', $cmdStr);
         $this->assertStringContainsString('--dry-run', $cmdStr);
+        // keep_last=0 → флаг отсутствует
         $this->assertStringNotContainsString('--keep-last', $cmdStr, 'keep_last=0 should not add --keep-last');
     }
 
+    /** forget с паролем передаёт RESTIC_PASSWORD в env. */
     public function testForgetWithPasswordUsesEnv(): void
     {
         $repoWithPassword = array_merge($this->repo, ['password' => 'secret123']);
@@ -168,6 +190,7 @@ class MaintenanceServiceTest extends TestCase
         $this->assertSame('secret123', $capturedEnv['RESTIC_PASSWORD']);
     }
 
+    /** forget без пароля добавляет --insecure-no-password и НЕ передаёт RESTIC_PASSWORD. */
     public function testForgetWithoutPasswordUsesInsecureFlag(): void
     {
         $capturedCommand = null;

@@ -1,4 +1,8 @@
 <?php if ($repo !== null): ?>
+<div class="breadcrumb">
+    <a href="/repositories/detail?repo=<?= htmlspecialchars(urlencode($repo['id'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">&larr; <?= htmlspecialchars(__('maint.back_repo'), ENT_QUOTES, 'UTF-8') ?></a>
+</div>
+
 <h2>
     <?= htmlspecialchars(__('snap.title'), ENT_QUOTES, 'UTF-8') ?>
     <span class="snap-repo-name">— <?= htmlspecialchars($repo['name'] ?? '', ENT_QUOTES, 'UTF-8') ?></span>
