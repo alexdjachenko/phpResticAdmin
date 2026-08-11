@@ -20,11 +20,11 @@ use PHPUnit\Framework\TestCase;
  * Сценарий:
  *   - Несуществующая команда → ненулевой exitCode, stderr не пуст.
  *   - Неисполняемый файл → ошибка.
- *   - echo → stdout содержит ожидаемую строку, stderr пуст.
+ *   - php -r echo → stdout содержит ожидаемую строку, stderr пуст.
  *   - ls несуществующего пути → stderr не пуст.
- *   - stdin передаётся в процесс (cat).
+ *   - stdin передаётся в процесс (php читает php://stdin).
  *   - Таймаут: sleep 5 с таймаутом 1с.
- *   - Переменные окружения пробрасываются (echo $TEST_VAR).
+ *   - Переменные окружения пробрасываются (php getenv).
  *
  * Критерий успеха: все assertSame/assertStringContainsString проходят.
  */
@@ -62,10 +62,10 @@ class CommandRunnerTest extends TestCase
         $this->assertNotEmpty($result['stderr'], 'stderr should not be empty for non-executable file');
     }
 
-    /** Успешная команда (echo) → stdout содержит вывод, stderr пуст. */
+    /** Успешная команда (php -r) → stdout содержит вывод, stderr пуст. */
     public function testRunCapturesStdoutOnSuccess(): void
     {
-        $result = $this->runner->run(['/bin/echo', 'hello world']);
+        $result = $this->runner->run([PHP_BINARY, '-r', "echo 'hello world';"]);
 
         $this->assertSame(0, $result['exitCode']);
         $this->assertStringContainsString('hello world', $result['stdout']);
@@ -81,10 +81,10 @@ class CommandRunnerTest extends TestCase
         $this->assertNotEmpty($result['stderr']);
     }
 
-    /** stdin передаётся в процесс (cat). */
+    /** stdin передаётся в процесс (php читает php://stdin). */
     public function testRunWithStdin(): void
     {
-        $result = $this->runner->run(['/bin/cat'], [], "test input\n");
+        $result = $this->runner->run([PHP_BINARY, '-r', "echo file_get_contents('php://stdin');"], [], "test input\n");
 
         $this->assertSame(0, $result['exitCode']);
         $this->assertStringContainsString('test input', $result['stdout']);
@@ -103,7 +103,7 @@ class CommandRunnerTest extends TestCase
     public function testRunWithEnvPassesVariables(): void
     {
         $result = $this->runner->run(
-            ['/bin/sh', '-c', 'echo $TEST_VAR'],
+            [PHP_BINARY, '-r', "echo getenv('TEST_VAR');"],
             ['TEST_VAR' => 'phpResticAdminTestValue']
         );
 
