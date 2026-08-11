@@ -10,59 +10,40 @@ namespace App\Tests\Integration;
 
 use App\Restic\CommandRunner;
 use App\Restic\RepositoryService;
-use App\Storage\RepositoryStorage;
 use PHPUnit\Framework\TestCase;
-use Symfony\Component\Yaml\Yaml;
 
 /**
- * Интеграционный тест соединения с restic-репозиторием.
+ * Интеграционный тест инициализации и соединения с restic-репозиторием.
  *
- * Цель: проверить работу RepositoryService при реальном взаимодействии
- *       с restic CLI: проверка соединения, инициализация репозитория,
- *       обработка ошибок (несуществующий репо, уже инициализированный,
- *       недоступный для записи родительский каталог).
+ * Каждый тест — цепочка: создание репозитория → работа с ним → негативные
+ * сценарии на том же репозитории.
  *
- * Сценарий:
- *   1. Инициализируется временный restic-репозиторий.
- *   2. Проверяется testConnection для валидного и невалидного репозитория.
- *   3. Проверяется init: успешный, повторный (должен упасть),
- *      с паролем, с недоступным родительским каталогом.
+ * Цепочка 1 (без пароля):
+ *   init → testConnection успех → повторный init провал.
  *
- * Критерий успеха:
- *   - testConnection возвращает ok=true для существующего репо.
- *   - testConnection возвращает ok=false для несуществующего пути.
- *   - init возвращает ok=true и создаёт директорию.
- *   - init на уже инициализированном репо возвращает ok=false.
- *   - init с паролем: ok=true, testConnection с паролем подтверждает.
- *   - init с не-writable родителем возвращает ok=false.
+ * Цепочка 2 (с паролем):
+ *   init → testConnection с правильным паролем успех →
+ *   testConnection с неправильным паролем провал →
+ *   testConnection без пароля провал.
+ *
+ * Цепочка 3 (ошибки без репозитория):
+ *   init в не-writable родитель → провал →
+ *   testConnection к несуществующему пути → провал.
+ *
+ * Критерий успеха: ok-сценарии возвращают ok=true, fail-сценарии — ok=false
+ * с непустым error.
  *
  * Требует: restic в PATH.
  */
 class ResticConnectionTest extends TestCase
 {
-    /** @var string Временная директория для всего теста */
+    /** @var string Временная директория для изоляции тестов */
     private string $tmpDir;
-    /** @var string Путь к основному тестовому restic-репозиторию */
-    private string $repoDir;
 
     protected function setUp(): void
     {
-        // Создаём изолированную временную директорию
         $this->tmpDir = sys_get_temp_dir() . '/phpresticadmin_integration_' . uniqid();
-        $this->repoDir = $this->tmpDir . '/restic-repo';
         mkdir($this->tmpDir, 0777, true);
-        mkdir($this->repoDir, 0777, true);
-
-        // Инициализируем restic-репозиторий без пароля для всех тестов класса
-        $runner = new CommandRunner();
-        $result = $runner->run(
-            ['restic', 'init', '--repo', $this->repoDir, '--insecure-no-password'],
-            ['RESTIC_PASSWORD' => '']
-        );
-
-        if ($result['exitCode'] !== 0) {
-            $this->markTestSkipped('Failed to initialize restic repository: ' . $result['stderr']);
-        }
     }
 
     protected function tearDown(): void
@@ -70,192 +51,138 @@ class ResticConnectionTest extends TestCase
         $this->removeDir($this->tmpDir);
     }
 
+    // === Цепочка 1: репозиторий без пароля ===
+
     /**
-     * Проверяет успешное соединение с инициализированным репозиторием.
+     * Цепочка с репозиторием без пароля.
      *
-     * Сценарий: создаётся YAML-конфиг репозитория, загружается через
-     *            RepositoryStorage, затем testConnection проверяет связь.
-     *            Ожидается: ok=true, output — валидный JSON (пустой массив).
+     * 1. init без пароля → ok, директория создана.
+     * 2. testConnection без пароля → ok, output — валидный JSON (пустой массив).
+     * 3. Повторный init на том же репо → ok=false, "config file already exists".
      */
-    public function testConnectionToInitializedRepository(): void
+    public function testInitConnectionAndReinitWithoutPassword(): void
     {
-        // Arrange: создаём временный repositories.yaml с одним репозиторием
-        $yamlFile = $this->tmpDir . '/repositories.yaml';
-        $repos = [
-            'repositories' => [
-                [
-                    'id' => 'test123',
-                    'name' => 'Test Repo',
-                    'type' => 'local',
-                    'path' => $this->repoDir,
-                    'password' => null,
-                ],
-            ],
-        ];
-        file_put_contents($yamlFile, Yaml::dump($repos));
-
-        // Загружаем через RepositoryStorage (проверяем заодно парсинг YAML)
-        $storage = new RepositoryStorage($yamlFile);
-        $loaded = $storage->loadAll('test');
-
-        $this->assertCount(1, $loaded);
-        $this->assertSame('test123', $loaded[0]['id']);
-
-        // Act: проверяем соединение с репозиторием
+        $repoDir = $this->tmpDir . '/repo-no-password';
         $service = new RepositoryService(new CommandRunner());
-        $result = $service->testConnection($loaded[0]);
+        $repo = [
+            'id' => 'test',
+            'name' => 'Test',
+            'type' => 'local',
+            'path' => $repoDir,
+            'password' => null,
+        ];
 
-        // Assert: соединение успешно
-        $this->assertTrue($result['ok'], 'Connection should succeed: ' . ($result['error'] ?? ''));
-        $this->assertJson($result['output']);
+        // --- Шаг 1: init без пароля ---
+        $result = $service->init(['path' => $repoDir, 'password' => null]);
 
-        // Assert: output — JSON-массив снепшотов (пустой для нового репо)
-        $snapshots = json_decode($result['output'], true);
+        $this->assertTrue($result['ok'], 'Init should succeed: ' . ($result['error'] ?? ''));
+        $this->assertDirectoryExists($repoDir, 'restic init should create the repository directory');
+
+        // --- Шаг 2: testConnection ---
+        $connResult = $service->testConnection($repo);
+
+        $this->assertTrue($connResult['ok'], 'Connection should succeed: ' . ($connResult['error'] ?? ''));
+        $this->assertJson($connResult['output']);
+
+        $snapshots = json_decode($connResult['output'], true);
         $this->assertIsArray($snapshots);
         $this->assertEmpty($snapshots, 'New repository should have no snapshots');
+
+        // --- Шаг 3: повторный init → провал ---
+        $reInitResult = $service->init(['path' => $repoDir, 'password' => null]);
+
+        $this->assertFalse($reInitResult['ok'], 'Init on already-initialized repo should fail');
+        $this->assertNotEmpty($reInitResult['error'], 'Error message should not be empty');
+        $this->assertStringContainsString('config file already exists', $reInitResult['error'], 'Error should mention "config file already exists"');
     }
 
+    // === Цепочка 2: репозиторий с паролем ===
+
     /**
-     * Проверяет, что testConnection возвращает ошибку для несуществующего пути.
+     * Цепочка с репозиторием, защищённым паролем.
+     *
+     * 1. init с паролем → ok.
+     * 2. testConnection с правильным паролем → ok.
+     * 3. testConnection с неправильным паролем → ok=false.
+     * 4. testConnection без пароля (через --insecure-no-password) → ok=false.
      */
-    public function testConnectionFailsForNonExistentRepository(): void
+    public function testInitAndConnectionWithPassword(): void
     {
-        // Arrange: репозиторий с заведомо несуществующим путём
-        $repository = [
+        $repoDir = $this->tmpDir . '/repo-with-password';
+        $password = 'testSecret123';
+        $service = new RepositoryService(new CommandRunner());
+
+        // --- Шаг 1: init с паролем ---
+        $result = $service->init(['path' => $repoDir, 'password' => $password]);
+
+        $this->assertTrue($result['ok'], 'Init with password should succeed: ' . ($result['error'] ?? ''));
+
+        $repo = [
+            'id' => 'test',
+            'name' => 'Test',
+            'type' => 'local',
+            'path' => $repoDir,
+            'password' => $password,
+        ];
+
+        // --- Шаг 2: testConnection с правильным паролем → успех ---
+        $connOk = $service->testConnection($repo);
+
+        $this->assertTrue($connOk['ok'], 'Connection with correct password should succeed: ' . ($connOk['error'] ?? ''));
+        $this->assertJson($connOk['output']);
+
+        // --- Шаг 3: testConnection с неправильным паролем → провал ---
+        $repoWrongPw = array_merge($repo, ['password' => 'wrongPassword']);
+        $connWrongPw = $service->testConnection($repoWrongPw);
+
+        $this->assertFalse($connWrongPw['ok'], 'Connection with wrong password should fail');
+        $this->assertNotEmpty($connWrongPw['error'], 'Error message should not be empty for wrong password');
+
+        // --- Шаг 4: testConnection без пароля → провал ---
+        $repoNoPw = array_merge($repo, ['password' => null]);
+        $connNoPw = $service->testConnection($repoNoPw);
+
+        $this->assertFalse($connNoPw['ok'], 'Connection without password to protected repo should fail');
+        $this->assertNotEmpty($connNoPw['error'], 'Error message should not be empty when password is missing');
+    }
+
+    // === Негативные сценарии без существующего репозитория ===
+
+    /**
+     * Цепочка ошибок без существующего репозитория.
+     *
+     * 1. init в родительский каталог без прав на запись → ok=false.
+     * 2. testConnection к заведомо несуществующему пути → ok=false.
+     */
+    public function testInitAndConnectionFailuresWithoutRepo(): void
+    {
+        $service = new RepositoryService(new CommandRunner());
+
+        // --- Шаг 1: init в не-writable родитель ---
+        $parentDir = $this->tmpDir . '/readonly-parent';
+        mkdir($parentDir, 0555, true);
+
+        $initResult = $service->init([
+            'path' => $parentDir . '/subdir-repo',
+            'password' => null,
+        ]);
+
+        $this->assertFalse($initResult['ok'], 'Init with non-writable parent should fail');
+        $this->assertNotEmpty($initResult['error'], 'Error message should not be empty for permission failure');
+
+        chmod($parentDir, 0777);
+
+        // --- Шаг 2: testConnection к несуществующему пути ---
+        $connResult = $service->testConnection([
             'id' => 'nonexistent',
             'name' => 'Nonexistent',
             'type' => 'local',
             'path' => '/nonexistent/path/to/repo',
             'password' => null,
-        ];
-
-        // Act
-        $service = new RepositoryService(new CommandRunner());
-        $result = $service->testConnection($repository);
-
-        // Assert: ok=false, сообщение об ошибке не пустое
-        $this->assertFalse($result['ok'], 'Connection to nonexistent repo should fail');
-        $this->assertNotEmpty($result['error']);
-    }
-
-    /**
-     * Проверяет успешную инициализацию нового репозитория.
-     *
-     * Важно: директория НЕ должна существовать до init — restic должен
-     *        создать её сам. Предыдущая версия теста предсоздавала
-     *        директорию, маскируя возможные ошибки init.
-     */
-    public function testInitRepository(): void
-    {
-        // Arrange: путь к ещё не существующей директории
-        $initDir = $this->tmpDir . '/init-repo';
-
-        $repository = [
-            'path' => $initDir,
-            'password' => null,
-        ];
-
-        // Act: инициализируем репозиторий
-        $service = new RepositoryService(new CommandRunner());
-        $result = $service->init($repository);
-
-        // Assert: init успешен, директория создана
-        $this->assertTrue($result['ok'], 'Init should succeed: ' . ($result['error'] ?? ''));
-        $this->assertDirectoryExists($initDir, 'restic init should create the repository directory');
-
-        // Дополнительно: проверяем, что testConnection работает после init
-        $connResult = $service->testConnection([
-            'id' => 'test',
-            'name' => 'Test',
-            'type' => 'local',
-            'path' => $initDir,
-            'password' => null,
         ]);
 
-        $this->assertTrue($connResult['ok'], 'Connection after init should succeed: ' . ($connResult['error'] ?? ''));
-    }
-
-    /**
-     * Проверяет, что повторный init на уже инициализированном репозитории
-     * возвращает ошибку.
-     */
-    public function testInitRepositoryFailsForAlreadyInitializedRepo(): void
-    {
-        // Arrange: repoDir уже инициализирован в setUp()
-        $repository = [
-            'path' => $this->repoDir,
-            'password' => null,
-        ];
-
-        // Act: пытаемся инициализировать повторно
-        $service = new RepositoryService(new CommandRunner());
-        $result = $service->init($repository);
-
-        // Assert: ok=false, сообщение об ошибке содержит "config file already exists"
-        $this->assertFalse($result['ok'], 'Init on already-initialized repo should fail');
-        $this->assertNotEmpty($result['error'], 'Error message should not be empty');
-        $this->assertStringContainsString('config file already exists', $result['error'], 'Error should mention "config file already exists"');
-    }
-
-    /**
-     * Проверяет инициализацию репозитория с паролем.
-     *
-     * Сценарий: init с паролем, затем testConnection с тем же паролем.
-     */
-    public function testInitRepositoryWithPassword(): void
-    {
-        // Arrange: путь к новой директории
-        $initDir = $this->tmpDir . '/init-password-repo';
-
-        $repository = [
-            'path' => $initDir,
-            'password' => 'testSecret123',
-        ];
-
-        // Act: init с паролем
-        $service = new RepositoryService(new CommandRunner());
-        $result = $service->init($repository);
-
-        // Assert: init успешен
-        $this->assertTrue($result['ok'], 'Init with password should succeed: ' . ($result['error'] ?? ''));
-
-        // Дополнительно: testConnection с тем же паролем должен работать
-        $connResult = $service->testConnection([
-            'id' => 'test',
-            'name' => 'Test',
-            'type' => 'local',
-            'path' => $initDir,
-            'password' => 'testSecret123',
-        ]);
-
-        $this->assertTrue($connResult['ok'], 'Connection after init with password should succeed: ' . ($connResult['error'] ?? ''));
-    }
-
-    /**
-     * Проверяет, что init возвращает ошибку, если родительский каталог
-     * недоступен для записи.
-     */
-    public function testInitRepositoryFailsForNonWritableParent(): void
-    {
-        // Arrange: создаём родительский каталог только для чтения
-        $parentDir = $this->tmpDir . '/readonly-parent';
-        mkdir($parentDir, 0555, true);
-
-        $repository = [
-            'path' => $parentDir . '/subdir-repo',
-            'password' => null,
-        ];
-
-        // Act: пытаемся init в недоступную директорию
-        $service = new RepositoryService(new CommandRunner());
-        $result = $service->init($repository);
-
-        // Assert: ok=false, ошибка не пустая
-        $this->assertFalse($result['ok'], 'Init with non-writable parent should fail');
-        $this->assertNotEmpty($result['error'], 'Error message should not be empty for permission failure');
-
-        // Восстанавливаем права для tearDown
-        chmod($parentDir, 0777);
+        $this->assertFalse($connResult['ok'], 'Connection to nonexistent repo should fail');
+        $this->assertNotEmpty($connResult['error'], 'Error message should not be empty for nonexistent path');
     }
 
     private function removeDir(string $dir): void
