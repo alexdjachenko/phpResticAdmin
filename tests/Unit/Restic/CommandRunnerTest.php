@@ -20,11 +20,11 @@ use PHPUnit\Framework\TestCase;
  * Сценарий:
  *   - Несуществующая команда → ненулевой exitCode, stderr не пуст.
  *   - Неисполняемый файл → ошибка.
- *   - php -r echo → stdout содержит ожидаемую строку, stderr пуст.
+ *   - /bin/echo → stdout содержит ожидаемую строку, stderr пуст.
  *   - ls несуществующего пути → stderr не пуст.
- *   - stdin передаётся в процесс (php читает php://stdin).
+ *   - stdin передаётся в процесс (/bin/cat).
  *   - Таймаут: sleep 5 с таймаутом 1с.
- *   - Переменные окружения пробрасываются (php getenv).
+ *   - Переменные окружения пробрасываются (/bin/sh).
  *
  * Критерий успеха: все assertSame/assertStringContainsString проходят.
  */
@@ -42,7 +42,7 @@ class CommandRunnerTest extends TestCase
     {
         $result = $this->runner->run(['nonexistent_binary_xyz_12345']);
 
-        $this->assertNotSame(0, $result['exitCode']);
+        $this->assertNotSame(0, $result['exitCode'], 'exitCode should not be 0 for nonexistent binary');
         $this->assertNotEmpty($result['stderr'], 'stderr should not be empty when command is not found');
         $this->assertStringContainsString('nonexistent_binary_xyz_12345', $result['stderr']);
     }
@@ -58,16 +58,21 @@ class CommandRunnerTest extends TestCase
 
         unlink($tmpFile);
 
-        $this->assertNotSame(0, $result['exitCode']);
+        $this->assertNotSame(0, $result['exitCode'], 'exitCode should not be 0 for non-executable file');
         $this->assertNotEmpty($result['stderr'], 'stderr should not be empty for non-executable file');
     }
 
-    /** Успешная команда (php -r) → stdout содержит вывод, stderr пуст. */
+    /** Успешная команда (/bin/echo) → stdout содержит вывод, stderr пуст. */
     public function testRunCapturesStdoutOnSuccess(): void
     {
-        $result = $this->runner->run([PHP_BINARY, '-r', "echo 'hello world';"]);
+        $result = $this->runner->run(['/bin/echo', 'hello world']);
 
-        $this->assertSame(0, $result['exitCode']);
+        $this->assertSame(0, $result['exitCode'], sprintf(
+            'Expected exitCode 0, got %d. stderr: "%s", stdout: "%s"',
+            $result['exitCode'],
+            $result['stderr'],
+            $result['stdout']
+        ));
         $this->assertStringContainsString('hello world', $result['stdout']);
         $this->assertSame('', $result['stderr']);
     }
@@ -75,27 +80,39 @@ class CommandRunnerTest extends TestCase
     /** Команда с ошибкой (ls несуществующего пути) → stderr не пуст. */
     public function testRunCapturesStderrOnFailure(): void
     {
-        $result = $this->runner->run(['ls', '/nonexistent_path_' . uniqid()]);
+        $result = $this->runner->run(['/bin/ls', '/nonexistent_path_' . uniqid()]);
 
-        $this->assertNotSame(0, $result['exitCode']);
-        $this->assertNotEmpty($result['stderr']);
+        $this->assertNotSame(0, $result['exitCode'], sprintf(
+            'Expected nonzero exitCode, got %d. stderr: "%s"',
+            $result['exitCode'],
+            $result['stderr']
+        ));
+        $this->assertNotEmpty($result['stderr'], 'stderr should not be empty when command fails');
     }
 
-    /** stdin передаётся в процесс (php читает php://stdin). */
+    /** stdin передаётся в процесс (/bin/cat). */
     public function testRunWithStdin(): void
     {
-        $result = $this->runner->run([PHP_BINARY, '-r', "echo file_get_contents('php://stdin');"], [], "test input\n");
+        $result = $this->runner->run(['/bin/cat'], [], "test input\n");
 
-        $this->assertSame(0, $result['exitCode']);
+        $this->assertSame(0, $result['exitCode'], sprintf(
+            'Expected exitCode 0, got %d. stderr: "%s"',
+            $result['exitCode'],
+            $result['stderr']
+        ));
         $this->assertStringContainsString('test input', $result['stdout']);
     }
 
     /** Таймаут: sleep 5 с таймаутом 1с → exitCode != 0, stderr содержит 'timed out'. */
     public function testRunHandlesTimeout(): void
     {
-        $result = $this->runner->run(['sleep', '5'], [], null, 1);
+        $result = $this->runner->run(['/bin/sleep', '5'], [], null, 1);
 
-        $this->assertNotSame(0, $result['exitCode']);
+        $this->assertNotSame(0, $result['exitCode'], sprintf(
+            'Expected nonzero exitCode for timed out process, got %d. stderr: "%s"',
+            $result['exitCode'],
+            $result['stderr']
+        ));
         $this->assertStringContainsString('timed out', $result['stderr']);
     }
 
@@ -103,11 +120,15 @@ class CommandRunnerTest extends TestCase
     public function testRunWithEnvPassesVariables(): void
     {
         $result = $this->runner->run(
-            [PHP_BINARY, '-r', "echo getenv('TEST_VAR');"],
+            ['/bin/sh', '-c', 'echo $TEST_VAR'],
             ['TEST_VAR' => 'phpResticAdminTestValue']
         );
 
-        $this->assertSame(0, $result['exitCode']);
+        $this->assertSame(0, $result['exitCode'], sprintf(
+            'Expected exitCode 0, got %d. stderr: "%s"',
+            $result['exitCode'],
+            $result['stderr']
+        ));
         $this->assertStringContainsString('phpResticAdminTestValue', $result['stdout']);
     }
 }
