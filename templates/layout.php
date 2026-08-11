@@ -69,7 +69,7 @@
 
     <footer class="app-footer">
         © 2026 Alex Djachenko (Алексей Дьяченко)
-        &middot; <strong>phpResticAdmin</strong> v<?= htmlspecialchars($appVersion ?? 'dev', ENT_QUOTES, 'UTF-8') ?>
+        &middot; <strong><a href="https://github.com/alexdjachenko/phpResticAdmin" target="_blank" rel="noopener">phpResticAdmin</a></strong> v<?= htmlspecialchars($appVersion ?? 'dev', ENT_QUOTES, 'UTF-8') ?>
         &middot; restic <?= htmlspecialchars($resticVersion ?? '', ENT_QUOTES, 'UTF-8') ?>
         &middot; <a href="https://www.apache.org/licenses/LICENSE-2.0" target="_blank" rel="noopener">Apache 2.0</a>
     </footer>
