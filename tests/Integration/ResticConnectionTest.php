@@ -191,10 +191,10 @@ class ResticConnectionTest extends TestCase
         $service = new RepositoryService(new CommandRunner());
         $result = $service->init($repository);
 
-        // Assert: ok=false, сообщение об ошибке содержит "already initialized"
+        // Assert: ok=false, сообщение об ошибке содержит "config file already exists"
         $this->assertFalse($result['ok'], 'Init on already-initialized repo should fail');
         $this->assertNotEmpty($result['error'], 'Error message should not be empty');
-        $this->assertStringContainsString('already initialized', $result['error'], 'Error should mention "already initialized"');
+        $this->assertStringContainsString('config file already exists', $result['error'], 'Error should mention "config file already exists"');
     }
 
     /**

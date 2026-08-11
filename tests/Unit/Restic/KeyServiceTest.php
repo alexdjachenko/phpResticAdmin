@@ -20,7 +20,8 @@ use PHPUnit\Framework\TestCase;
  *
  * Сценарий:
  *   - listKeys: валидный JSON, пустой вывод, невалидный JSON, ошибка (exitCode != 0).
- *   - addKey: проверка пароля в stdin.
+ *   - addKey: проверка пароля в stdin, с паролем через RESTIC_PASSWORD,
+ *     без пароля через --insecure-no-password.
  *   - removeKey: проверка аргументов команды.
  *   - changePassword: проверка пароля в stdin и аргументов.
  *
@@ -186,5 +187,66 @@ class KeyServiceTest extends TestCase
         $this->assertSame("newpass456\nnewpass456\n", $capturedStdin);
         $this->assertContains('passwd', $capturedCommand);
         $this->assertContains('abc123', $capturedCommand);
+    }
+
+    /** addKey с паролем: RESTIC_PASSWORD в env, --insecure-no-password отсутствует. */
+    public function testAddKeyWithPasswordUsesEnv(): void
+    {
+        $repoWithPassword = array_merge($this->repo, ['password' => 'secret123']);
+        $capturedEnv = null;
+        $capturedCommand = null;
+
+        $mock = $this->createMock(CommandRunner::class);
+        $mock->expects($this->once())
+            ->method('run')
+            ->with(
+                $this->callback(function (array $cmd) use (&$capturedCommand) {
+                    $capturedCommand = $cmd;
+                    return true;
+                }),
+                $this->callback(function (array $env) use (&$capturedEnv) {
+                    $capturedEnv = $env;
+                    return true;
+                }),
+                $this->anything()
+            )
+            ->willReturn(['exitCode' => 0, 'stdout' => '', 'stderr' => '']);
+
+        $service = new KeyService($mock);
+        $result = $service->addKey($repoWithPassword, 'secret123');
+
+        $this->assertTrue($result['ok']);
+        $this->assertNotNull($capturedEnv);
+        $this->assertArrayHasKey('RESTIC_PASSWORD', $capturedEnv);
+        $this->assertSame('secret123', $capturedEnv['RESTIC_PASSWORD']);
+        $this->assertNotContains('--insecure-no-password', $capturedCommand);
+    }
+
+    /** addKey без пароля: --insecure-no-password в команде, RESTIC_PASSWORD нет в env. */
+    public function testAddKeyWithoutPasswordUsesInsecureFlag(): void
+    {
+        $capturedCommand = null;
+
+        $mock = $this->createMock(CommandRunner::class);
+        $mock->expects($this->once())
+            ->method('run')
+            ->with(
+                $this->callback(function (array $cmd) use (&$capturedCommand) {
+                    $capturedCommand = $cmd;
+                    return true;
+                }),
+                $this->callback(function (array $env) {
+                    return !isset($env['RESTIC_PASSWORD']);
+                }),
+                $this->anything()
+            )
+            ->willReturn(['exitCode' => 0, 'stdout' => '', 'stderr' => '']);
+
+        $service = new KeyService($mock);
+        $result = $service->addKey($this->repo, 'secret123');
+
+        $this->assertTrue($result['ok']);
+        $this->assertNotNull($capturedCommand);
+        $this->assertContains('--insecure-no-password', $capturedCommand);
     }
 }
