@@ -51,10 +51,12 @@ class CommandRunner
 
         $timedOut = false;
         $deadline = ($timeout > 0) ? microtime(true) + $timeout : PHP_FLOAT_MAX;
+        $exitCode = -1;
 
         while (true) {
             $status = proc_get_status($process);
             if (!$status['running']) {
+                $exitCode = $status['exitcode'];
                 break;
             }
 
@@ -65,7 +67,9 @@ class CommandRunner
                 if ($status['running']) {
                     proc_terminate($process, 9);
                     usleep(200000);
+                    $status = proc_get_status($process);
                 }
+                $exitCode = $status['exitcode'];
                 $timedOut = true;
                 break;
             }
@@ -79,7 +83,7 @@ class CommandRunner
         $stderr = stream_get_contents($pipes[2]);
         fclose($pipes[2]);
 
-        $exitCode = proc_close($process);
+        proc_close($process);
 
         $stdout = $stdout !== false ? $stdout : '';
         $stderr = $stderr !== false ? $stderr : '';
