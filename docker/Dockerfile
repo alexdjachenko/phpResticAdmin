@@ -23,6 +23,10 @@ COPY templates/ /var/www/templates/
 COPY data/ /var/www/data/
 COPY version.txt /var/www/version.txt
 
+# Runtime data/backup locations owned by www-data (Apache user)
+RUN mkdir -p /sources /backups /var/www/data/data \
+    && chown -R www-data:www-data /sources /backups /var/www/data
+
 # restic cache dir — создаём на этапе сборки с правами www-data
 RUN mkdir -p /tmp/phpresticadmin/restic-cache \
     && chown -R www-data:www-data /tmp/phpresticadmin

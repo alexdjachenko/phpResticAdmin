@@ -9,6 +9,7 @@
 namespace App\Storage;
 
 use App\Core\App;
+use Symfony\Component\Yaml\Yaml;
 
 class ConfigStorage
 {
@@ -20,19 +21,65 @@ class ConfigStorage
     }
 
     /**
-     * @return array<string, array{password: string}>
+     * Загружает пользователей из users.php (приоритет) и users.yaml (дополнение).
+     * При совпадении логина побеждает users.php.
+     *
+     * @return array<string, array<string, mixed>>
      */
     public function loadUsers(): array
     {
-        return $this->loadPhpFile('users.php');
+        $users = $this->loadPhpFile('users.php');
+
+        foreach ($this->loadUsersYaml() as $username => $data) {
+            if (!isset($users[$username])) {
+                $users[$username] = $data;
+            }
+        }
+
+        return $users;
     }
 
     /**
-     * @return array{guest_user: ?string, debug: int, tmp_dir: string, log_dir: string, timezone: string}
+     * @return array{guest_user: ?string, debug: int, tmp_dir: string, log_dir: string, timezone: string, repo_base_dir?: string, backup_paths_roots?: array<int, string>, repo_paths_roots?: array<int, string>}
      */
     public function loadSettings(): array
     {
         return $this->loadPhpFile('settings.php');
+    }
+
+    /**
+     * Загружает users.yaml из data/data/users.yaml (рядом с repositories.yaml).
+     * Отсутствующий или невалидный файл → пустой массив.
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    private function loadUsersYaml(): array
+    {
+        $path = dirname($this->configDir) . '/data/users.yaml';
+
+        if (!file_exists($path)) {
+            return [];
+        }
+
+        try {
+            $data = Yaml::parseFile($path);
+        } catch (\Throwable $e) {
+            App::log('Failed to parse users.yaml: ' . $e->getMessage(), 0);
+            return [];
+        }
+
+        if (!is_array($data)) {
+            return [];
+        }
+
+        $users = [];
+        foreach ($data as $username => $userData) {
+            if (is_string($username) && is_array($userData)) {
+                $users[$username] = $userData;
+            }
+        }
+
+        return $users;
     }
 
     private function loadPhpFile(string $filename): array

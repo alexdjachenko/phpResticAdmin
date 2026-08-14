@@ -150,11 +150,7 @@ class MaintenanceController
             return;
         }
 
-        $result = App::repoService()->init([
-            'path' => $repo['path'],
-            'password' => $repo['password'] ?? null,
-            'env' => $repo['env'] ?? [],
-        ]);
+        $result = App::repoService()->init($repo);
 
         echo App::response()->render('maintenance/result.php', [
             'action' => __('maint.init'),

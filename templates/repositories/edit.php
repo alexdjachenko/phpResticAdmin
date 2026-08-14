@@ -3,6 +3,7 @@ $backupPathsStr = '';
 if (!empty($repo['backup_paths'])) {
     $backupPathsStr = implode("\n", $repo['backup_paths']);
 }
+$repoType = $repo['type'] ?? 'local';
 ?>
 <p><a href="/repositories/detail?repo=<?= htmlspecialchars(urlencode($repo['id'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" class="back-link"><?= htmlspecialchars(__('maint.back_repo'), ENT_QUOTES, 'UTF-8') ?></a></p>
 
@@ -34,9 +35,28 @@ if (!empty($repo['backup_paths'])) {
         </select>
     </div>
 
-    <div class="form-group">
+    <div class="form-group" data-location-field="local" style="display:<?= $repoType === 'local' ? 'block' : 'none' ?>">
         <label for="repo-path"><?= htmlspecialchars(__('repo.path'), ENT_QUOTES, 'UTF-8') ?></label>
-        <input type="text" id="repo-path" name="path" required value="<?= htmlspecialchars($repo['path'] ?? '', ENT_QUOTES, 'UTF-8') ?>">
+        <input type="text" id="repo-path" name="local_path" value="<?= htmlspecialchars($repo['local_path'] ?? $repo['path'] ?? '', ENT_QUOTES, 'UTF-8') ?>">
+        <span class="form-help"><?= htmlspecialchars(__('repo.path_help'), ENT_QUOTES, 'UTF-8') ?></span>
+    </div>
+
+    <div class="form-group" data-location-field="s3" style="display:<?= $repoType === 's3' ? 'block' : 'none' ?>">
+        <label for="repo-bucket"><?= htmlspecialchars(__('repo.s3_bucket'), ENT_QUOTES, 'UTF-8') ?></label>
+        <input type="text" id="repo-bucket" name="s3_bucket" value="<?= htmlspecialchars($repo['s3_bucket'] ?? $repo['path'] ?? '', ENT_QUOTES, 'UTF-8') ?>">
+        <span class="form-help"><?= htmlspecialchars(__('repo.s3_bucket_help'), ENT_QUOTES, 'UTF-8') ?></span>
+    </div>
+
+    <div class="form-group" data-location-field="sftp" style="display:<?= $repoType === 'sftp' ? 'block' : 'none' ?>">
+        <label for="repo-sftp-path"><?= htmlspecialchars(__('repo.sftp_path'), ENT_QUOTES, 'UTF-8') ?></label>
+        <input type="text" id="repo-sftp-path" name="sftp_path" value="<?= htmlspecialchars($repo['sftp_path'] ?? $repo['path'] ?? '', ENT_QUOTES, 'UTF-8') ?>">
+        <span class="form-help"><?= htmlspecialchars(__('repo.sftp_path_help'), ENT_QUOTES, 'UTF-8') ?></span>
+    </div>
+
+    <div class="form-group" data-location-field="rest" style="display:<?= $repoType === 'rest' ? 'block' : 'none' ?>">
+        <label for="repo-rest-url"><?= htmlspecialchars(__('repo.rest_url'), ENT_QUOTES, 'UTF-8') ?></label>
+        <input type="text" id="repo-rest-url" name="rest_url" value="<?= htmlspecialchars($repo['rest_url'] ?? $repo['path'] ?? '', ENT_QUOTES, 'UTF-8') ?>">
+        <span class="form-help"><?= htmlspecialchars(__('repo.rest_url_help'), ENT_QUOTES, 'UTF-8') ?></span>
     </div>
 
     <div class="form-group">
@@ -77,9 +97,15 @@ if (!empty($repo['backup_paths'])) {
 (function() {
     var typeSelect = document.getElementById('repo-type');
     var s3Fields = document.getElementById('s3-fields');
-    function toggleS3Fields() {
-        s3Fields.style.display = typeSelect.value === 's3' ? 'block' : 'none';
+
+    function toggleTypeFields() {
+        var type = typeSelect.value;
+        s3Fields.style.display = type === 's3' ? 'block' : 'none';
+        document.querySelectorAll('[data-location-field]').forEach(function(el) {
+            el.style.display = el.getAttribute('data-location-field') === type ? 'block' : 'none';
+        });
     }
-    typeSelect.addEventListener('change', toggleS3Fields);
+
+    typeSelect.addEventListener('change', toggleTypeFields);
 })();
 </script>

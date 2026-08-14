@@ -9,6 +9,8 @@
 namespace App\Tests\Integration;
 
 use App\Restic\CommandRunner;
+use App\Restic\RepositoryService;
+use App\Restic\SnapshotService;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -19,7 +21,7 @@ use PHPUnit\Framework\TestCase;
  *
  * Сценарий:
  *   1. Создаётся структура data/dir/file.txt с содержимым "Hello Export".
- *   2. Делается backup, получается snapshot ID.
+ *   2. Делается backup (RepositoryService), получается snapshot ID (SnapshotService).
  *   3. dump конкретного файла — проверяется содержимое.
  *   4. dump / (весь снапшот) — проверяется, что это валидный tar-архив.
  *   5. dump несуществующего файла — проверяется ненулевой exitCode.
@@ -59,30 +61,28 @@ class ExportEndToEndTest extends TestCase
 
         $this->runner = new CommandRunner();
 
+        $repo = [
+            'id' => 'export-repo',
+            'name' => 'Export',
+            'type' => 'local',
+            'path' => $this->repoDir,
+            'password' => null,
+        ];
+
         // Инициализируем репозиторий
-        $result = $this->runner->run(
-            ['restic', 'init', '--repo', $this->repoDir, '--insecure-no-password'],
-            ['RESTIC_PASSWORD' => '']
-        );
-        if ($result['exitCode'] !== 0) {
-            $this->markTestSkipped('Failed to init restic repo: ' . $result['stderr']);
+        $repoService = new RepositoryService($this->runner);
+        $result = $repoService->init($repo);
+        if (!$result['ok']) {
+            $this->markTestSkipped('Failed to init restic repo: ' . $result['error']);
         }
 
         // Делаем backup
-        $result = $this->runner->run(
-            ['restic', 'backup', '--repo', $this->repoDir, '--insecure-no-password', $this->dataDir],
-            ['RESTIC_PASSWORD' => '']
-        );
-        $this->assertSame(0, $result['exitCode'], 'Backup should succeed: ' . $result['stderr']);
+        $result = $repoService->backupSync($repo, [$this->dataDir]);
+        $this->assertTrue($result['ok'], 'Backup should succeed: ' . $result['error']);
 
         // Получаем ID снапшота (ожидаем ровно один)
-        $snapResult = $this->runner->run(
-            ['restic', 'snapshots', '--json', '--last', '--repo', $this->repoDir, '--insecure-no-password'],
-            ['RESTIC_PASSWORD' => '']
-        );
-        $this->assertSame(0, $snapResult['exitCode']);
-        $snaps = json_decode($snapResult['stdout'], true);
-        $this->assertIsArray($snaps);
+        $snapService = new SnapshotService($this->runner);
+        $snaps = $snapService->listSnapshots($repo);
         $this->assertCount(1, $snaps);
         $this->snapId = $snaps[0]['id'] ?? '';
     }
@@ -94,40 +94,31 @@ class ExportEndToEndTest extends TestCase
 
     /**
      * Проверяет выгрузку одного файла из снапшота.
-     *
-     * Ожидается: содержимое stdout = "Hello Export" (точное совпадение).
      */
     public function testDumpSingleFileReturnsCorrectContent(): void
     {
-        // Act: restic dump конкретного файла
         $result = $this->runner->run(
-            ['restic', 'dump', $this->snapId, $this->dataDir . '/dir/file.txt', '--repo', $this->repoDir, '--insecure-no-password'],
-            ['RESTIC_PASSWORD' => '']
+            ['restic', '--insecure-no-password', '--repo', $this->repoDir, 'dump', $this->snapId, $this->dataDir . '/dir/file.txt'],
+            []
         );
 
-        // Assert: команда успешна, содержимое совпадает с оригиналом
         $this->assertSame(0, $result['exitCode'], 'dump should succeed: ' . $result['stderr']);
         $this->assertStringContainsString('Hello Export', $result['stdout']);
     }
 
     /**
      * Проверяет выгрузку всего снапшота как tar-архива.
-     *
-     * Ожидается: stdout — валидный tar (сигнатура "ustar" на позиции 257).
      */
     public function testDumpSnapshotReturnsTarArchive(): void
     {
-        // Act: restic dump / (весь снапшот → tar)
         $result = $this->runner->run(
-            ['restic', 'dump', $this->snapId, '/', '--repo', $this->repoDir, '--insecure-no-password'],
-            ['RESTIC_PASSWORD' => '']
+            ['restic', '--insecure-no-password', '--repo', $this->repoDir, 'dump', $this->snapId, '/'],
+            []
         );
 
-        // Assert: команда успешна, вывод не пустой
         $this->assertSame(0, $result['exitCode'], 'dump / should succeed: ' . $result['stderr']);
         $this->assertGreaterThan(0, strlen($result['stdout']), 'tar output should not be empty');
 
-        // Assert: проверяем tar-сигнатуру ("ustar" на позиции 257 в стандартном tar-заголовке)
         $this->assertStringContainsString('ustar', substr($result['stdout'], 257, 10), 'Output should be a valid tar archive');
     }
 
@@ -136,13 +127,11 @@ class ExportEndToEndTest extends TestCase
      */
     public function testDumpNonexistentFileFails(): void
     {
-        // Act: restic dump файла, которого нет в снапшоте
         $result = $this->runner->run(
-            ['restic', 'dump', $this->snapId, '/nonexistent.txt', '--repo', $this->repoDir, '--insecure-no-password'],
-            ['RESTIC_PASSWORD' => '']
+            ['restic', '--insecure-no-password', '--repo', $this->repoDir, 'dump', $this->snapId, '/nonexistent.txt'],
+            []
         );
 
-        // Assert: exitCode != 0 (ошибка)
         $this->assertNotSame(0, $result['exitCode'], 'dump of nonexistent file should fail');
     }
 

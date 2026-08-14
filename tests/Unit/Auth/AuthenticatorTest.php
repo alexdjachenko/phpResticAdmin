@@ -29,7 +29,7 @@ use PHPUnit\Framework\TestCase;
  *   - Legacy: пользователь без секции repos получает полные права.
  *   - Гранулярность: use_read не наследуется из use и edit.
  *   - Импликация: use_write ⇒ use_read.
- *   - canMove требует edit на обеих категориях.
+ *   - canMove требует use_read(source) и use_write(dest).
  *
  * Критерий успеха: все assert проходят.
  */
@@ -222,14 +222,33 @@ class AuthenticatorTest extends TestCase
         $this->assertFalse($auth->canEdit('private'));
     }
 
-    /** canMove требует edit на обеих категориях. */
-    public function testCanMoveRequiresEditOnBothCategories(): void
+    /** canMove требует use_read(source) и use_write(dest). */
+    public function testCanMoveRequiresUseReadSourceAndUseWriteDest(): void
     {
-        $auth = new Authenticator($this->configStorage, $this->session);
-        $auth->login('admin', 'secret123');
+        $passwordHash = password_hash('mover', PASSWORD_DEFAULT);
+        $this->writeUsersConfig($this->tmpDir, [
+            'mover' => [
+                'password' => $passwordHash,
+                'api_tokens' => [],
+                'repos' => [
+                    'public' => ['use' => false, 'use_read' => true, 'use_write' => false, 'edit' => false],
+                    'private' => ['use' => false, 'use_read' => false, 'use_write' => true, 'edit' => false],
+                    'session' => ['use' => false, 'use_read' => false, 'use_write' => false, 'edit' => false],
+                ],
+            ],
+        ]);
+        $configStorage = new ConfigStorage($this->tmpDir);
+        $auth = new Authenticator($configStorage, $this->session);
+        $auth->login('mover', 'mover');
 
+        // source public use_read=true, dest private use_write=true → true
         $this->assertTrue($auth->canMove('public', 'private'));
-        $this->assertTrue($auth->canMove('private', 'session'));
+
+        // dest session use_write=false → false
+        $this->assertFalse($auth->canMove('public', 'session'));
+
+        // source private use_read=false → false
+        $this->assertFalse($auth->canMove('private', 'public'));
     }
 
     /** Гость не может перемещать репозитории. */

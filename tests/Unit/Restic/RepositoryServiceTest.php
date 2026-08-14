@@ -264,5 +264,5 @@ class RepositoryServiceTest extends TestCase
         $this->assertFalse($result['ok']);
         $this->assertNotEmpty($result['error'], 'error should not be empty when init fails silently');
         $this->assertStringContainsString('exited with code', $result['error'], 'Fallback error should mention exit code');
-    }
-    }
+        }
+        }

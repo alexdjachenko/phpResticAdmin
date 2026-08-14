@@ -9,6 +9,7 @@
 namespace App\Tests\Integration;
 
 use App\Restic\CommandRunner;
+use App\Restic\RepositoryService;
 use App\Restic\SnapshotService;
 use PHPUnit\Framework\TestCase;
 
@@ -19,13 +20,13 @@ use PHPUnit\Framework\TestCase;
  *       и что SnapshotService способен их обнаружить и прочитать.
  *
  * Сценарий:
- *   1. Инициализируется временный restic-репозиторий без пароля.
+ *   1. Инициализируется временный restic-репозиторий без пароля (RepositoryService::init).
  *   2. Создаются тестовые файлы/директории.
- *   3. Выполняется restic backup через CommandRunner.
+ *   3. Выполняется restic backup через RepositoryService::backupSync.
  *   4. Через SnapshotService::listSnapshots() проверяется наличие снапшота.
  *
  * Критерий успеха:
- *   - exitCode backup = 0 (команда завершилась без ошибок).
+ *   - backup завершается успешно.
  *   - SnapshotService возвращает непустой массив снапшотов.
  *   - Каждый снапшот содержит ключевые поля: short_id, paths, summary.
  *
@@ -37,8 +38,8 @@ class BackupServiceTest extends TestCase
     private string $tmpDir;
     /** @var string Путь к restic-репозиторию внутри tmpDir */
     private string $repoDir;
-    /** @var CommandRunner Обёртка для вызова restic CLI */
-    private CommandRunner $runner;
+    /** @var array<string, mixed> Конфигурация тестового репозитория */
+    private array $repo;
 
     protected function setUp(): void
     {
@@ -48,17 +49,21 @@ class BackupServiceTest extends TestCase
         mkdir($this->tmpDir, 0777, true);
         mkdir($this->repoDir, 0777, true);
 
-        $this->runner = new CommandRunner();
+        $this->repo = [
+            'id' => 'test-repo',
+            'name' => 'Test Repo',
+            'type' => 'local',
+            'path' => $this->repoDir,
+            'password' => null,
+        ];
 
-        // Инициализируем restic-репозиторий без пароля
-        $result = $this->runner->run(
-            ['restic', 'init', '--repo', $this->repoDir, '--insecure-no-password'],
-            ['RESTIC_PASSWORD' => '']
-        );
+        // Инициализируем restic-репозиторий без пароля через сервис
+        $repoService = new RepositoryService(new CommandRunner());
+        $result = $repoService->init($this->repo);
 
         // Если restic недоступен (например, локально) — пропускаем тест
-        if ($result['exitCode'] !== 0) {
-            $this->markTestSkipped('Failed to init restic repo: ' . $result['stderr']);
+        if (!$result['ok']) {
+            $this->markTestSkipped('Failed to init restic repo: ' . $result['error']);
         }
     }
 
@@ -69,9 +74,6 @@ class BackupServiceTest extends TestCase
 
     /**
      * Проверяет, что backup одного каталога создаёт снапшот в репозитории.
-     *
-     * Сценарий: создаём каталог с одним файлом, делаем backup,
-     *            затем через SnapshotService проверяем наличие снапшота.
      */
     public function testBackupCreatesSnapshot(): void
     {
@@ -80,33 +82,23 @@ class BackupServiceTest extends TestCase
         mkdir($dataDir, 0777, true);
         file_put_contents($dataDir . '/hello.txt', 'Hello World');
 
-        // Act: выполняем backup через restic CLI
-        $result = $this->runner->run(
-            ['restic', 'backup', '--repo', $this->repoDir, '--insecure-no-password', $dataDir],
-            ['RESTIC_PASSWORD' => '']
-        );
+        // Act: выполняем backup через RepositoryService
+        $repoService = new RepositoryService(new CommandRunner());
+        $result = $repoService->backupSync($this->repo, [$dataDir]);
 
         // Assert: backup должен завершиться успешно
-        $this->assertSame(0, $result['exitCode'], 'Backup should succeed: ' . $result['stderr']);
+        $this->assertTrue($result['ok'], 'Backup should succeed: ' . $result['error']);
 
         // Assert: SnapshotService должен увидеть созданный снапшот
-        $snapService = new SnapshotService($this->runner);
-        $snapshots = $snapService->listSnapshots([
-            'path' => $this->repoDir,
-            'password' => null,
-        ]);
+        $snapService = new SnapshotService(new CommandRunner());
+        $snapshots = $snapService->listSnapshots($this->repo);
 
         $this->assertNotEmpty($snapshots, 'Should have at least one snapshot after backup');
-        // Проверяем, что снапшот содержит минимально необходимые поля
         $this->assertArrayHasKey('short_id', $snapshots[0]);
     }
 
     /**
      * Проверяет backup нескольких независимых каталогов одной командой.
-     *
-     * Сценарий: создаём два каталога path1 и path2 с разными файлами,
-     *            делаем backup обоих одной командой, проверяем что paths
-     *            в снапшоте содержат оба пути.
      */
     public function testBackupMultiplePaths(): void
     {
@@ -119,26 +111,21 @@ class BackupServiceTest extends TestCase
         file_put_contents($dir2 . '/b.txt', 'B');
 
         // Act: backup двух каталогов одной командой
-        $result = $this->runner->run(
-            ['restic', 'backup', '--repo', $this->repoDir, '--insecure-no-password', $dir1, $dir2],
-            ['RESTIC_PASSWORD' => '']
-        );
+        $repoService = new RepositoryService(new CommandRunner());
+        $result = $repoService->backupSync($this->repo, [$dir1, $dir2]);
 
-        $this->assertSame(0, $result['exitCode'], 'Backup should succeed: ' . $result['stderr']);
+        $this->assertTrue($result['ok'], 'Backup should succeed: ' . $result['error']);
 
         // Assert: снапшот должен содержать оба пути
-        $snapService = new SnapshotService($this->runner);
-        $snapshots = $snapService->listSnapshots([
-            'path' => $this->repoDir,
-            'password' => null,
-        ]);
+        $snapService = new SnapshotService(new CommandRunner());
+        $snapshots = $snapService->listSnapshots($this->repo);
 
         $this->assertNotEmpty($snapshots);
         $paths = $snapshots[0]['paths'] ?? [];
         $this->assertCount(2, $paths, 'Should contain exactly 2 backup paths');
         $this->assertContains($dir1, $paths, 'First backup path should be present');
         $this->assertContains($dir2, $paths, 'Second backup path should be present');
-        }
+    }
 
     private function removeDir(string $dir): void
     {

@@ -26,8 +26,8 @@ class KeyService
     public function verifyKey(array $repository, string $password): array
     {
         $verifyRepo = array_merge($repository, ['password' => $password]);
-        $command = $this->buildCommand(['snapshots', '--json'], $verifyRepo);
-        $env = $this->buildEnv($verifyRepo);
+        $command = ResticCommandBuilder::buildCommand(['snapshots', '--json'], $verifyRepo);
+        $env = ResticCommandBuilder::buildEnv($verifyRepo);
         $result = $this->runner->run($command, $env, null, 10);
 
         return [
@@ -42,8 +42,8 @@ class KeyService
      */
     public function listKeys(array $repository): array
     {
-        $command = $this->buildCommand(['key', 'list', '--json'], $repository);
-        $env = $this->buildEnv($repository);
+        $command = ResticCommandBuilder::buildCommand(['key', 'list', '--json'], $repository);
+        $env = ResticCommandBuilder::buildEnv($repository);
         $result = $this->runner->run($command, $env);
 
         if ($result['exitCode'] !== 0) {
@@ -75,8 +75,8 @@ class KeyService
             ];
         }
 
-        $command = $this->buildCommand(['key', 'add'], $repository);
-        $env = $this->buildEnv($repository);
+        $command = ResticCommandBuilder::buildCommand(['key', 'add'], $repository);
+        $env = ResticCommandBuilder::buildEnv($repository);
         $stdin = $newPassword . "\n" . $newPassword . "\n";
         $result = $this->runner->run($command, $env, $stdin);
 
@@ -93,8 +93,8 @@ class KeyService
      */
     public function removeKey(array $repository, string $keyId): array
     {
-        $command = $this->buildCommand(['key', 'remove', $keyId], $repository);
-        $env = $this->buildEnv($repository);
+        $command = ResticCommandBuilder::buildCommand(['key', 'remove', $keyId], $repository);
+        $env = ResticCommandBuilder::buildEnv($repository);
         $result = $this->runner->run($command, $env);
 
         return [
@@ -105,13 +105,18 @@ class KeyService
     }
 
     /**
+     * Меняет пароль репозитория.
+     *
+     * restic 0.19+ `key passwd` не принимает ID ключа — меняется пароль
+     * текущего ключа.
+     *
      * @param array<string, mixed> $repository
      * @return array{ok: bool, output: string, error: string}
      */
-    public function changePassword(array $repository, string $keyId, string $newPassword): array
+    public function changePassword(array $repository, string $newPassword): array
     {
-        $command = $this->buildCommand(['key', 'passwd', $keyId], $repository);
-        $env = $this->buildEnv($repository);
+        $command = ResticCommandBuilder::buildCommand(['key', 'passwd'], $repository);
+        $env = ResticCommandBuilder::buildEnv($repository);
         $stdin = $newPassword . "\n" . $newPassword . "\n";
         $result = $this->runner->run($command, $env, $stdin);
 
@@ -120,39 +125,5 @@ class KeyService
             'output' => $result['stdout'],
             'error' => $result['stderr'],
         ];
-    }
-
-    /**
-     * @param array<int, string> $subcommandArgs
-     * @param array<string, mixed> $repository
-     * @return array<int, string>
-     */
-    private function buildCommand(array $subcommandArgs, array $repository): array
-    {
-        $cmd = ['restic'];
-
-        if (empty($repository['password'])) {
-            $cmd[] = '--insecure-no-password';
-        }
-
-        $cmd[] = '--repo';
-        $cmd[] = $repository['path'];
-
-        return array_merge($cmd, $subcommandArgs);
-    }
-
-    /**
-     * @param array<string, mixed> $repository
-     * @return array<string, string>
-     */
-    private function buildEnv(array $repository): array
-    {
-        $env = $repository['env'] ?? [];
-
-        if (!empty($repository['password'])) {
-            $env['RESTIC_PASSWORD'] = $repository['password'];
-        }
-
-        return $env;
     }
 }

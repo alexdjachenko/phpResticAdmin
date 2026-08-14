@@ -9,12 +9,14 @@
 namespace App\Tests\Integration;
 
 use App\Restic\CommandRunner;
+use App\Restic\KeyService;
+use App\Restic\RepositoryService;
 use PHPUnit\Framework\TestCase;
 
 /**
  * Интеграционный тест управления ключами restic (key list/add/remove/passwd).
  *
- * Цель: проверить операции с ключами доступа к репозиторию через restic CLI:
+ * Цель: проверить операции с ключами доступа к репозиторию через KeyService:
  *       просмотр списка, добавление, удаление, смена пароля.
  *
  * Сценарий:
@@ -38,8 +40,8 @@ class KeyEndToEndTest extends TestCase
     private string $tmpDir;
     /** @var string Путь к restic-репозиторию */
     private string $repoDir;
-    /** @var CommandRunner */
-    private CommandRunner $runner;
+    /** @var array<string, mixed> Конфигурация тестового репозитория */
+    private array $repo;
     /** @var string Пароль репозитория (нужен для key-операций) */
     private string $repoPassword = 'testpass123';
 
@@ -51,15 +53,19 @@ class KeyEndToEndTest extends TestCase
         mkdir($this->tmpDir, 0777, true);
         mkdir($this->repoDir, 0777, true);
 
-        $this->runner = new CommandRunner();
+        $this->repo = [
+            'id' => 'key-repo',
+            'name' => 'Key Repo',
+            'type' => 'local',
+            'path' => $this->repoDir,
+            'password' => $this->repoPassword,
+        ];
 
         // Инициализируем репозиторий С ПАРОЛЕМ (операции с ключами без пароля бессмысленны)
-        $result = $this->runner->run(
-            ['restic', 'init', '--repo', $this->repoDir],
-            ['RESTIC_PASSWORD' => $this->repoPassword]
-        );
-        if ($result['exitCode'] !== 0) {
-            $this->markTestSkipped('Failed to init restic repo: ' . $result['stderr']);
+        $repoService = new RepositoryService(new CommandRunner());
+        $result = $repoService->init($this->repo);
+        if (!$result['ok']) {
+            $this->markTestSkipped('Failed to init restic repo: ' . $result['error']);
         }
     }
 
@@ -73,43 +79,26 @@ class KeyEndToEndTest extends TestCase
      */
     public function testListKeys(): void
     {
-        // Act: получаем список ключей в JSON
-        $result = $this->runner->run(
-            ['restic', 'key', 'list', '--json', '--repo', $this->repoDir],
-            ['RESTIC_PASSWORD' => $this->repoPassword]
-        );
+        $service = new KeyService(new CommandRunner());
+        $keys = $service->listKeys($this->repo);
 
-        // Assert: команда успешна, ровно 1 ключ, current=true
-        $this->assertSame(0, $result['exitCode'], 'key list should succeed: ' . $result['stderr']);
-        $keys = json_decode($result['stdout'], true);
-        $this->assertIsArray($keys);
         $this->assertCount(1, $keys, 'should have exactly 1 key after init');
         $this->assertTrue($keys[0]['current'] ?? false, 'initial key should be current');
     }
 
     /**
      * Проверяет полный цикл: add key → list (2 ключа) → remove → list (1 ключ).
-     *
-     * Важно: ключи добавляются через stdin (подтверждение нового пароля),
-     *        удаляется НЕ текущий ключ, а добавленный.
      */
     public function testAddAndRemoveKey(): void
     {
-        // Шаг 1: добавляем новый ключ (restic требует подтверждения пароля через stdin)
-        $result = $this->runner->run(
-            ['restic', 'key', 'add', '--repo', $this->repoDir],
-            ['RESTIC_PASSWORD' => $this->repoPassword],
-            "newpass456\nnewpass456\n"
-        );
-        $this->assertSame(0, $result['exitCode'], 'key add should succeed: ' . $result['stderr']);
+        $service = new KeyService(new CommandRunner());
+
+        // Шаг 1: добавляем новый ключ
+        $result = $service->addKey($this->repo, 'newpass456');
+        $this->assertTrue($result['ok'], 'key add should succeed: ' . $result['error']);
 
         // Шаг 2: проверяем, что теперь 2 ключа
-        $listResult = $this->runner->run(
-            ['restic', 'key', 'list', '--json', '--repo', $this->repoDir],
-            ['RESTIC_PASSWORD' => $this->repoPassword]
-        );
-        $keys = json_decode($listResult['stdout'], true);
-        $this->assertIsArray($keys);
+        $keys = $service->listKeys($this->repo);
         $this->assertCount(2, $keys, 'should have 2 keys after adding');
 
         // Находим НЕ текущий ключ для удаления
@@ -123,19 +112,11 @@ class KeyEndToEndTest extends TestCase
         $this->assertNotNull($newKeyId, 'should find a non-current key');
 
         // Шаг 3: удаляем добавленный ключ
-        $removeResult = $this->runner->run(
-            ['restic', 'key', 'remove', $newKeyId, '--repo', $this->repoDir],
-            ['RESTIC_PASSWORD' => $this->repoPassword]
-        );
-        $this->assertSame(0, $removeResult['exitCode'], 'key remove should succeed: ' . $removeResult['stderr']);
+        $removeResult = $service->removeKey($this->repo, $newKeyId);
+        $this->assertTrue($removeResult['ok'], 'key remove should succeed: ' . $removeResult['error']);
 
         // Шаг 4: проверяем, что снова 1 ключ
-        $listResult = $this->runner->run(
-            ['restic', 'key', 'list', '--json', '--repo', $this->repoDir],
-            ['RESTIC_PASSWORD' => $this->repoPassword]
-        );
-        $keysAfter = json_decode($listResult['stdout'], true);
-        $this->assertIsArray($keysAfter);
+        $keysAfter = $service->listKeys($this->repo);
         $this->assertCount(1, $keysAfter, 'should have 1 key after removal');
     }
 
@@ -146,21 +127,14 @@ class KeyEndToEndTest extends TestCase
      */
     public function testChangePassword(): void
     {
-        // Act: меняем пароль (подтверждение через stdin)
-        $result = $this->runner->run(
-            ['restic', 'key', 'passwd', '--repo', $this->repoDir],
-            ['RESTIC_PASSWORD' => $this->repoPassword],
-            "changed789\nchanged789\n"
-        );
-        $this->assertSame(0, $result['exitCode'], 'key passwd should succeed: ' . $result['stderr']);
+        $service = new KeyService(new CommandRunner());
+
+        $result = $service->changePassword($this->repo, 'changed789');
+        $this->assertTrue($result['ok'], 'key passwd should succeed: ' . $result['error']);
 
         // Assert: ключ доступен с НОВЫМ паролем
-        $listResult = $this->runner->run(
-            ['restic', 'key', 'list', '--json', '--repo', $this->repoDir],
-            ['RESTIC_PASSWORD' => 'changed789']
-        );
-        $keysAfter = json_decode($listResult['stdout'], true);
-        $this->assertIsArray($keysAfter);
+        $repoWithNewPassword = array_merge($this->repo, ['password' => 'changed789']);
+        $keysAfter = $service->listKeys($repoWithNewPassword);
         $this->assertCount(1, $keysAfter, 'key should still exist after password change');
     }
 

@@ -10,6 +10,7 @@ namespace App\Controllers;
 
 use App\Core\App;
 use App\Core\Request;
+use App\Restic\ResticCommandBuilder;
 
 class ExportController
 {
@@ -59,20 +60,8 @@ class ExportController
         $filename = basename($path);
         $mime = $this->getMimeType($filename);
 
-        $command = ['restic'];
-        if (empty($repo['password'])) {
-            $command[] = '--insecure-no-password';
-        }
-        $command[] = '--repo';
-        $command[] = $repo['path'];
-        $command[] = 'dump';
-        $command[] = $snapId;
-        $command[] = $path;
-
-        $env = $repo['env'] ?? [];
-        if (!empty($repo['password'])) {
-            $env['RESTIC_PASSWORD'] = $repo['password'];
-        }
+        $command = ResticCommandBuilder::buildCommand(['dump', $snapId, $path], $repo);
+        $env = ResticCommandBuilder::buildEnv($repo);
 
         App::runner()->runStreamWithHeaders($command, $env, $mime, $filename);
     }
@@ -122,20 +111,8 @@ class ExportController
         $shortId = substr($snapId, 0, 8);
         $filename = 'snapshot-' . $shortId . '.tar';
 
-        $command = ['restic'];
-        if (empty($repo['password'])) {
-            $command[] = '--insecure-no-password';
-        }
-        $command[] = '--repo';
-        $command[] = $repo['path'];
-        $command[] = 'dump';
-        $command[] = $snapId;
-        $command[] = '/';
-
-        $env = $repo['env'] ?? [];
-        if (!empty($repo['password'])) {
-            $env['RESTIC_PASSWORD'] = $repo['password'];
-        }
+        $command = ResticCommandBuilder::buildCommand(['dump', $snapId, '/'], $repo);
+        $env = ResticCommandBuilder::buildEnv($repo);
 
         App::runner()->runStreamWithHeaders($command, $env, 'application/x-tar', $filename);
     }

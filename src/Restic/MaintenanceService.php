@@ -23,8 +23,8 @@ class MaintenanceService
      */
     public function check(array $repository): array
     {
-        $command = $this->buildCommand(['check'], $repository);
-        $env = $this->buildEnv($repository);
+        $command = ResticCommandBuilder::buildCommand(['check'], $repository);
+        $env = ResticCommandBuilder::buildEnv($repository);
         $result = $this->runner->run($command, $env);
 
         return [
@@ -40,8 +40,8 @@ class MaintenanceService
      */
     public function prune(array $repository): array
     {
-        $command = $this->buildCommand(['prune'], $repository);
-        $env = $this->buildEnv($repository);
+        $command = ResticCommandBuilder::buildCommand(['prune'], $repository);
+        $env = ResticCommandBuilder::buildEnv($repository);
         $result = $this->runner->run($command, $env);
 
         return [
@@ -57,8 +57,8 @@ class MaintenanceService
      */
     public function rebuildIndex(array $repository): array
     {
-        $command = $this->buildCommand(['rebuild-index'], $repository);
-        $env = $this->buildEnv($repository);
+        $command = ResticCommandBuilder::buildCommand(['rebuild-index'], $repository);
+        $env = ResticCommandBuilder::buildEnv($repository);
         $result = $this->runner->run($command, $env);
 
         return [
@@ -74,8 +74,8 @@ class MaintenanceService
      */
     public function unlock(array $repository): array
     {
-        $command = $this->buildCommand(['unlock'], $repository);
-        $env = $this->buildEnv($repository);
+        $command = ResticCommandBuilder::buildCommand(['unlock'], $repository);
+        $env = ResticCommandBuilder::buildEnv($repository);
         $result = $this->runner->run($command, $env);
 
         return [
@@ -121,8 +121,8 @@ class MaintenanceService
             $args[] = '--dry-run';
         }
 
-        $command = $this->buildCommand($args, $repository);
-        $env = $this->buildEnv($repository);
+        $command = ResticCommandBuilder::buildCommand($args, $repository);
+        $env = ResticCommandBuilder::buildEnv($repository);
         $result = $this->runner->run($command, $env);
 
         return [
@@ -130,39 +130,5 @@ class MaintenanceService
             'output' => $result['stdout'],
             'error' => $result['stderr'],
         ];
-    }
-
-    /**
-     * @param array<int, string> $subcommandArgs
-     * @param array<string, mixed> $repository
-     * @return array<int, string>
-     */
-    private function buildCommand(array $subcommandArgs, array $repository): array
-    {
-        $cmd = ['restic'];
-
-        if (empty($repository['password'])) {
-            $cmd[] = '--insecure-no-password';
-        }
-
-        $cmd[] = '--repo';
-        $cmd[] = $repository['path'];
-
-        return array_merge($cmd, $subcommandArgs);
-    }
-
-    /**
-     * @param array<string, mixed> $repository
-     * @return array<string, string>
-     */
-    private function buildEnv(array $repository): array
-    {
-        $env = $repository['env'] ?? [];
-
-        if (!empty($repository['password'])) {
-            $env['RESTIC_PASSWORD'] = $repository['password'];
-        }
-
-        return $env;
     }
 }

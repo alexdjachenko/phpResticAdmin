@@ -148,7 +148,7 @@ class Authenticator
 
     public function canMove(string $fromCategory, string $toCategory): bool
     {
-        return $this->canEdit($fromCategory) && $this->canEdit($toCategory);
+        return $this->canUseRead($fromCategory) && $this->canUseWrite($toCategory);
     }
 
     /**
