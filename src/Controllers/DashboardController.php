@@ -27,7 +27,14 @@ class DashboardController
         $currentRepoId = App::session()->get('current_repo');
         $repo = null;
         $latestSnapshots = [];
-        $repoCount = count($repositories);
+
+        $visibleRepositories = [];
+        foreach ($repositories as $r) {
+            if ($auth->canUse($r['category'] ?? 'public')) {
+                $visibleRepositories[] = $r;
+            }
+        }
+        $repoCount = count($visibleRepositories);
 
         if ($currentRepoId !== null) {
             foreach ($repositories as $r) {

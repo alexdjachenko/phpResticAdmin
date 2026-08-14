@@ -9,6 +9,9 @@
 namespace App\Tests\Integration;
 
 use App\Restic\CommandRunner;
+use App\Restic\MaintenanceService;
+use App\Restic\RepositoryService;
+use App\Restic\SnapshotService;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -19,7 +22,7 @@ use PHPUnit\Framework\TestCase;
  *       снапшотов, снятие блокировки, перестроение индекса.
  *
  * Сценарий:
- *   1. Инициализируется репозиторий, создаются 3 снапшота с тегами.
+ *   1. Инициализируется репозиторий (RepositoryService::init), создаются 3 снапшота (RepositoryService::backupSync).
  *   2. check — проверка целостности (должна пройти успешно).
  *   3. forget --dry-run — проверка, что снапшоты НЕ удаляются.
  *   4. forget --keep-last 1 — реальное удаление, остаётся 1 снапшот.
@@ -27,10 +30,10 @@ use PHPUnit\Framework\TestCase;
  *   6. rebuild-index — перестроение индекса.
  *
  * Критерий успеха:
- *   - check возвращает exitCode 0.
+ *   - check возвращает ok=true.
  *   - forget --dry-run не меняет количество снапшотов.
  *   - forget --keep-last 1 оставляет ровно 1 снапшот.
- *   - unlock и rebuild-index возвращают exitCode 0.
+ *   - unlock и rebuild-index возвращают ok=true.
  *
  * Важно: тесты выполняются последовательно и модифицируют состояние
  *        репозитория (forget реально удаляет снапшоты). Порядок тестов
@@ -46,8 +49,8 @@ class MaintenanceEndToEndTest extends TestCase
     private string $repoDir;
     /** @var string Путь к тестовым данным */
     private string $dataDir;
-    /** @var CommandRunner */
-    private CommandRunner $runner;
+    /** @var array<string, mixed> Конфигурация тестового репозитория */
+    private array $repo;
 
     protected function setUp(): void
     {
@@ -63,26 +66,30 @@ class MaintenanceEndToEndTest extends TestCase
         mkdir($this->dataDir . '/b', 0777, true);
         mkdir($this->dataDir . '/c', 0777, true);
 
-        $this->runner = new CommandRunner();
+        $this->repo = [
+            'id' => 'maint-repo',
+            'name' => 'Maintenance',
+            'type' => 'local',
+            'path' => $this->repoDir,
+            'password' => null,
+        ];
 
         // Инициализируем репозиторий
-        $result = $this->runner->run(
-            ['restic', 'init', '--repo', $this->repoDir, '--insecure-no-password'],
-            ['RESTIC_PASSWORD' => '']
-        );
-        if ($result['exitCode'] !== 0) {
-            $this->markTestSkipped('Failed to init restic repo: ' . $result['stderr']);
+        $repoService = new RepositoryService(new CommandRunner());
+        $result = $repoService->init($this->repo);
+        if (!$result['ok']) {
+            $this->markTestSkipped('Failed to init restic repo: ' . $result['error']);
         }
 
-        // Создаём 3 снапшота с разными тегами для тестов forget
+        // Создаём 3 снапшота
         file_put_contents($this->dataDir . '/a/f1.txt', 'data1');
-        $this->backup('tag1');
+        $this->backup();
 
         file_put_contents($this->dataDir . '/b/f2.txt', 'data2');
-        $this->backup('tag2');
+        $this->backup();
 
         file_put_contents($this->dataDir . '/c/f3.txt', 'data3');
-        $this->backup('tag3');
+        $this->backup();
     }
 
     protected function tearDown(): void
@@ -95,14 +102,10 @@ class MaintenanceEndToEndTest extends TestCase
      */
     public function testCheckRunsSuccessfully(): void
     {
-        // Act: запускаем проверку целостности
-        $result = $this->runner->run(
-            ['restic', 'check', '--repo', $this->repoDir, '--insecure-no-password'],
-            ['RESTIC_PASSWORD' => '']
-        );
+        $service = new MaintenanceService(new CommandRunner());
+        $result = $service->check($this->repo);
 
-        // Assert: проверка прошла без ошибок
-        $this->assertSame(0, $result['exitCode'], 'check should succeed: ' . $result['stderr']);
+        $this->assertTrue($result['ok'], 'check should succeed: ' . $result['error']);
     }
 
     /**
@@ -110,72 +113,40 @@ class MaintenanceEndToEndTest extends TestCase
      */
     public function testForgetDryRunDoesNotDelete(): void
     {
-        // Запоминаем исходное количество снапшотов
-        $snapResult = $this->runner->run(
-            ['restic', 'snapshots', '--json', '--repo', $this->repoDir, '--insecure-no-password'],
-            ['RESTIC_PASSWORD' => '']
-        );
-        $snaps = json_decode($snapResult['stdout'], true);
-        $this->assertIsArray($snaps);
-        $count = count($snaps);
+        $snapService = new SnapshotService(new CommandRunner());
+        $count = count($snapService->listSnapshots($this->repo));
 
-        // Act: forget --dry-run --keep-last 1
-        $result = $this->runner->run(
-            ['restic', 'forget', '--dry-run', '--keep-last', '1', '--repo', $this->repoDir, '--insecure-no-password'],
-            ['RESTIC_PASSWORD' => '']
-        );
-        $this->assertSame(0, $result['exitCode'], 'forget dry-run should succeed: ' . $result['stderr']);
+        $service = new MaintenanceService(new CommandRunner());
+        $result = $service->forget($this->repo, ['keep_last' => 1, 'dry_run' => true]);
+        $this->assertTrue($result['ok'], 'forget dry-run should succeed: ' . $result['error']);
 
-        // Assert: количество снапшотов не изменилось
-        $snapResult = $this->runner->run(
-            ['restic', 'snapshots', '--json', '--repo', $this->repoDir, '--insecure-no-password'],
-            ['RESTIC_PASSWORD' => '']
-        );
-        $snapsAfter = json_decode($snapResult['stdout'], true);
-        $this->assertIsArray($snapsAfter);
-        $this->assertSame($count, count($snapsAfter), 'dry-run should not delete snapshots');
+        $this->assertSame($count, count($snapService->listSnapshots($this->repo)), 'dry-run should not delete snapshots');
     }
 
     /**
      * Проверяет реальное удаление снапшотов: forget --keep-last 1.
      *
      * Важно: этот тест НЕОБРАТИМО изменяет состояние репозитория.
-     *        Последующие тесты в этом классе не должны рассчитывать
-     *        на исходные 3 снапшота.
      */
     public function testForgetWithKeepLast(): void
     {
-        // Act: реальное удаление — оставляем только последний снапшот
-        $result = $this->runner->run(
-            ['restic', 'forget', '--keep-last', '1', '--repo', $this->repoDir, '--insecure-no-password'],
-            ['RESTIC_PASSWORD' => '']
-        );
-        $this->assertSame(0, $result['exitCode'], 'forget should succeed: ' . $result['stderr']);
+        $service = new MaintenanceService(new CommandRunner());
+        $result = $service->forget($this->repo, ['keep_last' => 1]);
+        $this->assertTrue($result['ok'], 'forget should succeed: ' . $result['error']);
 
-        // Assert: остался ровно 1 снапшот
-        $snapResult = $this->runner->run(
-            ['restic', 'snapshots', '--json', '--repo', $this->repoDir, '--insecure-no-password'],
-            ['RESTIC_PASSWORD' => '']
-        );
-        $snaps = json_decode($snapResult['stdout'], true);
-        $this->assertIsArray($snaps);
-        $this->assertCount(1, $snaps, 'forget --keep-last 1 should leave 1 snapshot');
+        $snapService = new SnapshotService(new CommandRunner());
+        $this->assertCount(1, $snapService->listSnapshots($this->repo), 'forget --keep-last 1 should leave 1 snapshot');
     }
 
     /**
-     * Проверяет, что unlock на чистом (не заблокированном) репозитории
-     * завершается успешно (exitCode 0).
+     * Проверяет, что unlock на чистом (не заблокированном) репозитории завершается успешно.
      */
     public function testUnlockOnCleanRepoSucceeds(): void
     {
-        // Act: unlock на чистом репо
-        $result = $this->runner->run(
-            ['restic', 'unlock', '--repo', $this->repoDir, '--insecure-no-password'],
-            ['RESTIC_PASSWORD' => '']
-        );
+        $service = new MaintenanceService(new CommandRunner());
+        $result = $service->unlock($this->repo);
 
-        // Assert: операция успешна
-        $this->assertSame(0, $result['exitCode'], 'unlock on clean repo should succeed');
+        $this->assertTrue($result['ok'], 'unlock on clean repo should succeed');
     }
 
     /**
@@ -183,23 +154,17 @@ class MaintenanceEndToEndTest extends TestCase
      */
     public function testRebuildIndexSucceeds(): void
     {
-        // Act: перестраиваем индекс
-        $result = $this->runner->run(
-            ['restic', 'rebuild-index', '--repo', $this->repoDir, '--insecure-no-password'],
-            ['RESTIC_PASSWORD' => '']
-        );
+        $service = new MaintenanceService(new CommandRunner());
+        $result = $service->rebuildIndex($this->repo);
 
-        // Assert: операция успешна
-        $this->assertSame(0, $result['exitCode'], 'rebuild-index should succeed: ' . $result['stderr']);
+        $this->assertTrue($result['ok'], 'rebuild-index should succeed: ' . $result['error']);
     }
 
-    private function backup(string $tag): void
+    private function backup(): void
     {
-        $result = $this->runner->run(
-            ['restic', 'backup', '--repo', $this->repoDir, '--insecure-no-password', '--tag', $tag, $this->dataDir],
-            ['RESTIC_PASSWORD' => '']
-        );
-        $this->assertSame(0, $result['exitCode'], "Backup '$tag' should succeed: " . $result['stderr']);
+        $repoService = new RepositoryService(new CommandRunner());
+        $result = $repoService->backupSync($this->repo, [$this->dataDir]);
+        $this->assertTrue($result['ok'], 'Backup should succeed: ' . $result['error']);
     }
 
     private function removeDir(string $dir): void

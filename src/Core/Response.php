@@ -24,7 +24,14 @@ class Response
         $vars['debug'] = App::isDebug();
 
         $user = App::auth()->user();
-        $vars['repositories'] = $user !== null ? App::repoStorage()->loadAll($user) : [];
+        $allRepositories = $user !== null ? App::repoStorage()->loadAll($user) : [];
+        $visibleRepositories = [];
+        foreach ($allRepositories as $repo) {
+            if (App::auth()->canUse($repo['category'] ?? 'public')) {
+                $visibleRepositories[] = $repo;
+            }
+        }
+        $vars['repositories'] = $visibleRepositories;
         $vars['currentRepoId'] = App::session()->get('current_repo');
 
         if (!isset($vars['isLoggedIn'])) {

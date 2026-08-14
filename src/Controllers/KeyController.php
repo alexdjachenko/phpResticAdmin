@@ -275,10 +275,9 @@ class KeyController
         }
 
         $repoId = $request->post('repo_id', '');
-        $keyId = $request->post('key_id', '');
         $newPassword = $request->post('new_password', '');
 
-        if ($repoId === '' || $keyId === '' || $newPassword === '') {
+        if ($repoId === '' || $newPassword === '') {
             App::session()->flash('error', __('keys.add_error'));
             App::response()->redirect('/keys?repo=' . urlencode($repoId));
             return;
@@ -304,7 +303,7 @@ class KeyController
             return;
         }
 
-        $result = App::keyService()->changePassword($repo, $keyId, $newPassword);
+        $result = App::keyService()->changePassword($repo, $newPassword);
 
         if ($result['ok']) {
             App::session()->flash('success', __('keys.passwd_changed'));

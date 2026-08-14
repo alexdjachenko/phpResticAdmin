@@ -6,8 +6,12 @@ services:
       - "8080:80"
     volumes:
       - phpresticadmin_data:/var/www/data
+      - phpresticadmin_sources:/sources
+      - phpresticadmin_backups:/backups
     deploy:
       replicas: 1
 
-volumes:
-  phpresticadmin_data:
+    volumes:
+    phpresticadmin_data:
+    phpresticadmin_sources:
+    phpresticadmin_backups:

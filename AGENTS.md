@@ -263,7 +263,7 @@ docker/
 - `use_write` — без fallback'а. Не задан явно → `false`.
 - `init` — глобальный флаг `can_init` на уровне пользователя
 - `delete` — удалять репозитории (глобальный флаг `can_delete` на уровне пользователя)
-- `canMove(from, to)` — требует `edit` на обе категории
+- `canMove(from, to)` — требует `use_read(source)` + `use_write(dest)`
 
 Fallback для `can_init`/`can_delete`: если флаг не указан — `isLoggedIn()` (true для вошедших, false для guest).
 
@@ -348,7 +348,7 @@ Fallback-правила для пользователей без секции `r
 
 - **`restic ls --json` выдаёт NDJSON (JSON Lines), а не массив.** Каждая строка — отдельный JSON-объект. `json_decode($stdout, true)` на всём выводе падает, нужно парсить построчно.
 - **`restic snapshots --json` в старых версиях (0.14, Debian bookworm) не содержит `summary.total_size`.** Для получения размеров использовать `restic stats --json --mode raw-data <ids...>`. В коде: `SnapshotService::enrichWithSizes()`.
-- **`--insecure-no-password` — глобальный флаг, должен стоять ДО подкоманды** (`restic --insecure-no-password --repo /x snapshots`), а не после позиционных аргументов (иначе restic примет его за snapshot ID). В коде: `SnapshotService::buildCommand()`, `KeyService::buildCommand()`, `MaintenanceService::buildCommand()`, `RepositoryService::buildCommand()` обеспечивают правильный порядок. **Важно:** `RepositoryService` был исправлен (Stage 5 regression) — до исправления флаги ставились после подкоманды (`restic init --repo /path --insecure-no-password`), что ломало init в restic 0.19+.
+- **`--insecure-no-password` — глобальный флаг, должен стоять ДО подкоманды** (`restic --insecure-no-password --repo /x snapshots`), а не после позиционных аргументов (иначе restic примет его за snapshot ID). В коде: `ResticCommandBuilder::buildCommand()` обеспечивает правильный порядок для всех сервисов и контроллеров. **Важно:** `RepositoryService` был исправлен (Stage 5 regression) — до исправления флаги ставились после подкоманды (`restic init --repo /path --insecure-no-password`), что ломало init в restic 0.19+.
 - **`restic ls` возвращает записи `.` и `..`** среди вывода. `empty('..')` → false, поэтому фильтровать явно: `$name === '.' || $name === '..'`.
 - **restic требует `$HOME` для кеша** (`.cache/restic`). В Docker-контейнере переменная не задана → падает `ls`, `find` и др. `CommandRunner::ensureEnv()` проставляет `HOME=/tmp`.
 - **`restic ls` не рекурсивен.** Показывает только прямых детей каталога. Каждый клик по папке в browse делает отдельный HTTP-запрос.
@@ -455,21 +455,57 @@ return [
 ];
 ```
 
+### `data/data/users.yaml`
+
+Дополнительный источник пользователей (формат — map логин → массив настроек,
+как в `users.php`). При совпадении логина побеждает `users.php`.
+
+```yaml
+viewer:
+    password: null
+    api_tokens: []
+    can_init: false
+    can_delete: false
+    repos:
+        public:   { use: true, use_read: true, use_write: false, edit: false }
+        private:  { use: false, use_read: false, use_write: false, edit: false }
+        session:  { use: false, use_read: false, use_write: false, edit: false }
+```
+
 ### `data/data/repositories.yaml`
+
+Расположение хранится в поле, зависящем от типа: `local_path` (local), `s3_bucket` (s3),
+`sftp_path` (sftp), `rest_url` (rest). S3-endpoint хранится в `env.AWS_ENDPOINT`.
 
 ```yaml
 repositories:
   - id: "a1b2c3d4"
     name: "My Backup"
     type: "local"
-    path: "/backups/repo"
+    local_path: "/backups/repo"
     password: null
     backup_paths:
       - "/home"
       - "/etc"
+  - id: "e5f6a7b8"
+    name: "S3 Backup"
+    type: "s3"
+    s3_bucket: "my-bucket/restic"
+    password: "secret"
     env:
       AWS_ACCESS_KEY_ID: "..."
       AWS_SECRET_ACCESS_KEY: "..."
+      AWS_ENDPOINT: "https://s3.example.com"
+  - id: "c9d0e1f2"
+    name: "SFTP Backup"
+    type: "sftp"
+    sftp_path: "user@host:/srv/repo"
+    password: "secret"
+  - id: "f3a4b5c6"
+    name: "REST Backup"
+    type: "rest"
+    rest_url: "http://host:8000/"
+    password: "secret"
 ```
 
 ---

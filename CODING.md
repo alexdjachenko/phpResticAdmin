@@ -34,7 +34,7 @@
 - В шаблонах: `<?= htmlspecialchars(__('key'), ENT_QUOTES, 'UTF-8') ?>`
 - В контроллерах (flash-сообщения, ошибки): `__('key', ['{var}' => $value])`
 - Строки, которые не нужно переводить: логи (`App::log()`), ключи массивов, технические идентификаторы
-- Новые ключи переводов добавляются в ОБА файла: `data/lang/en.php` и `data/lang/ru.php`
+- Новые ключи переводов добавляются в ОБА файла: `src/Lang/en.php` и `src/Lang/ru.php`
 - Ключи группируются по контексту: `repo.*`, `auth.*`, `flash.*`, `form.*`, `nav.*`, `error.*`
 
 ## Архитектурные соглашения
@@ -47,9 +47,10 @@
 
 ## Пути репозиториев
 
-- **Всегда использовать `RepositoryController::normalizePath()`** для новых путей
-- Абсолютные пути (`/data/backup`) и URL-схемы (`s3://...`, `sftp://...`) сохраняются как есть
-- Относительные пути (`my-repo`) получают префикс `repo_base_dir` из `settings.php` (по умолчанию `/backups`)
+- **Всегда использовать `RepositoryPath::normalize()`** для новых путей
+- Расположение хранится в типоспецифичном поле: `local_path` (local), `s3_bucket` (s3), `sftp_path` (sftp), `rest_url` (rest)
+- Абсолютные пути (`/data/backup`) сохраняются как есть; относительные (`my-repo`) получают префикс `repo_base_dir` из `settings.php` (по умолчанию `/backups`)
+- S3: `s3_bucket` + `env.AWS_ENDPOINT`; URL `s3:...` собирается автоматически через `RepositoryPath::toResticLocation()`
 
 ## Модель прав
 
@@ -70,7 +71,7 @@
 - `use_read` — без fallback'а: не задан → `false`.
 - `use_write` — без fallback'а: не задан → `false`.
 - `init` и `delete` — глобальные флаги `can_init`/`can_delete` на уровне пользователя
-- `canMove(from, to)` требует `use_write` на обе категории
+- `canMove(from, to)` требует `use_read(source)` + `use_write(dest)`
 - Чекбокс «init» в форме добавления показывается только если `canInit()`
 - Для пользователей без явных `can_init`/`can_delete`: logged-in → true, guest → false
 

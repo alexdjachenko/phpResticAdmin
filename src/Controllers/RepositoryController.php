@@ -10,6 +10,7 @@ namespace App\Controllers;
 
 use App\Core\App;
 use App\Core\Request;
+use App\Helpers\RepositoryPath;
 
 class RepositoryController
 {
@@ -23,7 +24,14 @@ class RepositoryController
             return;
         }
 
-        $repositories = App::repoStorage()->loadAll($user);
+        $allRepositories = App::repoStorage()->loadAll($user);
+        $repositories = [];
+        foreach ($allRepositories as $repo) {
+            if ($auth->canUse($repo['category'] ?? 'public')) {
+                $repositories[] = $repo;
+            }
+        }
+
         $flash = App::session()->flash('success');
 
         $availableCategories = [];
@@ -285,15 +293,17 @@ class RepositoryController
         $repoId = $request->post('repo_id', '');
         $name = trim($request->post('name', ''));
         $type = $request->post('type', 'local');
-        $path = trim($request->post('path', ''));
         $password = $request->post('password', '');
         $backupPathsRaw = $request->post('backup_paths', '');
         $s3Key = trim($request->post('s3_key', ''));
         $s3Secret = trim($request->post('s3_secret', ''));
         $s3Endpoint = trim($request->post('s3_endpoint', ''));
 
-        if ($name === '' || $path === '') {
-            App::session()->flash('error', 'Name and path are required.');
+        $locationField = $this->locationFieldFor($type);
+        $locationValue = trim($request->post($locationField, ''));
+
+        if ($name === '' || $locationValue === '') {
+            App::session()->flash('error', __('repo.name_path_required'));
             App::response()->redirect('/repositories/edit?repo=' . urlencode($repoId));
             return;
         }
@@ -319,22 +329,43 @@ class RepositoryController
             return;
         }
 
-        $path = $this->normalizePath($path);
+        $settings = App::configStorage()->loadSettings();
 
-        $newData = [
-            'name' => $name,
-            'type' => $type,
-            'path' => $path,
-        ];
+        $location = RepositoryPath::normalize($type, $locationValue, $settings['repo_base_dir'] ?? null);
 
-        if ($password !== '') {
-            $newData['password'] = $password;
+        if ($type === 'local' && !RepositoryPath::localRepoAllowed($location, $settings['repo_paths_roots'] ?? [])) {
+            App::session()->flash('error', __('repo.path_outside_roots', ['{roots}' => implode(', ', $settings['repo_paths_roots'] ?? [])]));
+            App::response()->redirect('/repositories/edit?repo=' . urlencode($repoId));
+            return;
         }
 
         $backupPaths = array_values(array_filter(
             array_map('trim', explode("\n", $backupPathsRaw)),
             function (string $p): bool { return $p !== ''; }
         ));
+
+        $disallowedBackup = RepositoryPath::firstDisallowedBackupPath($backupPaths, $settings['backup_paths_roots'] ?? []);
+        if ($disallowedBackup !== null) {
+            App::session()->flash('error', __('repo.backup_path_outside_roots', ['{roots}' => implode(', ', $settings['backup_paths_roots'] ?? [])]));
+            App::response()->redirect('/repositories/edit?repo=' . urlencode($repoId));
+            return;
+        }
+
+        $newData = [
+            'name' => $name,
+            'type' => $type,
+            'local_path' => null,
+            's3_bucket' => null,
+            'sftp_path' => null,
+            'rest_url' => null,
+            'path' => null,
+        ];
+        $newData[$locationField] = $location;
+
+        if ($password !== '') {
+            $newData['password'] = $password;
+        }
+
         if (!empty($backupPaths)) {
             $newData['backup_paths'] = $backupPaths;
         } else {
@@ -416,6 +447,14 @@ class RepositoryController
             return;
         }
 
+        $settings = App::configStorage()->loadSettings();
+        $disallowedBackup = RepositoryPath::firstDisallowedBackupPath($backupPaths, $settings['backup_paths_roots'] ?? []);
+        if ($disallowedBackup !== null) {
+            App::session()->flash('error', __('repo.backup_path_outside_roots', ['{roots}' => implode(', ', $settings['backup_paths_roots'] ?? [])]));
+            App::response()->redirect('/repositories/detail?repo=' . urlencode($repoId));
+            return;
+        }
+
         $result = App::repoService()->backupSync($repo, $backupPaths);
 
         echo App::response()->render('repositories/backup.php', [
@@ -491,7 +530,6 @@ class RepositoryController
 
         $name = trim($request->post('name', ''));
         $type = $request->post('type', 'local');
-        $path = trim($request->post('path', ''));
         $category = $request->post('category', '');
         $password = $request->post('password', '');
         $initRepo = $request->post('init_repo', '0') === '1';
@@ -500,14 +538,17 @@ class RepositoryController
         $s3Secret = trim($request->post('s3_secret', ''));
         $s3Endpoint = trim($request->post('s3_endpoint', ''));
 
-        if ($name === '' || $path === '') {
-            App::session()->flash('error', 'Name and path are required.');
+        $locationField = $this->locationFieldFor($type);
+        $locationValue = trim($request->post($locationField, ''));
+
+        if ($name === '' || $locationValue === '') {
+            App::session()->flash('error', __('repo.name_path_required'));
             App::response()->redirect('/repositories/add');
             return;
         }
 
         if (!in_array($category, ['public', 'private', 'session'], true)) {
-            App::session()->flash('error', 'Invalid category.');
+            App::session()->flash('error', __('repo.invalid_category'));
             App::response()->redirect('/repositories/add');
             return;
         }
@@ -517,20 +558,36 @@ class RepositoryController
             return;
         }
 
-        $path = $this->normalizePath($path);
+        $settings = App::configStorage()->loadSettings();
 
-        $repository = [
-            'id' => bin2hex(random_bytes(8)),
-            'name' => $name,
-            'type' => $type,
-            'path' => $path,
-            'password' => $password !== '' ? $password : null,
-        ];
+        $location = RepositoryPath::normalize($type, $locationValue, $settings['repo_base_dir'] ?? null);
+
+        if ($type === 'local' && !RepositoryPath::localRepoAllowed($location, $settings['repo_paths_roots'] ?? [])) {
+            App::session()->flash('error', __('repo.path_outside_roots', ['{roots}' => implode(', ', $settings['repo_paths_roots'] ?? [])]));
+            App::response()->redirect('/repositories/add');
+            return;
+        }
 
         $backupPaths = array_values(array_filter(
             array_map('trim', explode("\n", $backupPathsRaw)),
             function (string $p): bool { return $p !== ''; }
         ));
+
+        $disallowedBackup = RepositoryPath::firstDisallowedBackupPath($backupPaths, $settings['backup_paths_roots'] ?? []);
+        if ($disallowedBackup !== null) {
+            App::session()->flash('error', __('repo.backup_path_outside_roots', ['{roots}' => implode(', ', $settings['backup_paths_roots'] ?? [])]));
+            App::response()->redirect('/repositories/add');
+            return;
+        }
+
+        $repository = [
+            'id' => bin2hex(random_bytes(8)),
+            'name' => $name,
+            'type' => $type,
+            'password' => $password !== '' ? $password : null,
+        ];
+        $repository[$locationField] = $location;
+
         if (!empty($backupPaths)) {
             $repository['backup_paths'] = $backupPaths;
         }
@@ -700,15 +757,13 @@ class RepositoryController
         App::response()->json(['ok' => true, 'redirect' => '/repositories', '_csrf_token' => App::security()->csrfToken()]);
     }
 
-    private function normalizePath(string $path): string
+    private function locationFieldFor(string $type): string
     {
-        if (str_starts_with($path, '/') || str_contains($path, '://')) {
-            return $path;
-        }
-
-        $settings = App::configStorage()->loadSettings();
-        $baseDir = rtrim($settings['repo_base_dir'] ?? '/backups', '/');
-
-        return $baseDir . '/' . $path;
+        return match ($type) {
+            's3' => 's3_bucket',
+            'sftp' => 'sftp_path',
+            'rest' => 'rest_url',
+            default => 'local_path',
+        };
     }
 }

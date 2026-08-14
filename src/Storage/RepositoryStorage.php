@@ -220,7 +220,7 @@ class RepositoryStorage
      */
     private function applyUpdate(array &$repo, array $newData): void
     {
-        $editable = ['name', 'type', 'path', 'password', 'backup_paths', 'env'];
+        $editable = ['name', 'type', 'local_path', 's3_bucket', 'sftp_path', 'rest_url', 'path', 'password', 'backup_paths', 'env'];
         foreach ($editable as $field) {
             if (array_key_exists($field, $newData)) {
                 $repo[$field] = $newData[$field];

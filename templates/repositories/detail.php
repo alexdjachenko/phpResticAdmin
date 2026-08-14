@@ -3,6 +3,13 @@ $cat = $category;
 $catLabel = __('repo.category.' . $cat);
 $badgeClass = 'badge-' . $cat;
 $backupPaths = $repo['backup_paths'] ?? [];
+$locationField = match ($repo['type'] ?? 'local') {
+    's3' => 's3_bucket',
+    'sftp' => 'sftp_path',
+    'rest' => 'rest_url',
+    default => 'local_path',
+};
+$locationValue = $repo[$locationField] ?? $repo['path'] ?? '';
 ?>
 <p><a href="/repositories" class="back-link"><?= htmlspecialchars(__('repo.detail_back'), ENT_QUOTES, 'UTF-8') ?></a></p>
 
@@ -19,7 +26,7 @@ $backupPaths = $repo['backup_paths'] ?? [];
         </tr>
         <tr>
             <th><?= htmlspecialchars(__('repo.path'), ENT_QUOTES, 'UTF-8') ?></th>
-            <td><code><?= htmlspecialchars($repo['path'] ?? '', ENT_QUOTES, 'UTF-8') ?></code></td>
+            <td><code><?= htmlspecialchars($locationValue, ENT_QUOTES, 'UTF-8') ?></code></td>
         </tr>
         <?php if (!empty($backupPaths)): ?>
         <tr>

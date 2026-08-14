@@ -9,6 +9,8 @@
 namespace App\Tests\Integration;
 
 use App\Restic\CommandRunner;
+use App\Restic\RepositoryService;
+use App\Restic\SnapshotService;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -20,7 +22,7 @@ use PHPUnit\Framework\TestCase;
  *
  * Сценарий:
  *   1. Создаётся вложенная структура data/a/b/file.txt.
- *   2. Делается backup, получается snapshot ID.
+ *   2. Делается backup (RepositoryService), получается snapshot ID (SnapshotService).
  *   3. restic ls / — проверяется наличие директории a.
  *   4. restic ls data/a/b — проверяется наличие файла file.txt.
  *
@@ -39,6 +41,8 @@ class BrowseIntegrationTest extends TestCase
     private string $repoDir;
     /** @var CommandRunner */
     private CommandRunner $runner;
+    /** @var string ID снапшота для тестов browse */
+    private string $snapId;
 
     protected function setUp(): void
     {
@@ -49,14 +53,19 @@ class BrowseIntegrationTest extends TestCase
 
         $this->runner = new CommandRunner();
 
-        // Инициализируем репозиторий
-        $result = $this->runner->run(
-            ['restic', 'init', '--repo', $this->repoDir, '--insecure-no-password'],
-            ['RESTIC_PASSWORD' => '']
-        );
+        $repo = [
+            'id' => 'browse-repo',
+            'name' => 'Browse',
+            'type' => 'local',
+            'path' => $this->repoDir,
+            'password' => null,
+        ];
 
-        if ($result['exitCode'] !== 0) {
-            $this->markTestSkipped('Failed to init restic repo: ' . $result['stderr']);
+        // Инициализируем репозиторий
+        $repoService = new RepositoryService($this->runner);
+        $result = $repoService->init($repo);
+        if (!$result['ok']) {
+            $this->markTestSkipped('Failed to init restic repo: ' . $result['error']);
         }
 
         // Создаём вложенную структуру: data/a/b/file.txt
@@ -66,21 +75,14 @@ class BrowseIntegrationTest extends TestCase
         file_put_contents($subDir . '/file.txt', 'content');
 
         // Делаем backup
-        $backupResult = $this->runner->run(
-            ['restic', 'backup', '--repo', $this->repoDir, '--insecure-no-password', $dataDir],
-            ['RESTIC_PASSWORD' => '']
-        );
-
-        if ($backupResult['exitCode'] !== 0) {
-            $this->markTestSkipped('Failed to create backup: ' . $backupResult['stderr']);
+        $backupResult = $repoService->backupSync($repo, [$dataDir]);
+        if (!$backupResult['ok']) {
+            $this->markTestSkipped('Failed to create backup: ' . $backupResult['error']);
         }
 
         // Получаем ID последнего снапшота
-        $snapResult = $this->runner->run(
-            ['restic', 'snapshots', '--json', '--repo', $this->repoDir, '--insecure-no-password', '--last'],
-            ['RESTIC_PASSWORD' => '']
-        );
-        $snapshots = json_decode($snapResult['stdout'], true) ?: [];
+        $snapService = new SnapshotService($this->runner);
+        $snapshots = $snapService->listSnapshots($repo);
         $this->snapId = $snapshots[0]['id'] ?? '';
     }
 
@@ -89,29 +91,21 @@ class BrowseIntegrationTest extends TestCase
         $this->removeDir($this->tmpDir);
     }
 
-    /** @var string ID снапшота для тестов browse */
-    private string $snapId;
-
     /**
      * Проверяет просмотр корневого каталога снапшота.
-     *
-     * Ожидается: хотя бы одна директория (мы создали data/a/b/file.txt).
      */
     public function testBrowseRoot(): void
     {
-        // Act: restic ls на корень снапшота
         $result = $this->runner->run(
-            ['restic', 'ls', '--json', '--repo', $this->repoDir, '--insecure-no-password', $this->snapId, '/'],
-            ['RESTIC_PASSWORD' => '']
+            ['restic', '--insecure-no-password', '--repo', $this->repoDir, 'ls', '--json', $this->snapId, '/'],
+            []
         );
 
-        // Assert: команда успешна, парсим NDJSON
         $this->assertSame(0, $result['exitCode'], 'Browse should succeed: ' . $result['stderr']);
         $entries = $this->parseNdjson($result['stdout']);
         $this->assertIsArray($entries);
         $this->assertNotEmpty($entries, 'Root should contain entries');
 
-        // Assert: в корне есть хотя бы одна директория (data/)
         $dirs = array_filter($entries, function ($e): bool {
             return is_array($e) && ($e['type'] ?? '') === 'dir';
         });
@@ -120,29 +114,20 @@ class BrowseIntegrationTest extends TestCase
 
     /**
      * Проверяет просмотр подкаталога снапшота.
-     *
-     * Путь data/a/b должен содержать file.txt.
-     *
-     * TODO: использование полного пути $dataDir . '/a/b' привязано к
-     *       абсолютному пути бэкапа. Это корректно для restic (он хранит
-     *       полные пути), но может быть неочевидно при чтении теста.
      */
     public function testBrowseSubdirectory(): void
     {
         $dataDir = $this->tmpDir . '/data';
 
-        // Act: restic ls на подкаталог data/a/b
         $result = $this->runner->run(
-            ['restic', 'ls', '--json', '--repo', $this->repoDir, '--insecure-no-password', $this->snapId, $dataDir . '/a/b'],
-            ['RESTIC_PASSWORD' => '']
+            ['restic', '--insecure-no-password', '--repo', $this->repoDir, 'ls', '--json', $this->snapId, $dataDir . '/a/b'],
+            []
         );
 
-        // Assert: команда успешна
         $this->assertSame(0, $result['exitCode'], 'Browse subdir should succeed: ' . $result['stderr']);
         $entries = $this->parseNdjson($result['stdout']);
         $this->assertIsArray($entries);
 
-        // Assert: в подкаталоге есть хотя бы один файл
         $files = array_filter($entries, function ($e): bool {
             return is_array($e) && ($e['type'] ?? '') === 'file';
         });

@@ -9,6 +9,7 @@
 namespace App\Tests\Integration;
 
 use App\Restic\CommandRunner;
+use App\Restic\RepositoryService;
 use App\Restic\SnapshotService;
 use PHPUnit\Framework\TestCase;
 
@@ -54,14 +55,17 @@ class SnapshotServiceTest extends TestCase
         mkdir($this->repoDir, 0777, true);
 
         // Инициализируем restic-репозиторий без пароля
-        $runner = new CommandRunner();
-        $result = $runner->run(
-            ['restic', 'init', '--repo', $this->repoDir, '--insecure-no-password'],
-            ['RESTIC_PASSWORD' => '']
-        );
+        $repoService = new RepositoryService(new CommandRunner());
+        $result = $repoService->init([
+            'id' => 'test-repo',
+            'name' => 'Test',
+            'type' => 'local',
+            'path' => $this->repoDir,
+            'password' => null,
+        ]);
 
-        if ($result['exitCode'] !== 0) {
-            $this->markTestSkipped('Failed to init restic repo: ' . $result['stderr']);
+        if (!$result['ok']) {
+            $this->markTestSkipped('Failed to init restic repo: ' . $result['error']);
         }
 
         // Создаём тестовый файл и делаем backup — чтобы в репозитории был хотя бы один снапшот
@@ -69,13 +73,16 @@ class SnapshotServiceTest extends TestCase
         mkdir($testDir, 0777, true);
         file_put_contents($testDir . '/test.txt', 'Hello World');
 
-        $backupResult = $runner->run(
-            ['restic', 'backup', '--repo', $this->repoDir, '--insecure-no-password', $testDir],
-            ['RESTIC_PASSWORD' => '']
-        );
+        $backupResult = $repoService->backupSync([
+            'id' => 'test-repo',
+            'name' => 'Test',
+            'type' => 'local',
+            'path' => $this->repoDir,
+            'password' => null,
+        ], [$testDir]);
 
-        if ($backupResult['exitCode'] !== 0) {
-            $this->markTestSkipped('Failed to create backup: ' . $backupResult['stderr']);
+        if (!$backupResult['ok']) {
+            $this->markTestSkipped('Failed to create backup: ' . $backupResult['error']);
         }
 
         // Конфигурация репозитория для SnapshotService
@@ -188,13 +195,17 @@ class SnapshotServiceTest extends TestCase
         $destDir = $this->tmpDir . '/dest-repo';
         mkdir($destDir, 0777, true);
 
-        $initResult = $runner->run(
-            ['restic', 'init', '--repo', $destDir, '--insecure-no-password'],
-            ['RESTIC_PASSWORD' => '']
-        );
+        $repoService = new RepositoryService($runner);
+        $initResult = $repoService->init([
+            'id' => 'test-dest',
+            'name' => 'Dest',
+            'type' => 'local',
+            'path' => $destDir,
+            'password' => null,
+        ]);
 
-        if ($initResult['exitCode'] !== 0) {
-            $this->markTestSkipped('Failed to init dest restic repo: ' . $initResult['stderr']);
+        if (!$initResult['ok']) {
+            $this->markTestSkipped('Failed to init dest restic repo: ' . $initResult['error']);
         }
 
         $service = new SnapshotService($runner);

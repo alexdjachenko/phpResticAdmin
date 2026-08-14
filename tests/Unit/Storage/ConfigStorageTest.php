@@ -12,16 +12,20 @@ use App\Storage\ConfigStorage;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Юнит-тест ConfigStorage (загрузка users.php и settings.php).
+ * Юнит-тест ConfigStorage (загрузка users.php, users.yaml и settings.php).
  *
  * Цель: проверить парсинг PHP-конфигов, обработку отсутствующих файлов
- *       и невалидного содержимого.
+ *       и невалидного содержимого, а также поддержку users.yaml
+ *       (дополнение к users.php с приоритетом users.php).
  *
  * Сценарий:
  *   - Загрузка существующего users.php и settings.php.
  *   - Отсутствующий файл → пустой массив.
  *   - Файл возвращает не-массив → пустой массив (защита).
  *   - Новый формат users.php с секцией repos.
+ *   - users.yaml грузится, когда users.php отсутствует.
+ *   - При совпадении логинов побеждает users.php.
+ *   - Отсутствующий/невалидный yaml → только php.
  *
  * Критерий успеха: assertSame/assertArrayHasKey проходят.
  */
@@ -29,11 +33,16 @@ class ConfigStorageTest extends TestCase
 {
     /** @var string Временная директория для конфигов */
     private string $tmpDir;
+    /** @var string Временная директория PHP-конфигов (cfg) */
+    private string $configDir;
 
     protected function setUp(): void
     {
         $this->tmpDir = sys_get_temp_dir() . '/phpresticadmin_test_' . uniqid();
-        mkdir($this->tmpDir, 0777, true);
+        $this->configDir = $this->tmpDir . '/cfg';
+        mkdir($this->configDir, 0777, true);
+        // Каталог для users.yaml (dirname(configDir) . '/data')
+        mkdir($this->tmpDir . '/data', 0777, true);
     }
 
     protected function tearDown(): void
@@ -45,11 +54,11 @@ class ConfigStorageTest extends TestCase
     public function testLoadUsersReturnsArray(): void
     {
         file_put_contents(
-            $this->tmpDir . '/users.php',
+            $this->configDir . '/users.php',
             '<?php return ["admin" => ["password" => "hash123"]];'
         );
 
-        $storage = new ConfigStorage($this->tmpDir);
+        $storage = new ConfigStorage($this->configDir);
         $users = $storage->loadUsers();
 
         $this->assertIsArray($users);
@@ -60,7 +69,7 @@ class ConfigStorageTest extends TestCase
     /** Отсутствующий файл → пустой массив. */
     public function testLoadUsersReturnsEmptyArrayWhenFileMissing(): void
     {
-        $storage = new ConfigStorage($this->tmpDir);
+        $storage = new ConfigStorage($this->configDir);
         $users = $storage->loadUsers();
 
         $this->assertIsArray($users);
@@ -71,11 +80,11 @@ class ConfigStorageTest extends TestCase
     public function testLoadSettingsReturnsArray(): void
     {
         file_put_contents(
-            $this->tmpDir . '/settings.php',
+            $this->configDir . '/settings.php',
             '<?php return ["guest_user" => null, "timezone" => "UTC"];'
         );
 
-        $storage = new ConfigStorage($this->tmpDir);
+        $storage = new ConfigStorage($this->configDir);
         $settings = $storage->loadSettings();
 
         $this->assertIsArray($settings);
@@ -86,7 +95,7 @@ class ConfigStorageTest extends TestCase
     /** Отсутствующий settings.php → пустой массив. */
     public function testLoadSettingsReturnsEmptyArrayWhenFileMissing(): void
     {
-        $storage = new ConfigStorage($this->tmpDir);
+        $storage = new ConfigStorage($this->configDir);
         $settings = $storage->loadSettings();
 
         $this->assertIsArray($settings);
@@ -97,11 +106,11 @@ class ConfigStorageTest extends TestCase
     public function testLoadPhpFileReturnsEmptyArrayWhenFileReturnsNonArray(): void
     {
         file_put_contents(
-            $this->tmpDir . '/users.php',
+            $this->configDir . '/users.php',
             '<?php return null;'
         );
 
-        $storage = new ConfigStorage($this->tmpDir);
+        $storage = new ConfigStorage($this->configDir);
         $users = $storage->loadUsers();
 
         $this->assertIsArray($users);
@@ -112,7 +121,7 @@ class ConfigStorageTest extends TestCase
     public function testLoadUsersWithNewFormat(): void
     {
         file_put_contents(
-            $this->tmpDir . '/users.php',
+            $this->configDir . '/users.php',
             '<?php return [
                 "admin" => [
                     "password" => "hash123",
@@ -135,7 +144,7 @@ class ConfigStorageTest extends TestCase
             ];'
         );
 
-        $storage = new ConfigStorage($this->tmpDir);
+        $storage = new ConfigStorage($this->configDir);
         $users = $storage->loadUsers();
 
         $this->assertIsArray($users);
@@ -145,6 +154,61 @@ class ConfigStorageTest extends TestCase
         $this->assertTrue($users['admin']['repos']['public']['edit']);
         $this->assertNull($users['guest']['password']);
         $this->assertFalse($users['guest']['repos']['private']['use']);
+    }
+
+    /** users.yaml грузится, когда users.php отсутствует. */
+    public function testLoadUsersYamlWhenPhpMissing(): void
+    {
+        file_put_contents(
+            $this->tmpDir . '/data/users.yaml',
+            "yamluser:\n    password: null\n    api_tokens: []\n    can_init: false\n    can_delete: false\n    repos:\n        public: { use: true, use_read: true, use_write: false, edit: false }\n"
+        );
+
+        $storage = new ConfigStorage($this->configDir);
+        $users = $storage->loadUsers();
+
+        $this->assertIsArray($users);
+        $this->assertArrayHasKey('yamluser', $users);
+        $this->assertNull($users['yamluser']['password']);
+        $this->assertFalse($users['yamluser']['repos']['public']['use_write']);
+    }
+
+    /** При совпадении логинов побеждает users.php. */
+    public function testLoadUsersPhpWinsOverYaml(): void
+    {
+        file_put_contents(
+            $this->configDir . '/users.php',
+            '<?php return ["shared" => ["password" => "from-php"]];'
+        );
+        file_put_contents(
+            $this->tmpDir . '/data/users.yaml',
+            "shared:\n    password: from-yaml\n"
+        );
+
+        $storage = new ConfigStorage($this->configDir);
+        $users = $storage->loadUsers();
+
+        $this->assertSame('from-php', $users['shared']['password']);
+    }
+
+    /** Отсутствующий/невалидный yaml → только php. */
+    public function testLoadUsersInvalidYamlReturnsOnlyPhp(): void
+    {
+        file_put_contents(
+            $this->configDir . '/users.php',
+            '<?php return ["admin" => ["password" => "hash123"]];'
+        );
+        file_put_contents(
+            $this->tmpDir . '/data/users.yaml',
+            "bad: [unclosed"
+        );
+
+        $storage = new ConfigStorage($this->configDir);
+        $users = $storage->loadUsers();
+
+        $this->assertCount(1, $users);
+        $this->assertArrayHasKey('admin', $users);
+        $this->assertArrayNotHasKey('bad', $users);
     }
 
     private function removeDir(string $dir): void

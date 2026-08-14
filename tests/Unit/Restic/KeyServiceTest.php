@@ -158,7 +158,7 @@ class KeyServiceTest extends TestCase
         $this->assertContains($this->repoPath, $capturedCommand);
     }
 
-    /** changePassword: новый пароль передаётся в stdin, команда содержит passwd и ID. */
+    /** changePassword: новый пароль передаётся в stdin, команда содержит passwd и НЕ содержит ID ключа. */
     public function testChangePasswordSendsNewPasswordToStdin(): void
     {
         $capturedStdin = null;
@@ -180,14 +180,15 @@ class KeyServiceTest extends TestCase
             ->willReturn(['exitCode' => 0, 'stdout' => '', 'stderr' => '']);
 
         $service = new KeyService($mock);
-        $result = $service->changePassword($this->repo, 'abc123', 'newpass456');
+        $result = $service->changePassword($this->repo, 'newpass456');
 
         $this->assertTrue($result['ok']);
         $this->assertNotNull($capturedStdin);
         // Подтверждение нового пароля
         $this->assertSame("newpass456\nnewpass456\n", $capturedStdin);
         $this->assertContains('passwd', $capturedCommand);
-        $this->assertContains('abc123', $capturedCommand);
+        // restic 0.19+ key passwd не принимает ID ключа
+        $this->assertNotContains('abc123', $capturedCommand);
     }
 
     /** addKey с паролем: RESTIC_PASSWORD в env, --insecure-no-password отсутствует. */
@@ -325,5 +326,5 @@ class KeyServiceTest extends TestCase
         $this->assertNotNull($capturedEnv);
         $this->assertArrayHasKey('RESTIC_PASSWORD', $capturedEnv);
         $this->assertSame('secret123', $capturedEnv['RESTIC_PASSWORD']);
-    }
-    }
+        }
+        }

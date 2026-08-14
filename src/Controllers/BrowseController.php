@@ -10,6 +10,7 @@ namespace App\Controllers;
 
 use App\Core\App;
 use App\Core\Request;
+use App\Restic\ResticCommandBuilder;
 
 class BrowseController
 {
@@ -56,15 +57,8 @@ class BrowseController
             return;
         }
 
-        $command = ['restic', 'ls', '--json', '--repo', $repo['path'], $snapId, $path];
-
-        $env = $repo['env'] ?? [];
-
-        if (!empty($repo['password'])) {
-            $env['RESTIC_PASSWORD'] = $repo['password'];
-        } else {
-            $command[] = '--insecure-no-password';
-        }
+        $command = ResticCommandBuilder::buildCommand(['ls', '--json', $snapId, $path], $repo);
+        $env = ResticCommandBuilder::buildEnv($repo);
 
         $result = App::runner()->run($command, $env);
 

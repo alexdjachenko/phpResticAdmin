@@ -22,10 +22,28 @@
         </select>
     </div>
 
-    <div class="form-group">
+    <div class="form-group" data-location-field="local">
         <label for="repo-path"><?= htmlspecialchars(__('repo.path'), ENT_QUOTES, 'UTF-8') ?></label>
-        <input type="text" id="repo-path" name="path" required placeholder="/backups/my-repo">
+        <input type="text" id="repo-path" name="local_path" placeholder="/backups/my-repo">
         <span class="form-help"><?= htmlspecialchars(__('repo.path_help'), ENT_QUOTES, 'UTF-8') ?></span>
+    </div>
+
+    <div class="form-group" data-location-field="s3" style="display:none">
+        <label for="repo-bucket"><?= htmlspecialchars(__('repo.s3_bucket'), ENT_QUOTES, 'UTF-8') ?></label>
+        <input type="text" id="repo-bucket" name="s3_bucket" placeholder="my-bucket/restic">
+        <span class="form-help"><?= htmlspecialchars(__('repo.s3_bucket_help'), ENT_QUOTES, 'UTF-8') ?></span>
+    </div>
+
+    <div class="form-group" data-location-field="sftp" style="display:none">
+        <label for="repo-sftp-path"><?= htmlspecialchars(__('repo.sftp_path'), ENT_QUOTES, 'UTF-8') ?></label>
+        <input type="text" id="repo-sftp-path" name="sftp_path" placeholder="user@host:/srv/repo">
+        <span class="form-help"><?= htmlspecialchars(__('repo.sftp_path_help'), ENT_QUOTES, 'UTF-8') ?></span>
+    </div>
+
+    <div class="form-group" data-location-field="rest" style="display:none">
+        <label for="repo-rest-url"><?= htmlspecialchars(__('repo.rest_url'), ENT_QUOTES, 'UTF-8') ?></label>
+        <input type="text" id="repo-rest-url" name="rest_url" placeholder="http://host:8000/">
+        <span class="form-help"><?= htmlspecialchars(__('repo.rest_url_help'), ENT_QUOTES, 'UTF-8') ?></span>
     </div>
 
     <div class="form-group">
@@ -89,11 +107,15 @@
     var typeSelect = document.getElementById('repo-type');
     var s3Fields = document.getElementById('s3-fields');
 
-    function toggleS3Fields() {
-        s3Fields.style.display = typeSelect.value === 's3' ? 'block' : 'none';
+    function toggleTypeFields() {
+        var type = typeSelect.value;
+        s3Fields.style.display = type === 's3' ? 'block' : 'none';
+        document.querySelectorAll('[data-location-field]').forEach(function(el) {
+            el.style.display = el.getAttribute('data-location-field') === type ? 'block' : 'none';
+        });
     }
 
-    typeSelect.addEventListener('change', toggleS3Fields);
-    toggleS3Fields();
+    typeSelect.addEventListener('change', toggleTypeFields);
+    toggleTypeFields();
 })();
 </script>

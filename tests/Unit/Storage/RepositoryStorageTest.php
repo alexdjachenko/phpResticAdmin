@@ -289,6 +289,50 @@ YAML;
         $this->assertNull($all[0]['backup_paths'] ?? null);
     }
 
+    /** Сохранение типоспецифичных полей расположения (local_path/s3_bucket/sftp_path/rest_url). */
+    public function testSaveWithTypeSpecificLocationFields(): void
+    {
+        $storage = new RepositoryStorage($this->tmpDir . '/repositories.yaml');
+
+        $storage->save('public', ['id' => 'local-1', 'name' => 'Local', 'type' => 'local', 'local_path' => '/backups/repo', 'password' => null], 'testuser');
+        $storage->save('public', ['id' => 's3-1', 'name' => 'S3', 'type' => 's3', 's3_bucket' => 'my-bucket', 'password' => null], 'testuser');
+        $storage->save('public', ['id' => 'sftp-1', 'name' => 'SFTP', 'type' => 'sftp', 'sftp_path' => 'user@host:/repo', 'password' => null], 'testuser');
+        $storage->save('public', ['id' => 'rest-1', 'name' => 'REST', 'type' => 'rest', 'rest_url' => 'http://host:8000/', 'password' => null], 'testuser');
+
+        $all = $storage->loadAll('testuser');
+        $this->assertCount(4, $all);
+
+        $byId = [];
+        foreach ($all as $r) {
+            $byId[$r['id']] = $r;
+        }
+        $this->assertSame('/backups/repo', $byId['local-1']['local_path']);
+        $this->assertSame('my-bucket', $byId['s3-1']['s3_bucket']);
+        $this->assertSame('user@host:/repo', $byId['sftp-1']['sftp_path']);
+        $this->assertSame('http://host:8000/', $byId['rest-1']['rest_url']);
+    }
+
+    /** update очищает старое location-поле при смене типа. */
+    public function testUpdateClearsOldLocationFieldOnTypeChange(): void
+    {
+        $storage = new RepositoryStorage($this->tmpDir . '/repositories.yaml');
+
+        $storage->save('public', ['id' => 't1', 'name' => 'Repo', 'type' => 'local', 'local_path' => '/backups/repo', 'password' => null], 'testuser');
+
+        $storage->update('public', 't1', [
+            'type' => 's3',
+            'local_path' => null,
+            's3_bucket' => 'my-bucket',
+            'sftp_path' => null,
+            'rest_url' => null,
+        ], 'testuser');
+
+        $all = $storage->loadAll('testuser');
+        $this->assertSame('s3', $all[0]['type']);
+        $this->assertSame('my-bucket', $all[0]['s3_bucket']);
+        $this->assertNull($all[0]['local_path'] ?? null);
+    }
+
     private function removeDir(string $dir): void
     {
         if (!is_dir($dir)) {

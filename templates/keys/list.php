@@ -35,7 +35,6 @@
                 <form method="post" action="/keys/passwd" style="display:inline">
                     <input type="hidden" name="_csrf_token" value="<?= htmlspecialchars($csrfToken ?? '', ENT_QUOTES, 'UTF-8') ?>">
                     <input type="hidden" name="repo_id" value="<?= htmlspecialchars($repo['id'] ?? '', ENT_QUOTES, 'UTF-8') ?>">
-                    <input type="hidden" name="key_id" value="<?= htmlspecialchars($keyId, ENT_QUOTES, 'UTF-8') ?>">
                     <input type="password" name="new_password" placeholder="<?= htmlspecialchars(__('keys.new_password'), ENT_QUOTES, 'UTF-8') ?>" required style="width:120px">
                     <button type="submit" class="btn-primary-sm"><?= htmlspecialchars(__('keys.change_pass'), ENT_QUOTES, 'UTF-8') ?></button>
                 </form>
