@@ -15,7 +15,7 @@ use App\Restic\SnapshotService;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Интеграционный тест обслуживания репозитория (check, forget, unlock, rebuild-index).
+ * Интеграционный тест обслуживания репозитория (check, forget, unlock, repair index).
  *
  * Цель: проверить основные maintenance-операции restic при реальном
  *       взаимодействии с CLI: проверка целостности, удаление старых
@@ -27,13 +27,13 @@ use PHPUnit\Framework\TestCase;
  *   3. forget --dry-run — проверка, что снапшоты НЕ удаляются.
  *   4. forget --keep-last 1 — реальное удаление, остаётся 1 снапшот.
  *   5. unlock — снятие блокировки на чистом репо.
- *   6. rebuild-index — перестроение индекса.
+ *   6. repair index — перестроение/восстановление индекса.
  *
  * Критерий успеха:
  *   - check возвращает ok=true.
  *   - forget --dry-run не меняет количество снапшотов.
  *   - forget --keep-last 1 оставляет ровно 1 снапшот.
- *   - unlock и rebuild-index возвращают ok=true.
+ *   - unlock и repair index возвращают ok=true.
  *
  * Важно: тесты выполняются последовательно и модифицируют состояние
  *        репозитория (forget реально удаляет снапшоты). Порядок тестов
@@ -150,14 +150,14 @@ class MaintenanceEndToEndTest extends TestCase
     }
 
     /**
-     * Проверяет перестроение индекса (rebuild-index).
+     * Проверяет перестроение индекса (restic repair index).
      */
     public function testRebuildIndexSucceeds(): void
     {
         $service = new MaintenanceService(new CommandRunner());
         $result = $service->rebuildIndex($this->repo);
 
-        $this->assertTrue($result['ok'], 'rebuild-index should succeed: ' . $result['error']);
+        $this->assertTrue($result['ok'], 'repair index should succeed: ' . $result['error']);
     }
 
     private function backup(): void

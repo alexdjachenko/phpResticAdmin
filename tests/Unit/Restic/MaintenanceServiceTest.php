@@ -13,17 +13,19 @@ use App\Restic\MaintenanceService;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Юнит-тест MaintenanceService (check, prune, rebuild-index, unlock, forget).
+ * Юнит-тест MaintenanceService (check, prune, rebuild-index, unlock, forget, stats).
  *
  * Цель: проверить формирование команд restic для операций обслуживания,
  *       передачу пароля через окружение и флаг --insecure-no-password.
  *
  * Сценарий:
- *   - check/prune/rebuild-index/unlock: проверка аргументов команды.
+ *   - check/prune/rebuildIndex/unlock: проверка аргументов команды.
+ *     rebuildIndex использует restic repair index (rebuild-index устарел).
  *   - forget: проверка аргументов политики (keep-daily, keep-weekly, keep-last,
  *     prune, dry-run), отсутствие --keep-last при keep_last=0.
  *   - forget с паролем: RESTIC_PASSWORD в env.
  *   - forget без пароля: --insecure-no-password в команде.
+ *   - stats: проверка аргументов команды (stats --json).
  *
  * Критерий успеха: моки проверяют аргументы, возвращается ok=true.
  */
@@ -85,15 +87,18 @@ class MaintenanceServiceTest extends TestCase
         $this->assertTrue($result['ok']);
     }
 
-    /** rebuild-index вызывает restic rebuild-index. */
-    public function testRebuildIndexCallsResticRebuildIndex(): void
+    /** rebuildIndex вызывает restic repair index (rebuild-index устарел). */
+    public function testRebuildIndexCallsResticRepairIndex(): void
     {
         $mock = $this->createMock(CommandRunner::class);
         $mock->expects($this->once())
             ->method('run')
             ->with(
                 $this->callback(function (array $cmd) {
-                    return in_array('rebuild-index', $cmd, true) && in_array($this->repoPath, $cmd, true);
+                    return in_array('repair', $cmd, true)
+                        && in_array('index', $cmd, true)
+                        && in_array($this->repoPath, $cmd, true)
+                        && !in_array('rebuild-index', $cmd, true);
                 }),
                 $this->anything()
             )
@@ -214,4 +219,44 @@ class MaintenanceServiceTest extends TestCase
         $this->assertNotNull($capturedCommand);
         $this->assertContains('--insecure-no-password', $capturedCommand);
     }
-}
+
+    /** stats вызывает restic stats --json и возвращает ok=true. */
+    public function testStatsCallsResticStats(): void
+    {
+        $capturedCommand = null;
+        $mock = $this->createMock(CommandRunner::class);
+        $mock->expects($this->once())
+            ->method('run')
+            ->with(
+                $this->callback(function (array $cmd) use (&$capturedCommand) {
+                    $capturedCommand = $cmd;
+                    return true;
+                }),
+                $this->anything()
+            )
+            ->willReturn(['exitCode' => 0, 'stdout' => '{"total_size": 123}', 'stderr' => '']);
+
+        $service = new MaintenanceService($mock);
+        $result = $service->stats($this->repo);
+
+        $this->assertTrue($result['ok']);
+        $this->assertNotNull($capturedCommand);
+        $this->assertContains('stats', $capturedCommand);
+        $this->assertContains('--json', $capturedCommand);
+    }
+
+    /** stats при невалидном JSON возвращает сырой stdout. */
+    public function testStatsReturnsRawOutputForInvalidJson(): void
+    {
+        $mock = $this->createMock(CommandRunner::class);
+        $mock->expects($this->once())
+            ->method('run')
+            ->willReturn(['exitCode' => 0, 'stdout' => 'not-json', 'stderr' => '']);
+
+        $service = new MaintenanceService($mock);
+        $result = $service->stats($this->repo);
+
+        $this->assertTrue($result['ok']);
+        $this->assertSame('not-json', $result['output']);
+    }
+    }

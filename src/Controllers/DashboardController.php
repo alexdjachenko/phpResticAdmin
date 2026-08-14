@@ -48,8 +48,7 @@ class DashboardController
             }
 
             if ($repo !== null) {
-                $allSnapshots = App::snapshotService()->listSnapshots($repo);
-                $latestSnapshots = array_slice($allSnapshots, 0, 5);
+                $latestSnapshots = App::snapshotService()->listLatestSnapshots($repo, 5);
             }
         }
 

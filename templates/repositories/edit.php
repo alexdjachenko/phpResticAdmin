@@ -73,7 +73,8 @@ $repoType = $repo['type'] ?? 'local';
         <div class="form-group">
             <label for="s3-secret"><?= htmlspecialchars(__('repo.s3_secret'), ENT_QUOTES, 'UTF-8') ?></label>
             <input type="password" id="s3-secret" name="s3_secret" placeholder="••••••••">
-        </div>
+            <span class="form-help"><?= htmlspecialchars(__('repo.s3_secret_placeholder'), ENT_QUOTES, 'UTF-8') ?></span>
+            </div>
         <div class="form-group">
             <label for="s3-endpoint"><?= htmlspecialchars(__('repo.s3_endpoint'), ENT_QUOTES, 'UTF-8') ?></label>
             <input type="text" id="s3-endpoint" name="s3_endpoint" value="<?= htmlspecialchars($repo['env']['AWS_ENDPOINT'] ?? '', ENT_QUOTES, 'UTF-8') ?>" placeholder="https://s3.amazonaws.com">

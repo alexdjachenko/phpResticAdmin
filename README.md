@@ -11,7 +11,7 @@ A lightweight, framework-free PHP web UI for managing [restic](https://restic.ne
 ## Features
 
 - Browse snapshots and file trees, download individual files or whole snapshots (tar).
-- Run maintenance operations: `check`, `prune`, `forget`, `rebuild-index`, `unlock`, `init`.
+- Run maintenance operations: `check`, `prune`, `forget`, `repair index`, `unlock`, `init`.
 - Manage encryption keys: list, add, remove, change password.
 - Backends: local, Amazon S3, S3-compatible, SFTP, REST server.
 - Fine-grained per-category permissions (`public` / `private` / `session`).

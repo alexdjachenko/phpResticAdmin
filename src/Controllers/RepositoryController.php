@@ -190,8 +190,7 @@ class RepositoryController
         }
         $canMove = !empty($availableCategories);
 
-        $allSnapshots = App::snapshotService()->listSnapshots($repo);
-        $latestSnapshots = array_slice($allSnapshots, 0, 5);
+        $latestSnapshots = App::snapshotService()->listLatestSnapshots($repo, 5);
 
         $csrfToken = App::security()->csrfToken();
 
@@ -205,7 +204,7 @@ class RepositoryController
             'canMove' => $canMove,
             'availableCategories' => $availableCategories,
             'latestSnapshots' => $latestSnapshots,
-            'totalSnapshots' => count($allSnapshots),
+            'hasMoreSnapshots' => count($latestSnapshots) >= 5,
             'csrfToken' => $csrfToken,
             'isLoggedIn' => $auth->isLoggedIn(),
             'username' => $user,
