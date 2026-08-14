@@ -19,7 +19,8 @@ use PHPUnit\Framework\TestCase;
  *       передачу пароля через окружение и флаг --insecure-no-password.
  *
  * Сценарий:
- *   - check/prune/rebuild-index/unlock: проверка аргументов команды.
+ *   - check/prune/rebuildIndex/unlock: проверка аргументов команды.
+ *     rebuildIndex использует restic repair index (rebuild-index устарел).
  *   - forget: проверка аргументов политики (keep-daily, keep-weekly, keep-last,
  *     prune, dry-run), отсутствие --keep-last при keep_last=0.
  *   - forget с паролем: RESTIC_PASSWORD в env.
@@ -86,15 +87,18 @@ class MaintenanceServiceTest extends TestCase
         $this->assertTrue($result['ok']);
     }
 
-    /** rebuild-index вызывает restic rebuild-index. */
-    public function testRebuildIndexCallsResticRebuildIndex(): void
+    /** rebuildIndex вызывает restic repair index (rebuild-index устарел). */
+    public function testRebuildIndexCallsResticRepairIndex(): void
     {
         $mock = $this->createMock(CommandRunner::class);
         $mock->expects($this->once())
             ->method('run')
             ->with(
                 $this->callback(function (array $cmd) {
-                    return in_array('rebuild-index', $cmd, true) && in_array($this->repoPath, $cmd, true);
+                    return in_array('repair', $cmd, true)
+                        && in_array('index', $cmd, true)
+                        && in_array($this->repoPath, $cmd, true)
+                        && !in_array('rebuild-index', $cmd, true);
                 }),
                 $this->anything()
             )

@@ -57,7 +57,8 @@ class MaintenanceService
      */
     public function rebuildIndex(array $repository): array
     {
-        $command = ResticCommandBuilder::buildCommand(['rebuild-index'], $repository);
+        // rebuild-index устарел в restic; актуальная команда — repair index.
+        $command = ResticCommandBuilder::buildCommand(['repair', 'index'], $repository);
         $env = ResticCommandBuilder::buildEnv($repository);
         $result = $this->runner->run($command, $env, null, 0);
 
