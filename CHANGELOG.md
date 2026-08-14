@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.7.0](https://github.com/alexdjachenko/phpResticAdmin/compare/v0.6.1...v0.7.0) (2026-08-14)
+
+
+### Features
+
+* **repos:** S3 backend fix, path restrictions, users.yaml and permis… ([af8454c](https://github.com/alexdjachenko/phpResticAdmin/commit/af8454c304d9afd785eaabac5935efc63fb3eea8))
+* **repos:** S3 backend fix, path restrictions, users.yaml and permission cleanup ([65e154c](https://github.com/alexdjachenko/phpResticAdmin/commit/65e154cf6cb911c6d94d37010a7d97177a1e7fc9))
+
 ## [0.6.1](https://github.com/alexdjachenko/phpResticAdmin/compare/v0.6.0...v0.6.1) (2026-08-11)
 
 
