@@ -287,9 +287,36 @@ YAML;
 
         $all = $storage->loadAll('testuser');
         $this->assertNull($all[0]['backup_paths'] ?? null);
-    }
+        }
 
-    /** Сохранение типоспецифичных полей расположения (local_path/s3_bucket/sftp_path/rest_url). */
+        /** update сохраняет password и env (включая AWS_SECRET_ACCESS_KEY), когда они не переданы. */
+        public function testUpdatePreservesPasswordAndEnvWhenOmitted(): void
+        {
+        $storage = new RepositoryStorage($this->tmpDir . '/repositories.yaml');
+
+        $storage->save('public', [
+            'id' => 'upd-env',
+            'name' => 'S3 Repo',
+            'type' => 's3',
+            's3_bucket' => 'my-bucket',
+            'password' => 'secret-pass',
+            'env' => [
+                'AWS_ACCESS_KEY_ID' => 'AKIA123',
+                'AWS_SECRET_ACCESS_KEY' => 's3-secret',
+                'AWS_ENDPOINT' => 'https://s3.example.com',
+            ],
+        ], 'testuser');
+
+        // Имитация edit(): изменяется только имя, password и env не передаются.
+        $storage->update('public', 'upd-env', ['name' => 'Renamed'], 'testuser');
+
+        $all = $storage->loadAll('testuser');
+        $this->assertSame('secret-pass', $all[0]['password']);
+        $this->assertSame('AKIA123', $all[0]['env']['AWS_ACCESS_KEY_ID'] ?? null);
+        $this->assertSame('s3-secret', $all[0]['env']['AWS_SECRET_ACCESS_KEY'] ?? null);
+        }
+
+        /** Сохранение типоспецифичных полей расположения (local_path/s3_bucket/sftp_path/rest_url). */
     public function testSaveWithTypeSpecificLocationFields(): void
     {
         $storage = new RepositoryStorage($this->tmpDir . '/repositories.yaml');

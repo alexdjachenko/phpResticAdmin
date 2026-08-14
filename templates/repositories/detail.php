@@ -134,7 +134,7 @@ $locationValue = $repo[$locationField] ?? $repo['path'] ?? '';
             <?php endforeach ?>
         </tbody>
     </table>
-    <?php if ($totalSnapshots > 5): ?>
+    <?php if ($hasMoreSnapshots): ?>
         <p><a href="/snapshots?repo=<?= htmlspecialchars(urlencode($repo['id'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars(__('repo.view_all_snaps'), ENT_QUOTES, 'UTF-8') ?></a></p>
     <?php endif ?>
 </div>

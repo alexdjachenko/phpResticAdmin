@@ -406,6 +406,16 @@ class App
             $controller->forget();
         });
 
+        $router->map('POST', '/maintenance/connection', function () {
+            $controller = new \App\Controllers\MaintenanceController();
+            $controller->connection();
+        });
+
+        $router->map('POST', '/maintenance/stats', function () {
+            $controller = new \App\Controllers\MaintenanceController();
+            $controller->stats();
+        });
+
         $router->map('GET', '/keys', function () {
             $controller = new \App\Controllers\KeyController();
             $controller->list();

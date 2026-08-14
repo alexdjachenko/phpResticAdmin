@@ -27,7 +27,38 @@ class SnapshotService
     {
         $command = ResticCommandBuilder::buildCommand(['snapshots', '--json'], $repository);
         $env = ResticCommandBuilder::buildEnv($repository);
-        $result = $this->runner->run($command, $env);
+        $result = $this->runner->run($command, $env, null, 120);
+
+        if ($result['exitCode'] !== 0) {
+            return [];
+        }
+
+        $decoded = json_decode($result['stdout'], true);
+
+        if (!is_array($decoded)) {
+            return [];
+        }
+
+        return $decoded;
+    }
+
+    /**
+     * Возвращает N последних снепшотов (restic snapshots --json --latest N).
+     *
+     * Используется на дашборде и странице репозитория, чтобы не тянуть
+     * полный список с больших удалённых репозиториев.
+     *
+     * @param array<string, mixed> $repository
+     * @return array<int, array<string, mixed>>
+     */
+    public function listLatestSnapshots(array $repository, int $limit = 5): array
+    {
+        $command = ResticCommandBuilder::buildCommand(
+            ['snapshots', '--json', '--latest', (string) $limit],
+            $repository
+        );
+        $env = ResticCommandBuilder::buildEnv($repository);
+        $result = $this->runner->run($command, $env, null, 120);
 
         if ($result['exitCode'] !== 0) {
             return [];
@@ -55,7 +86,7 @@ class SnapshotService
         $command[] = $snapId;
 
         $env = ResticCommandBuilder::buildEnv($repository);
-        $result = $this->runner->run($command, $env);
+        $result = $this->runner->run($command, $env, null, 300);
 
         if ($result['exitCode'] !== 0) {
             return null;
@@ -149,7 +180,7 @@ class SnapshotService
             $env['RESTIC_FROM_PASSWORD'] = (string) $sourceRepo['password'];
         }
 
-        $result = $this->runner->run($cmd, $env);
+        $result = $this->runner->run($cmd, $env, null, 0);
 
         return [
             'ok' => $result['exitCode'] === 0,

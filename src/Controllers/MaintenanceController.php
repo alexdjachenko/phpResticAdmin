@@ -66,6 +66,126 @@ class MaintenanceController
     }
 
     /**
+     * POST /maintenance/connection — быстрая проверка доступности
+     * репозитория через restic cat config.
+     */
+    public function connection(): void
+    {
+        $auth = App::auth();
+        $user = $auth->user();
+
+        if ($user === null) {
+            App::response()->redirect('/login');
+            return;
+        }
+
+        $request = new Request();
+        $security = App::security();
+
+        $token = $request->post('_csrf_token', '');
+        if (!$security->validateCsrf($token)) {
+            App::response()->error(403, __('flash.csrf_error'));
+            return;
+        }
+
+        $repoId = $request->post('repo_id', '');
+        if ($repoId === '') {
+            App::response()->error(400, 'Missing repository ID');
+            return;
+        }
+
+        $repositories = App::repoStorage()->loadAll($user);
+        $repo = null;
+        foreach ($repositories as $r) {
+            if (($r['id'] ?? '') === $repoId) {
+                $repo = $r;
+                break;
+            }
+        }
+
+        if ($repo === null) {
+            App::response()->error(404, __('flash.not_found'));
+            return;
+        }
+
+        $category = $repo['category'] ?? 'public';
+        if (!$auth->canUseWrite($category)) {
+            App::response()->error(403, __('error.forbidden'));
+            return;
+        }
+
+        $result = App::repoService()->testConnection($repo);
+
+        echo App::response()->render('maintenance/result.php', [
+            'action' => __('maint.check_connection'),
+            'result' => $result,
+            'repo' => $repo,
+            'isLoggedIn' => $auth->isLoggedIn(),
+            'username' => $user,
+        ]);
+    }
+
+    /**
+     * POST /maintenance/stats — общая статистика репозитория (restic stats).
+     */
+    public function stats(): void
+    {
+        $auth = App::auth();
+        $user = $auth->user();
+
+        if ($user === null) {
+            App::response()->redirect('/login');
+            return;
+        }
+
+        $request = new Request();
+        $security = App::security();
+
+        $token = $request->post('_csrf_token', '');
+        if (!$security->validateCsrf($token)) {
+            App::response()->error(403, __('flash.csrf_error'));
+            return;
+        }
+
+        $repoId = $request->post('repo_id', '');
+        if ($repoId === '') {
+            App::response()->error(400, 'Missing repository ID');
+            return;
+        }
+
+        $repositories = App::repoStorage()->loadAll($user);
+        $repo = null;
+        foreach ($repositories as $r) {
+            if (($r['id'] ?? '') === $repoId) {
+                $repo = $r;
+                break;
+            }
+        }
+
+        if ($repo === null) {
+            App::response()->error(404, __('flash.not_found'));
+            return;
+        }
+
+        $category = $repo['category'] ?? 'public';
+        if (!$auth->canUseWrite($category)) {
+            App::response()->error(403, __('error.forbidden'));
+            return;
+        }
+
+        set_time_limit(0);
+        $result = App::maintenanceService()->stats($repo);
+
+        echo App::response()->render('maintenance/result.php', [
+            'action' => __('maint.stats'),
+            'result' => $result,
+            'repo' => $repo,
+            'isLoggedIn' => $auth->isLoggedIn(),
+            'username' => $user,
+        ]);
+    }
+
+    /**
      * POST /maintenance/check
      */
     public function check(): void
@@ -150,6 +270,7 @@ class MaintenanceController
             return;
         }
 
+        set_time_limit(0);
         $result = App::repoService()->init($repo);
 
         echo App::response()->render('maintenance/result.php', [
@@ -219,6 +340,7 @@ class MaintenanceController
             'dry_run' => $request->post('dry_run', '0') === '1',
         ];
 
+        set_time_limit(0);
         $result = App::maintenanceService()->forget($repo, $policy);
 
         echo App::response()->render('maintenance/result.php', [
@@ -276,6 +398,7 @@ class MaintenanceController
             return;
         }
 
+        set_time_limit(0);
         $result = App::maintenanceService()->$method($repo);
 
         echo App::response()->render('maintenance/result.php', [

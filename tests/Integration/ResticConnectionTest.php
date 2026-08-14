@@ -19,7 +19,7 @@ use PHPUnit\Framework\TestCase;
  * сценарии на том же репозитории.
  *
  * Цепочка 1 (без пароля):
- *   init → testConnection успех → повторный init провал.
+ *   init → testConnection успех (restic cat config) → повторный init провал.
  *
  * Цепочка 2 (с паролем):
  *   init → testConnection с правильным паролем успех →
@@ -57,7 +57,7 @@ class ResticConnectionTest extends TestCase
      * Цепочка с репозиторием без пароля.
      *
      * 1. init без пароля → ok, директория создана.
-     * 2. testConnection без пароля → ok, output — валидный JSON (пустой массив).
+     * 2. testConnection без пароля → ok, output — текст конфига репозитория.
      * 3. Повторный init на том же репо → ok=false, "config file already exists".
      */
     public function testInitConnectionAndReinitWithoutPassword(): void
@@ -78,15 +78,12 @@ class ResticConnectionTest extends TestCase
         $this->assertTrue($result['ok'], 'Init should succeed: ' . ($result['error'] ?? ''));
         $this->assertDirectoryExists($repoDir, 'restic init should create the repository directory');
 
-        // --- Шаг 2: testConnection ---
+        // --- Шаг 2: testConnection (restic cat config) ---
         $connResult = $service->testConnection($repo);
 
         $this->assertTrue($connResult['ok'], 'Connection should succeed: ' . ($connResult['error'] ?? ''));
-        $this->assertJson($connResult['output']);
-
-        $snapshots = json_decode($connResult['output'], true);
-        $this->assertIsArray($snapshots);
-        $this->assertEmpty($snapshots, 'New repository should have no snapshots');
+        $this->assertNotEmpty($connResult['output'], 'cat config should return repository config text');
+        $this->assertStringContainsString('id', $connResult['output'], 'config should contain the repository id');
 
         // --- Шаг 3: повторный init → провал ---
         $reInitResult = $service->init(['path' => $repoDir, 'password' => null]);
@@ -129,7 +126,7 @@ class ResticConnectionTest extends TestCase
         $connOk = $service->testConnection($repo);
 
         $this->assertTrue($connOk['ok'], 'Connection with correct password should succeed: ' . ($connOk['error'] ?? ''));
-        $this->assertJson($connOk['output']);
+        $this->assertNotEmpty($connOk['output'], 'cat config should return repository config text');
 
         // --- Шаг 3: testConnection с неправильным паролем → провал ---
         $repoWrongPw = array_merge($repo, ['password' => 'wrongPassword']);

@@ -25,7 +25,7 @@ class MaintenanceService
     {
         $command = ResticCommandBuilder::buildCommand(['check'], $repository);
         $env = ResticCommandBuilder::buildEnv($repository);
-        $result = $this->runner->run($command, $env);
+        $result = $this->runner->run($command, $env, null, 0);
 
         return [
             'ok' => $result['exitCode'] === 0,
@@ -42,7 +42,7 @@ class MaintenanceService
     {
         $command = ResticCommandBuilder::buildCommand(['prune'], $repository);
         $env = ResticCommandBuilder::buildEnv($repository);
-        $result = $this->runner->run($command, $env);
+        $result = $this->runner->run($command, $env, null, 0);
 
         return [
             'ok' => $result['exitCode'] === 0,
@@ -59,7 +59,7 @@ class MaintenanceService
     {
         $command = ResticCommandBuilder::buildCommand(['rebuild-index'], $repository);
         $env = ResticCommandBuilder::buildEnv($repository);
-        $result = $this->runner->run($command, $env);
+        $result = $this->runner->run($command, $env, null, 0);
 
         return [
             'ok' => $result['exitCode'] === 0,
@@ -76,7 +76,7 @@ class MaintenanceService
     {
         $command = ResticCommandBuilder::buildCommand(['unlock'], $repository);
         $env = ResticCommandBuilder::buildEnv($repository);
-        $result = $this->runner->run($command, $env);
+        $result = $this->runner->run($command, $env, null, 0);
 
         return [
             'ok' => $result['exitCode'] === 0,
@@ -123,11 +123,44 @@ class MaintenanceService
 
         $command = ResticCommandBuilder::buildCommand($args, $repository);
         $env = ResticCommandBuilder::buildEnv($repository);
-        $result = $this->runner->run($command, $env);
+        $result = $this->runner->run($command, $env, null, 0);
 
         return [
             'ok' => $result['exitCode'] === 0,
             'output' => $result['stdout'],
+            'error' => $result['stderr'],
+        ];
+    }
+
+    /**
+     * Возвращает общую статистику репозитория (restic stats --json).
+     *
+     * Тяжёлая операция для больших репозиториев — запускается только
+     * по запросу пользователя со страницы обслуживания.
+     *
+     * @param array<string, mixed> $repository
+     * @return array{ok: bool, output: string, error: string}
+     */
+    public function stats(array $repository): array
+    {
+        $command = ResticCommandBuilder::buildCommand(['stats', '--json'], $repository);
+        $env = ResticCommandBuilder::buildEnv($repository);
+        $result = $this->runner->run($command, $env, null, 300);
+
+        $output = $result['stdout'];
+        if ($result['exitCode'] === 0 && $output !== '') {
+            $decoded = json_decode($output, true);
+            if (is_array($decoded)) {
+                $pretty = json_encode($decoded, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+                if ($pretty !== false) {
+                    $output = $pretty;
+                }
+            }
+        }
+
+        return [
+            'ok' => $result['exitCode'] === 0,
+            'output' => $output,
             'error' => $result['stderr'],
         ];
     }

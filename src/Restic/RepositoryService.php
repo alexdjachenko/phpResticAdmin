@@ -23,7 +23,10 @@ class RepositoryService
      */
     public function testConnection(array $repository): array
     {
-        $command = ResticCommandBuilder::buildCommand(['snapshots', '--json'], $repository);
+        // restic cat config — быстрая проверка, что репозиторий существует
+        // и доступен, без перебора всех снепшотов (snapshots может виснуть
+        // на больших удалённых репозиториях).
+        $command = ResticCommandBuilder::buildCommand(['cat', 'config'], $repository);
         $env = ResticCommandBuilder::buildEnv($repository);
 
         $result = $this->runner->run($command, $env, null, 10);

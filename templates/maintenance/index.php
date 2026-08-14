@@ -5,9 +5,29 @@
 <h2><?= htmlspecialchars(__('maint.title'), ENT_QUOTES, 'UTF-8') ?>: <?= htmlspecialchars($repo['name'] ?? '', ENT_QUOTES, 'UTF-8') ?></h2>
 
 <div class="maintenance-section">
+    <h3><?= htmlspecialchars(__('maint.check_connection'), ENT_QUOTES, 'UTF-8') ?></h3>
+    <p><?= htmlspecialchars(__('maint.check_connection_desc'), ENT_QUOTES, 'UTF-8') ?></p>
+    <form method="post" action="/maintenance/connection">
+        <input type="hidden" name="_csrf_token" value="<?= htmlspecialchars($csrfToken ?? '', ENT_QUOTES, 'UTF-8') ?>">
+        <input type="hidden" name="repo_id" value="<?= htmlspecialchars($repo['id'] ?? '', ENT_QUOTES, 'UTF-8') ?>">
+        <button type="submit" class="btn-primary"><?= htmlspecialchars(__('maint.run'), ENT_QUOTES, 'UTF-8') ?></button>
+    </form>
+</div>
+
+<div class="maintenance-section">
     <h3><?= htmlspecialchars(__('maint.check'), ENT_QUOTES, 'UTF-8') ?></h3>
     <p><?= htmlspecialchars(__('maint.check_desc'), ENT_QUOTES, 'UTF-8') ?></p>
     <form method="post" action="/maintenance/check">
+        <input type="hidden" name="_csrf_token" value="<?= htmlspecialchars($csrfToken ?? '', ENT_QUOTES, 'UTF-8') ?>">
+        <input type="hidden" name="repo_id" value="<?= htmlspecialchars($repo['id'] ?? '', ENT_QUOTES, 'UTF-8') ?>">
+        <button type="submit" class="btn-primary"><?= htmlspecialchars(__('maint.run'), ENT_QUOTES, 'UTF-8') ?></button>
+    </form>
+</div>
+
+<div class="maintenance-section">
+    <h3><?= htmlspecialchars(__('maint.stats'), ENT_QUOTES, 'UTF-8') ?></h3>
+    <p><?= htmlspecialchars(__('maint.stats_desc'), ENT_QUOTES, 'UTF-8') ?></p>
+    <form method="post" action="/maintenance/stats">
         <input type="hidden" name="_csrf_token" value="<?= htmlspecialchars($csrfToken ?? '', ENT_QUOTES, 'UTF-8') ?>">
         <input type="hidden" name="repo_id" value="<?= htmlspecialchars($repo['id'] ?? '', ENT_QUOTES, 'UTF-8') ?>">
         <button type="submit" class="btn-primary"><?= htmlspecialchars(__('maint.run'), ENT_QUOTES, 'UTF-8') ?></button>

@@ -101,8 +101,8 @@ src/
   Restic/
     CommandRunner.php    # run() + runStream() + runStreamWithHeaders() — обёртка proc_open()
     RepositoryService.php # testConnection(), init(), backup(), backupSync()
-    SnapshotService.php   # listSnapshots(), getSnapshot(), addTag(), removeTag()
-    MaintenanceService.php # check(), prune(), rebuildIndex(), unlock(), forget()
+    SnapshotService.php   # listSnapshots(), listLatestSnapshots(), getStats(), getSnapshot(), addTag(), removeTag(), copy()
+    MaintenanceService.php # check(), prune(), rebuildIndex(), unlock(), forget(), stats()
     KeyService.php         # listKeys(), addKey(), removeKey(), changePassword()
   Controllers/
     DashboardController.php  # GET / → дашборд, POST /cache/invalidate
@@ -127,7 +127,7 @@ templates/
   browse/
     tree.php             # Дерево файлов/папок + хлебные крошки + Download
   maintenance/
-    index.php            # Формы обслуживания (check/prune/rebuild-index/unlock/forget)
+    index.php            # Формы обслуживания (connection/check/stats/prune/rebuild-index/unlock/forget)
     result.php           # Результат операции обслуживания
   keys/
     list.php             # Таблица ключей + формы add/remove/passwd
@@ -218,6 +218,8 @@ docker/
 | POST  | `/maintenance/rebuild-index` | MaintenanceController::rebuildIndex | isLoggedIn + canUseWrite |
 | POST  | `/maintenance/unlock`  | MaintenanceController::unlock      | isLoggedIn + canUseWrite |
 | POST  | `/maintenance/forget`  | MaintenanceController::forget      | isLoggedIn + canUseWrite |
+| POST  | `/maintenance/connection` | MaintenanceController::connection | isLoggedIn + canUseWrite |
+| POST  | `/maintenance/stats`   | MaintenanceController::stats       | isLoggedIn + canUseWrite |
 | GET   | `/keys`                | KeyController::list                | isLoggedIn + canUseRead |
 | POST  | `/keys/add`            | KeyController::add                 | isLoggedIn + canUseWrite |
 | POST  | `/keys/remove`         | KeyController::remove              | isLoggedIn + canUseWrite |
@@ -320,12 +322,15 @@ Fallback-правила для пользователей без секции `r
 
 - `CommandRunner::run()` использует `proc_open()` с пайпами stdin/stdout/stderr
 - `CommandRunner::runStream()` — стриминг вывода в браузер (`fread` в цикле + `flush()`) для backup
-- `RepositoryService::testConnection()` выполняет `restic snapshots --json --repo <путь>`
+- `RepositoryService::testConnection()` выполняет `restic cat config` — быстрая проверка, что репозиторий существует и доступен (без перебора снепшотов)
 - `RepositoryService::init()` выполняет `restic init --repo <путь>`
 - `RepositoryService::backup()` выполняет `restic backup` со стримингом через `runStream()`
-- `SnapshotService::listSnapshots()` — `restic snapshots --json`, парсит JSON
+- `SnapshotService::listSnapshots()` — `restic snapshots --json`, парсит JSON (таймаут 120с)
+- `SnapshotService::listLatestSnapshots($repo, $n)` — `restic snapshots --json --latest N` для дашборда и страницы репозитория (не тянет полный список с больших удалённых репозиториев)
+- `MaintenanceService::stats()` — `restic stats --json` для общей статистики репозитория
 - Если пароль задан — передаёт `RESTIC_PASSWORD` в окружение; иначе добавляет `--insecure-no-password`
 - `RepositoryController::edit()` при смене типа с `s3` на другой НЕ очищает `env` (AWS-ключи). Это осознанно: если пользователь передумает и вернётся к `s3`, данные не потеряются. При обратном переключении поля в форме будут предзаполнены старыми значениями.
+- **Секретные поля в форме редактирования — «пустое поле = оставить как есть».** Пароль репозитория (`password`) и S3-секрет (`s3_secret`) перезаписываются только при непустом вводе; существующие значения берутся из сохранённого репозитория. Заполнение одного поля не сбрасывает другое.
 
 ### Механика текущего репозитория
 

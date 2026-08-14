@@ -24,6 +24,7 @@ use PHPUnit\Framework\TestCase;
  *   - init ошибка с пустым stderr: ok=false, error не пустой (fallback).
  *   - init с паролем: RESTIC_PASSWORD в env, без --insecure-no-password.
  *   - init без пароля: --insecure-no-password в команде.
+ *   - testConnection использует restic cat config (не snapshots).
  *   - testConnection ошибка: ok=false, error не пустой.
  *
  * Критерий успеха: моки проверяют аргументы, сервис возвращает ожидаемые структуры.
@@ -202,7 +203,9 @@ class RepositoryServiceTest extends TestCase
     }
 
     /**
-     * testConnection без пароля: --insecure-no-password и --repo ДО snapshots.
+     * testConnection использует restic cat config, а не snapshots.
+     *
+     * Проверяет порядок: --insecure-no-password и --repo ДО подкоманды cat.
      */
     public function testTestConnectionCommandOrderWithoutPassword(): void
     {
@@ -219,7 +222,7 @@ class RepositoryServiceTest extends TestCase
                 $this->anything(),
                 $this->anything()
             )
-            ->willReturn(['exitCode' => 0, 'stdout' => '[]', 'stderr' => '']);
+            ->willReturn(['exitCode' => 0, 'stdout' => "version: 2\nid: abc", 'stderr' => '']);
 
         $service = new RepositoryService($mock);
         $service->testConnection([
@@ -231,14 +234,18 @@ class RepositoryServiceTest extends TestCase
         ]);
 
         $this->assertNotNull($capturedCommand);
+        $this->assertContains('cat', $capturedCommand, 'testConnection should use restic cat');
+        $this->assertContains('config', $capturedCommand, 'testConnection should use restic cat config');
+        $this->assertNotContains('snapshots', $capturedCommand, 'testConnection must not list snapshots');
+
         $insecurePos = array_search('--insecure-no-password', $capturedCommand, true);
         $repoPos = array_search('--repo', $capturedCommand, true);
-        $snapPos = array_search('snapshots', $capturedCommand, true);
+        $catPos = array_search('cat', $capturedCommand, true);
         $this->assertIsInt($insecurePos);
         $this->assertIsInt($repoPos);
-        $this->assertIsInt($snapPos);
-        $this->assertLessThan($snapPos, $insecurePos, '--insecure-no-password must come BEFORE snapshots');
-        $this->assertLessThan($snapPos, $repoPos, '--repo must come BEFORE snapshots');
+        $this->assertIsInt($catPos);
+        $this->assertLessThan($catPos, $insecurePos, '--insecure-no-password must come BEFORE cat');
+        $this->assertLessThan($catPos, $repoPos, '--repo must come BEFORE cat');
     }
 
     /**
