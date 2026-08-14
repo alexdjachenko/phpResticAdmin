@@ -70,7 +70,7 @@
 - `use_read` — без fallback'а: не задан → `false`.
 - `use_write` — без fallback'а: не задан → `false`.
 - `init` и `delete` — глобальные флаги `can_init`/`can_delete` на уровне пользователя
-- `canMove(from, to)` требует `edit` на обе категории
+- `canMove(from, to)` требует `use_write` на обе категории
 - Чекбокс «init» в форме добавления показывается только если `canInit()`
 - Для пользователей без явных `can_init`/`can_delete`: logged-in → true, guest → false
 
