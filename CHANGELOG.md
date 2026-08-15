@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.7.1](https://github.com/alexdjachenko/phpResticAdmin/compare/v0.7.0...v0.7.1) (2026-08-14)
+
+
+### Bug Fixes
+
+* **repo:** use restic repair index instead of deprecated rebuild-index ([979a09f](https://github.com/alexdjachenko/phpResticAdmin/commit/979a09f1858a60b0fb61f9de78460a2aca97207f))
+
+
+### Performance Improvements
+
+* **repo:** use --latest for snapshot previews, cat config for connection checks, higher timeouts, maintenance stats ([cef390c](https://github.com/alexdjachenko/phpResticAdmin/commit/cef390ccda4ddfb3edd0bdd0edf16ada50b13cf9))
+
 ## [0.7.0](https://github.com/alexdjachenko/phpResticAdmin/compare/v0.6.1...v0.7.0) (2026-08-14)
 
 
