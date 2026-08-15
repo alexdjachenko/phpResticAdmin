@@ -28,10 +28,10 @@ jobs:
           echo "🔹 Репозиторий: ${{ github.repository }}"
           echo "========================================"
 
-      - name: Вывод всего контекста github (JSON)
+      - name: Контекст github
         run: |
-          echo "📦 Полный контекст github:"
-          echo "${{ toJson(github) }}" | jq .   # jq установлен на раннере
+          echo "📦 Контекст github:"
+          echo '${{ toJson(github) }}'
 
       - name: Вывод переменных окружения (env)
         run: |
