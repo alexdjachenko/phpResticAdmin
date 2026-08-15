@@ -1,0 +1,60 @@
+name: Debug / Experiment
+
+on:
+  push:
+    branches: [ main, '*' ]   # на push в любую ветку (можно уточнить)
+  pull_request:
+    branches: [ main ]        # на PR в main
+  release:
+    types: [ published ]      # на публикацию релиза
+  workflow_dispatch:          # ручной запуск
+    inputs:
+      custom_message:
+        description: 'Дополнительное сообщение'
+        required: false
+        default: 'Hello from manual run'
+
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Вывод информации о событии
+        run: |
+          echo "========================================"
+          echo "🔹 Имя события: ${{ github.event_name }}"
+          echo "🔹 Ветка/реф: ${{ github.ref }}"
+          echo "🔹 SHA: ${{ github.sha }}"
+          echo "🔹 Актор: ${{ github.actor }}"
+          echo "🔹 Репозиторий: ${{ github.repository }}"
+          echo "========================================"
+
+      - name: Вывод всего контекста github (JSON)
+        run: |
+          echo "📦 Полный контекст github:"
+          echo "${{ toJson(github) }}" | jq .   # jq установлен на раннере
+
+      - name: Вывод переменных окружения (env)
+        run: |
+          echo "🌍 Переменные окружения:"
+          env
+
+      - name: Вывод информации о релизе (если событие release)
+        if: github.event_name == 'release'
+        run: |
+          echo "🏷️ Тег релиза: ${{ github.event.release.tag_name }}"
+          echo "📌 Пре-релиз: ${{ github.event.release.prerelease }}"
+          echo "📄 Название релиза: ${{ github.event.release.name }}"
+
+      - name: Вывод информации о PR (если событие pull_request)
+        if: github.event_name == 'pull_request'
+        run: |
+          echo "🔢 Номер PR: ${{ github.event.pull_request.number }}"
+          echo "📌 Заголовок: ${{ github.event.pull_request.title }}"
+          echo "🌿 Ветка источника: ${{ github.event.pull_request.head.ref }}"
+          echo "🎯 Ветка назначения: ${{ github.event.pull_request.base.ref }}"
+
+      - name: Вывод сообщения для ручного запуска
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          echo "✋ Ручной запуск!"
+          echo "Сообщение: ${{ inputs.custom_message }}"
