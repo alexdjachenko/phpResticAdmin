@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.7.4](https://github.com/alexdjachenko/phpResticAdmin/compare/v0.7.3...v0.7.4) (2026-08-15)
+
+
+### Bug Fixes
+
+* checking if we alreade merging release pr or only creating befor setting docker image tag ([ce778e6](https://github.com/alexdjachenko/phpResticAdmin/commit/ce778e6adfe307d7f99476d6b2a2c4375d0c462b))
+* checking if we alreade merging release pr or only creating befor… ([d5bf277](https://github.com/alexdjachenko/phpResticAdmin/commit/d5bf2771720fc73e2f8fca666fa7c35cb6d98188))
+
 ## [0.7.3](https://github.com/alexdjachenko/phpResticAdmin/compare/v0.7.2...v0.7.3) (2026-08-15)
 
 
