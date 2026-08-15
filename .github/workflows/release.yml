@@ -1,0 +1,51 @@
+# ================================================================
+# RELEASE — запуск release-please и добавление релизных тегов
+# Запускается ТОЛЬКО после успешного прохождения тестов (workflow_run)
+# ================================================================
+
+name: Release
+
+on:
+  workflow_run:
+    workflows: ["Test"]          # Имя workflow с тестами (должно совпадать с name: Test)
+    types:
+      - completed                # Срабатывает, когда Test завершён
+    branches:
+      - main                     # Только для ветки main
+
+permissions:
+  contents: write        # для release-please (создание коммитов, тегов, PR)
+  pull-requests: write   # для release-please (создание PR)
+  packages: write        # для добавления тегов в GHCR
+
+jobs:
+  release:
+    # Запускаем только если тесты прошли успешно
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      # Шаг 1: Клонируем репозиторий на тот же коммит, на котором запускались тесты
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      # Шаг 2: Запускаем release-please (анализирует коммиты, создаёт/обновляет релизный PR или завершает релиз)
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Шаг 3: Если release-please создал новый релиз (тег и GitHub Release),
+      # добавляем к существующему образу теги latest и версию
+      - name: Add release tags to existing image
+        if: steps.release.outputs.release_created == 'true'
+        uses: shrink/actions-docker-registry-tag@v5
+        with:
+          registry: ghcr.io
+          repository: ${{ github.repository }}
+          # Берём образ, собранный по SHA того же коммита (из build.yml)
+          target: 'sha-${{ github.event.workflow_run.head_sha }}'
+          tags: |
+            latest
+            ${{ steps.release.outputs.tag_name }}
+            

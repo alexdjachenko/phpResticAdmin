@@ -1,7 +1,9 @@
 # ================================================================
-# ИМЯ РАБОЧЕГО ПРОЦЕССА
+# BUILD — сборка Docker-образа для разработки (параллельно с тестами)
+# Запускается на каждый push в main и на каждый PR
 # ================================================================
-name: Build and Publish
+
+name: Build
 
 # ================================================================
 # ТРИГГЕРЫ (СОБЫТИЯ) ЗАПУСКА
@@ -15,99 +17,38 @@ on:
   pull_request:
     branches: [main]
 
-  # 3. Запуск при публикации релиза (событие release)
-  #    ВАЖНО: это событие НЕ сработает, если релиз создан через API
-  #    с использованием GITHUB_TOKEN (как это делает release-please по умолчанию).
-  #    Чтобы оно сработало, нужно использовать Personal Access Token (PAT).
-  release:
-    types: [published]
 
-  # 4. Ручной запуск через интерфейс GitHub (кнопка "Run workflow")
+
+  # 3. Ручной запуск через интерфейс GitHub (кнопка "Run workflow")
   workflow_dispatch:
 
 # ================================================================
 # РАЗРЕШЕНИЯ (permissions) ДЛЯ ДЖОБОВ
 # ================================================================
 permissions:
-  contents: write        # Право на создание коммитов и тегов (нужно для release-please)
-  packages: write        # Право на запись в GitHub Container Registry (GHCR)
-  pull-requests: write   # Право на комментарии и управление PR (для release-please)
+  packages: write
 
-# ================================================================
-# ЗАДАЧИ (JOBS)
-# ================================================================
 jobs:
-
-  # ------------------------------------------------------------------
-  # ЗАДАЧА 1: release-please – автоматическое создание релизов
-  # ------------------------------------------------------------------
-  release-please:
-    # Запускаем только при пуше в main (чтобы не дублировать при других событиях)
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: googleapis/release-please-action@v4
-        with:
-          # Используем либо переданный PAT, либо стандартный GITHUB_TOKEN.
-          # ВАЖНО: если оставить GITHUB_TOKEN, то созданный релиз НЕ вызовет
-          # событие release для этого же workflow (ограничение безопасности).
-          # Для корректной работы триггера release нужно использовать PAT.
-          token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
-
-  # ------------------------------------------------------------------
-  # ЗАДАЧА 2: build-and-publish – сборка и публикация Docker-образа
-  # ------------------------------------------------------------------
-  build-and-publish:
+  build:
     runs-on: ubuntu-latest
 
     steps:
       # Шаг 1: Клонируем репозиторий
       - uses: actions/checkout@v4
 
-      # Шаг 2: Генерация метаданных (тегов и лейблов) для Docker-образа
-      - name: Docker meta
+      # Шаг 2: Генерация метаданных (тегов) для Docker-образа
+      - name: Docker meta (dev tags)
         id: meta
         uses: docker/metadata-action@v5
         with:
-          # Базовое имя образа (регистр + владелец + репозиторий)
           images: ghcr.io/${{ github.repository }}
-
-          # Правила генерации тегов – выполняются последовательно,
-          # но на итоговый список тегов порядок не влияет.
           tags: |
-            # --------------------------------------------------------------
-            # Правило 1: Тег 'latest' – только при событии release
-            # --------------------------------------------------------------
-            # Используем type=raw, чтобы явно задать значение.
-            # Условие enable: github.event_name == 'release' – НО,
-            # как уже сказано, это событие может не наступить при использовании GITHUB_TOKEN.
-            type=raw,value=latest,enable=${{ github.event_name == 'release' }}
-
-            # --------------------------------------------------------------
-            # Правило 2: Тег 'pr-XXX' – только при событии pull_request
-            # --------------------------------------------------------------
-            # Извлекаем номер PR из контекста github.event.pull_request.number
+            # Всегда добавляем тег на основе SHA коммита (например, sha-a1b2c3d)
+            type=sha,prefix=sha-
+            # Для PR добавляем тег pr-XXX (только если событие pull_request)
             type=raw,value=pr-${{ github.event.pull_request.number }},enable=${{ github.event_name == 'pull_request' }}
 
-            # --------------------------------------------------------------
-            # Правила 3–5: Семантические теги для релизов (v1, v1.2, 1.2.3)
-            # --------------------------------------------------------------
-            # Эти правила используют type=semver и предполагают, что Git-тег
-            # присутствует в ref (GITHUB_REF). Однако при событии release
-            # GITHUB_REF указывает на ветку, а не на тег, поэтому эти правила
-            # НЕ сработают даже при enable=${{ github.event_name == 'release' }}.
-            # Рекомендуется заменить их на type=raw с явной передачей
-            # значения из github.event.release.tag_name.
-            type=semver,pattern=v{{major}},enable=${{ github.event_name == 'release' }}
-            type=semver,pattern=v{{major}}.{{minor}},enable=${{ github.event_name == 'release' }}
-            type=semver,pattern={{version}},enable=${{ github.event_name == 'release' }}
-
-            # --------------------------------------------------------------
-            # Правило 6: Тег на основе SHA коммита – всегда как fallback
-            # --------------------------------------------------------------
-            type=sha,prefix=sha-
-
-      # Шаг 3: Настройка Docker Buildx (для сборки многоплатформенных образов)
+      # Шаг 3: Настройка Buildx для сборки многоплатформенных образов
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -121,15 +62,16 @@ jobs:
           # в этом же репозитории (так как мы дали permission packages: write)
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Шаг 5: Сборка и публикация образа
-      - name: Build and push
+      # Шаг 5: Сборка и публикация образа с тегами из метаданных
+      - name: Build and push (dev image)
         uses: docker/build-push-action@v6
         with:
-          context: .                     # Контекст сборки – корень репозитория
-          file: docker/Dockerfile        # Путь к Dockerfile
-          platforms: linux/amd64         # Платформа (можно добавить другие)
-          push: true                     # Загружаем образ в реестр
-          tags: ${{ steps.meta.outputs.tags }}      # Список тегов из предыдущего шага
-          labels: ${{ steps.meta.outputs.labels }}  # Метки (org.opencontainers.image.*)
-          cache-from: type=gha           # Используем кэш из GitHub Actions
-          cache-to: type=gha,mode=max    # Сохраняем кэш для будущих сборок
+          context: .
+          file: docker/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Кэширование для ускорения сборки (используем кэш GitHub Actions)
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
