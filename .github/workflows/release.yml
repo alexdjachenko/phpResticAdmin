@@ -35,17 +35,37 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      # Шаг 3: Если release-please создал новый релиз (тег и GitHub Release),
-      # добавляем к существующему образу теги latest и версию
-      - name: Add release tags to existing image
-        if: steps.release.outputs.release_created == 'true'
-        uses: shrink/actions-docker-registry-tag@v5
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          repository: ${{ github.repository }}
-          # Берём образ, собранный по SHA того же коммита (из build.yml)
-          target: 'sha-${{ github.event.workflow_run.head_sha }}'
-          tags: |
-            latest
-            ${{ steps.release.outputs.tag_name }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Шаг 4: Скачиваем протестированный образ по ПРАВИЛЬНОМУ SHA и пушим теги
+      - name: Tag and Push Release Images
+        env:
+          # Гарантированно берем SHA коммита, из которого собирался образ
+          TARGET_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          # Обрезаем SHA до 7 символов, так как сборщик Docker тегирует короткий хэш (sha-f35adaf)
+          SHORT_SHA=$(echo "${{ env.TARGET_SHA }}" | cut -c1-7)
+          echo "Скачиваем базовый образ с тегом: sha-$SHORT_SHA"
+          
+          # Скачиваем ранее собранный образ
+          docker pull ghcr.io/alexdjachenko/phpresticadmin:sha-$SHORT_SHA
+          
+          # 1. Всегда обновляем тег latest в ветке main
+          docker tag ghcr.io/alexdjachenko/phpresticadmin:sha-$SHORT_SHA ghcr.io/alexdjachenko/phpresticadmin:latest
+          docker push ghcr.io/alexdjachenko/phpresticadmin:latest
+          
+          # 2. Если release-please зафиксировал создание нового релиза, вешаем тег версии
+          if [ "${{ steps.release.outputs.release_created }}" = "true" ]; then
+            VERSION_TAG="${{ steps.release.outputs.tag_name }}"
+            echo "Обнаружен новый релиз: $VERSION_TAG. Создаем тег версии..."
             
+            docker tag ghcr.io/alexdjachenko/phpresticadmin:sha-$SHORT_SHA ghcr.io/alexdjachenko/phpresticadmin:$VERSION_TAG
+            docker push ghcr.io/alexdjachenko/phpresticadmin:$VERSION_TAG
+          else
+            echo "Это обычный коммит или служебный PR от release-please, тег версии не требуется."
+          fi
