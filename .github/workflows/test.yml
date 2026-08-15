@@ -115,3 +115,4 @@ jobs:
       - name: Cleanup
         if: always()
         run: docker stop phpresticadmin-test && docker rm phpresticadmin-test
+        
