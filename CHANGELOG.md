@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.2](https://github.com/alexdjachenko/phpResticAdmin/compare/v0.7.1...v0.7.2) (2026-08-15)
+
+
+### Bug Fixes
+
+* testing release worlflow ([259c4fe](https://github.com/alexdjachenko/phpResticAdmin/commit/259c4fe8840630d8c9832aa772eab78f4c3c772e))
+
 ## [0.7.1](https://github.com/alexdjachenko/phpResticAdmin/compare/v0.7.0...v0.7.1) (2026-08-14)
 
 
