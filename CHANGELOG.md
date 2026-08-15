@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.7.3](https://github.com/alexdjachenko/phpResticAdmin/compare/v0.7.2...v0.7.3) (2026-08-15)
+
+
+### Bug Fixes
+
+* setting release tag after merge please-release pr ([9f1781d](https://github.com/alexdjachenko/phpResticAdmin/commit/9f1781d15b4db941f3277a83de16c91f49f5808b))
+* setting release tag after merge please-release pr ([4da2efe](https://github.com/alexdjachenko/phpResticAdmin/commit/4da2efe0412947d8763f3d6f6d1a395119822c26))
+
 ## [0.7.2](https://github.com/alexdjachenko/phpResticAdmin/compare/v0.7.1...v0.7.2) (2026-08-15)
 
 
