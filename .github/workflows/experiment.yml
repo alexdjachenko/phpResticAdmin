@@ -58,3 +58,4 @@ jobs:
         run: |
           echo "✋ Ручной запуск!"
           echo "Сообщение: ${{ inputs.custom_message }}"
+          
