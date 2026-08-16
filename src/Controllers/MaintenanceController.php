@@ -173,24 +173,17 @@ class MaintenanceController
             return;
         }
 
-        set_time_limit(0);
-        $result = App::maintenanceService()->stats($repo);
+        $started = App::resticTasks()->startMaintenance('stats', $repo);
 
-        echo App::response()->render('maintenance/result.php', [
-            'action' => __('maint.stats'),
-            'result' => $result,
-            'repo' => $repo,
-            'isLoggedIn' => $auth->isLoggedIn(),
-            'username' => $user,
-        ]);
-    }
+        App::response()->redirect('/tasks/stream?label=' . urlencode($started['label']));
+        }
 
     /**
      * POST /maintenance/check
      */
     public function check(): void
     {
-        $this->runMaintenance('check', __('maint.check'));
+        $this->runMaintenance('check');
     }
 
     /**
@@ -198,7 +191,7 @@ class MaintenanceController
      */
     public function prune(): void
     {
-        $this->runMaintenance('prune', __('maint.prune'));
+        $this->runMaintenance('prune');
     }
 
     /**
@@ -206,7 +199,7 @@ class MaintenanceController
      */
     public function rebuildIndex(): void
     {
-        $this->runMaintenance('rebuildIndex', __('maint.rebuild_index'));
+        $this->runMaintenance('repair index');
     }
 
     /**
@@ -214,7 +207,7 @@ class MaintenanceController
      */
     public function unlock(): void
     {
-        $this->runMaintenance('unlock', __('maint.unlock'));
+        $this->runMaintenance('unlock');
     }
 
     /**
@@ -270,17 +263,10 @@ class MaintenanceController
             return;
         }
 
-        set_time_limit(0);
-        $result = App::repoService()->init($repo);
+        $started = App::resticTasks()->startInit($repo);
 
-        echo App::response()->render('maintenance/result.php', [
-            'action' => __('maint.init'),
-            'result' => $result,
-            'repo' => $repo,
-            'isLoggedIn' => $auth->isLoggedIn(),
-            'username' => $user,
-        ]);
-    }
+        App::response()->redirect('/tasks/stream?label=' . urlencode($started['label']));
+        }
 
     /**
      * POST /maintenance/forget
@@ -340,20 +326,17 @@ class MaintenanceController
             'dry_run' => $request->post('dry_run', '0') === '1',
         ];
 
-        set_time_limit(0);
-        $result = App::maintenanceService()->forget($repo, $policy);
+        $started = App::resticTasks()->startMaintenance('forget', $repo, $policy);
 
-        echo App::response()->render('maintenance/result.php', [
-            'action' => __('maint.forget'),
-            'result' => $result,
-            'repo' => $repo,
-            'isLoggedIn' => $auth->isLoggedIn(),
-            'username' => $user,
-            'dryRun' => $policy['dry_run'],
-        ]);
-    }
+        $url = '/tasks/stream?label=' . urlencode($started['label']);
+        if ($policy['dry_run']) {
+            $url .= '&dry_run=1';
+        }
 
-    private function runMaintenance(string $method, string $actionName): void
+        App::response()->redirect($url);
+        }
+
+    private function runMaintenance(string $operation): void
     {
         $auth = App::auth();
         $user = $auth->user();
@@ -398,16 +381,9 @@ class MaintenanceController
             return;
         }
 
-        set_time_limit(0);
-        $result = App::maintenanceService()->$method($repo);
+        $started = App::resticTasks()->startMaintenance($operation, $repo);
 
-        echo App::response()->render('maintenance/result.php', [
-            'action' => $actionName,
-            'result' => $result,
-            'repo' => $repo,
-            'isLoggedIn' => $auth->isLoggedIn(),
-            'username' => $user,
-        ]);
+        App::response()->redirect('/tasks/stream?label=' . urlencode($started['label']));
     }
 
     private function resolveRepoId(Request $request): ?string

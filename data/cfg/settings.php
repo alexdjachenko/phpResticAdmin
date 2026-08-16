@@ -8,4 +8,7 @@ return [
     'repo_base_dir' => '/backups',
     'backup_paths_roots' => ['/sources'],
     'repo_paths_roots' => ['/backups'],
-];
+    'tsp_binary' => 'tsp',
+    'tsp_slots' => 1,
+    'snapshot_cache_ttl' => 600,
+    ];

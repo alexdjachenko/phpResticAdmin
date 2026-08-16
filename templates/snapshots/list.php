@@ -8,12 +8,21 @@
     <span class="snap-repo-name">— <?= htmlspecialchars($repo['name'] ?? '', ENT_QUOTES, 'UTF-8') ?></span>
 </h2>
 <p><code><?= htmlspecialchars($repo['path'] ?? '', ENT_QUOTES, 'UTF-8') ?></code></p>
+
+<form method="post" action="/snapshots/refresh" style="display:inline">
+    <input type="hidden" name="_csrf_token" value="<?= htmlspecialchars($csrfToken ?? '', ENT_QUOTES, 'UTF-8') ?>">
+    <input type="hidden" name="repo_id" value="<?= htmlspecialchars($repo['id'] ?? '', ENT_QUOTES, 'UTF-8') ?>">
+    <button type="submit" class="btn-snapshots"><?= htmlspecialchars(__('snap.refresh'), ENT_QUOTES, 'UTF-8') ?></button>
+</form>
 <?php else: ?>
 <h2><?= htmlspecialchars(__('snap.title'), ENT_QUOTES, 'UTF-8') ?></h2>
 <p><?= htmlspecialchars(__('dash.select_repo'), ENT_QUOTES, 'UTF-8') ?></p>
 <?php endif ?>
 
-<?php if (empty($snapshots)): ?>
+<?php if (!empty($loading)): ?>
+    <p class="snap-loading"><?= htmlspecialchars(__('snap.loading'), ENT_QUOTES, 'UTF-8') ?></p>
+    <script>setTimeout(function() { window.location.reload(); }, 5000);</script>
+<?php elseif (empty($snapshots)): ?>
     <p><?= htmlspecialchars(__('snap.no_snaps'), ENT_QUOTES, 'UTF-8') ?></p>
 <?php else: ?>
     <table class="snapshot-table">

@@ -34,7 +34,16 @@ class DashboardController
                 $visibleRepositories[] = $r;
             }
         }
-        $repoCount = count($visibleRepositories);
+
+        $repoStats = ['public' => 0, 'private' => 0, 'session' => 0, 'total' => 0];
+        foreach ($visibleRepositories as $r) {
+            $cat = $r['category'] ?? 'public';
+            if (isset($repoStats[$cat])) {
+                $repoStats[$cat]++;
+            }
+            $repoStats['total']++;
+        }
+        $repoCount = $repoStats['total'];
 
         if ($currentRepoId !== null) {
             foreach ($repositories as $r) {
@@ -52,12 +61,29 @@ class DashboardController
             }
         }
 
+        $tasks = App::tasks()->listForUser($user, $auth->canManageProcesses());
+
+        $activeTasks = [];
+        $recentTasks = [];
+        foreach ($tasks as $task) {
+            $state = $task['state'] ?? '';
+            if (in_array($state, ['queued', 'running'], true)) {
+                $activeTasks[] = $task;
+            } elseif ($state === 'finished') {
+                $recentTasks[] = $task;
+            }
+        }
+        $recentTasks = array_slice(array_reverse($recentTasks), 0, 10);
+
         echo App::response()->render('dashboard.php', [
             'repo' => $repo,
             'latestSnapshots' => $latestSnapshots,
             'repoCount' => $repoCount,
+            'repoStats' => $repoStats,
+            'activeTasks' => $activeTasks,
+            'recentTasks' => $recentTasks,
         ]);
-    }
+        }
 
     public function invalidateCache(): void
     {

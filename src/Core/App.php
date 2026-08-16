@@ -9,10 +9,14 @@
 namespace App\Core;
 
 use App\Auth\Authenticator;
+use App\Process\TspClient;
+use App\Process\TspCommandRunner;
+use App\Process\TspTaskManager;
 use App\Restic\CommandRunner;
 use App\Restic\KeyService;
 use App\Restic\MaintenanceService;
 use App\Restic\RepositoryService;
+use App\Restic\ResticTaskService;
 use App\Restic\SnapshotService;
 use App\Storage\ConfigStorage;
 use App\Storage\RepositoryStorage;
@@ -29,6 +33,10 @@ class App
     private static ?SnapshotService $snapshotService = null;
     private static ?MaintenanceService $maintenanceService = null;
     private static ?KeyService $keyService = null;
+    private static ?TspClient $tsp = null;
+    private static ?TspTaskManager $tasks = null;
+    private static ?TspCommandRunner $tspRunner = null;
+    private static ?ResticTaskService $resticTasks = null;
     private static ?Security $security = null;
     private static ?Response $response = null;
 
@@ -130,14 +138,27 @@ class App
 
     public static function resticVersion(): string
     {
-        if (self::$resticVersion === null) {
-            $result = self::runner()->run(['restic', 'version']);
-            if ($result['exitCode'] === 0 && preg_match('/restic (\S+)/', $result['stdout'], $m)) {
-                self::$resticVersion = $m[1];
-            } else {
-                self::$resticVersion = 'unknown';
-            }
+        if (self::$resticVersion !== null) {
+            return self::$resticVersion;
         }
+
+        // Статический кеш сбрасывается между HTTP-запросами (PHP в Apache),
+        // поэтому результат `restic version` дополнительно кешируем в сессию.
+        $cached = self::session()->get('restic_version');
+        if (is_string($cached) && $cached !== '') {
+            self::$resticVersion = $cached;
+            return self::$resticVersion;
+        }
+
+        $result = self::runner()->run(['restic', 'version']);
+        if ($result['exitCode'] === 0 && preg_match('/restic (\S+)/', $result['stdout'], $m)) {
+            self::$resticVersion = $m[1];
+        } else {
+            self::$resticVersion = 'unknown';
+        }
+
+        self::session()->set('restic_version', self::$resticVersion);
+
         return self::$resticVersion;
     }
 
@@ -219,6 +240,38 @@ class App
             self::$keyService = new KeyService(self::runner());
         }
         return self::$keyService;
+    }
+
+    public static function tsp(): TspClient
+    {
+        if (self::$tsp === null) {
+            self::$tsp = new TspClient(self::runner());
+        }
+        return self::$tsp;
+    }
+
+    public static function tasks(): TspTaskManager
+    {
+        if (self::$tasks === null) {
+            self::$tasks = new TspTaskManager(self::tsp());
+        }
+        return self::$tasks;
+    }
+
+    public static function tspRunner(): TspCommandRunner
+    {
+        if (self::$tspRunner === null) {
+            self::$tspRunner = new TspCommandRunner(self::tsp(), self::runner());
+        }
+        return self::$tspRunner;
+    }
+
+    public static function resticTasks(): ResticTaskService
+    {
+        if (self::$resticTasks === null) {
+            self::$resticTasks = new ResticTaskService(self::tasks());
+        }
+        return self::$resticTasks;
     }
 
     public static function security(): Security
@@ -440,5 +493,60 @@ class App
             $controller = new \App\Controllers\KeyController();
             $controller->passwd();
         });
-    }
+
+        $router->map('GET', '/tasks/stream', function () {
+            $controller = new \App\Controllers\TaskController();
+            $controller->stream();
+        });
+
+        $router->map('GET', '/tasks/status', function () {
+            $controller = new \App\Controllers\TaskController();
+            $controller->status();
+        });
+
+        $router->map('POST', '/snapshots/refresh', function () {
+            $controller = new \App\Controllers\SnapshotController();
+            $controller->refresh();
+        });
+
+        $router->map('GET', '/users', function () {
+            $controller = new \App\Controllers\UserController();
+            $controller->list();
+        });
+
+        $router->map('GET', '/users/add', function () {
+            $controller = new \App\Controllers\UserController();
+            $controller->addForm();
+        });
+
+        $router->map('POST', '/users/add', function () {
+            $controller = new \App\Controllers\UserController();
+            $controller->add();
+        });
+
+        $router->map('GET', '/users/edit', function () {
+            $controller = new \App\Controllers\UserController();
+            $controller->editForm();
+        });
+
+        $router->map('POST', '/users/edit', function () {
+            $controller = new \App\Controllers\UserController();
+            $controller->edit();
+        });
+
+        $router->map('POST', '/users/delete', function () {
+            $controller = new \App\Controllers\UserController();
+            $controller->delete();
+        });
+
+        $router->map('GET', '/account/password', function () {
+            $controller = new \App\Controllers\AccountController();
+            $controller->passwordForm();
+        });
+
+        $router->map('POST', '/account/password', function () {
+            $controller = new \App\Controllers\AccountController();
+            $controller->changePassword();
+        });
+        }
 }

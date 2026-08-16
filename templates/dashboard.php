@@ -1,5 +1,83 @@
 <h2><?= htmlspecialchars(__('dash.title'), ENT_QUOTES, 'UTF-8') ?></h2>
 
+<div class="dashboard-stats">
+    <table class="repo-info">
+        <tr>
+            <th><?= htmlspecialchars(__('dash.repo_stats'), ENT_QUOTES, 'UTF-8') ?></th>
+            <td>
+                <?= htmlspecialchars(__('dash.public'), ENT_QUOTES, 'UTF-8') ?>: <?= (int) ($repoStats['public'] ?? 0) ?>
+                &middot; <?= htmlspecialchars(__('dash.private'), ENT_QUOTES, 'UTF-8') ?>: <?= (int) ($repoStats['private'] ?? 0) ?>
+                &middot; <?= htmlspecialchars(__('dash.session'), ENT_QUOTES, 'UTF-8') ?>: <?= (int) ($repoStats['session'] ?? 0) ?>
+                &middot; <?= htmlspecialchars(__('dash.total'), ENT_QUOTES, 'UTF-8') ?>: <?= (int) ($repoStats['total'] ?? 0) ?>
+            </td>
+        </tr>
+    </table>
+</div>
+
+<?php if (!empty($activeTasks)): ?>
+    <h3><?= htmlspecialchars(__('dash.active_tasks'), ENT_QUOTES, 'UTF-8') ?></h3>
+    <table class="snapshot-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th><?= htmlspecialchars(__('dash.task_state'), ENT_QUOTES, 'UTF-8') ?></th>
+                <th><?= htmlspecialchars(__('dash.task_label'), ENT_QUOTES, 'UTF-8') ?></th>
+                <th><?= htmlspecialchars(__('dash.task_command'), ENT_QUOTES, 'UTF-8') ?></th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            <?php foreach ($activeTasks as $task): ?>
+                <tr>
+                    <td><?= (int) ($task['id'] ?? 0) ?></td>
+                    <td><?= htmlspecialchars(__('tasks.state_' . ($task['state'] ?? 'unknown')), ENT_QUOTES, 'UTF-8') ?></td>
+                    <td><code><?= htmlspecialchars($task['label'] ?? '', ENT_QUOTES, 'UTF-8') ?></code></td>
+                    <td><?= htmlspecialchars(\App\Helpers\Format::truncate($task['command'] ?? '', 60), ENT_QUOTES, 'UTF-8') ?></td>
+                    <td>
+                        <?php if (!empty($task['label'])): ?>
+                            <a href="/tasks/stream?label=<?= htmlspecialchars(urlencode($task['label']), ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars(__('dash.task_open'), ENT_QUOTES, 'UTF-8') ?></a>
+                        <?php endif ?>
+                    </td>
+                </tr>
+            <?php endforeach ?>
+        </tbody>
+    </table>
+<?php endif ?>
+
+<?php if (!empty($recentTasks)): ?>
+    <h3><?= htmlspecialchars(__('dash.recent_tasks'), ENT_QUOTES, 'UTF-8') ?></h3>
+    <table class="snapshot-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th><?= htmlspecialchars(__('dash.task_state'), ENT_QUOTES, 'UTF-8') ?></th>
+                <th><?= htmlspecialchars(__('dash.task_label'), ENT_QUOTES, 'UTF-8') ?></th>
+                <th><?= htmlspecialchars(__('dash.task_command'), ENT_QUOTES, 'UTF-8') ?></th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            <?php foreach ($recentTasks as $task): ?>
+                <tr>
+                    <td><?= (int) ($task['id'] ?? 0) ?></td>
+                    <td><?= htmlspecialchars(__('tasks.state_' . ($task['state'] ?? 'unknown')), ENT_QUOTES, 'UTF-8') ?></td>
+                    <td><code><?= htmlspecialchars($task['label'] ?? '', ENT_QUOTES, 'UTF-8') ?></code></td>
+                    <td><?= htmlspecialchars(\App\Helpers\Format::truncate($task['command'] ?? '', 60), ENT_QUOTES, 'UTF-8') ?></td>
+                    <td>
+                        <?php if (!empty($task['label'])): ?>
+                            <a href="/tasks/stream?label=<?= htmlspecialchars(urlencode($task['label']), ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars(__('dash.task_open'), ENT_QUOTES, 'UTF-8') ?></a>
+                        <?php endif ?>
+                    </td>
+                </tr>
+            <?php endforeach ?>
+        </tbody>
+    </table>
+<?php endif ?>
+
+<?php if (empty($activeTasks) && empty($recentTasks)): ?>
+    <p><?= htmlspecialchars(__('dash.no_tasks'), ENT_QUOTES, 'UTF-8') ?></p>
+<?php endif ?>
+
 <?php if ($repoCount === 0): ?>
     <p><?= __('dash.no_repos') ?></p>
 <?php elseif ($repo !== null && !empty($latestSnapshots)): ?>

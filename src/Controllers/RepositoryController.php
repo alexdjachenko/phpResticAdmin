@@ -92,6 +92,12 @@ class RepositoryController
             return;
         }
 
+        $category = $repository['category'] ?? 'public';
+        if (!$auth->canUseRead($category)) {
+            App::response()->json(['ok' => false, 'error' => __('error.forbidden'), '_csrf_token' => App::security()->csrfToken()], 403);
+            return;
+        }
+
         $result = App::repoService()->testConnection($repository);
         $result['_csrf_token'] = App::security()->csrfToken();
         App::response()->json($result);
@@ -454,17 +460,10 @@ class RepositoryController
             return;
         }
 
-        $result = App::repoService()->backupSync($repo, $backupPaths);
+        $started = App::resticTasks()->startBackup($repo, $backupPaths);
 
-        echo App::response()->render('repositories/backup.php', [
-            'repo' => $repo,
-            'output' => $result['output'],
-            'error' => $result['error'],
-            'ok' => $result['ok'],
-            'isLoggedIn' => $auth->isLoggedIn(),
-            'username' => $user,
-        ]);
-    }
+        App::response()->redirect('/tasks/stream?label=' . urlencode($started['label']));
+        }
 
     /**
      * POST /repositories/select — выбор текущего репозитория (без CSRF).

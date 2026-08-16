@@ -28,15 +28,25 @@ class ConfigStorage
      */
     public function loadUsers(): array
     {
-        $users = $this->loadPhpFile('users.php');
+        $users = $this->loadPhpUsers();
 
-        foreach ($this->loadUsersYaml() as $username => $data) {
+        foreach ($this->loadYamlUsers() as $username => $data) {
             if (!isset($users[$username])) {
                 $users[$username] = $data;
             }
         }
 
         return $users;
+    }
+
+    /**
+     * Пользователи из users.php (только PHP-источник).
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    public function loadPhpUsers(): array
+    {
+        return $this->loadPhpFile('users.php');
     }
 
     /**
@@ -48,14 +58,36 @@ class ConfigStorage
     }
 
     /**
+     * Путь к users.yaml (рядом с repositories.yaml в data/data/).
+     */
+    public function usersYamlPath(): string
+    {
+        return dirname($this->configDir) . '/data/users.yaml';
+    }
+
+    /**
+     * Источник пользователя: 'php' (приоритетнее) | 'yaml' | null.
+     */
+    public function userSource(string $username): ?string
+    {
+        if (array_key_exists($username, $this->loadPhpUsers())) {
+            return 'php';
+        }
+        if (array_key_exists($username, $this->loadYamlUsers())) {
+            return 'yaml';
+        }
+        return null;
+    }
+
+    /**
      * Загружает users.yaml из data/data/users.yaml (рядом с repositories.yaml).
      * Отсутствующий или невалидный файл → пустой массив.
      *
      * @return array<string, array<string, mixed>>
      */
-    private function loadUsersYaml(): array
+    public function loadYamlUsers(): array
     {
-        $path = dirname($this->configDir) . '/data/users.yaml';
+        $path = $this->usersYamlPath();
 
         if (!file_exists($path)) {
             return [];

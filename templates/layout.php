@@ -50,6 +50,14 @@
                     </form>
                 <?php endforeach ?>
             </span>
+            <?php if (isset($isLoggedIn) && $isLoggedIn): ?>
+                <?php if (\App\Core\App::auth()->canManageUsers()): ?>
+                    <a href="/users"><?= htmlspecialchars(__('nav.users'), ENT_QUOTES, 'UTF-8') ?></a>
+                <?php endif ?>
+                <?php if (\App\Core\App::auth()->isYamlUser()): ?>
+                    <a href="/account/password"><?= htmlspecialchars(__('nav.account'), ENT_QUOTES, 'UTF-8') ?></a>
+                <?php endif ?>
+            <?php endif ?>
             <?php if (isset($isLoggedIn) && $isLoggedIn && isset($username)): ?>
                 <?= htmlspecialchars($username, ENT_QUOTES, 'UTF-8') ?> | <a href="/logout"><?= htmlspecialchars(__('nav.logout'), ENT_QUOTES, 'UTF-8') ?></a>
             <?php else: ?>

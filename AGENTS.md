@@ -11,7 +11,7 @@ PHPResticAdmin — **бесфреймворковое** PHP-приложение
 - **Репозиторий**: `alexdjachenko/PHPResticAdmin` на GitHub
 - **VCS**: Git, хостинг GitHub. Работаем через feature-ветки и Pull Requests
 - **CI**: GitHub Actions — тесты запускаются только там. Ориентируемся на статусы сборок на GitHub, локально проект не запускаем
-- **Текущий этап**: Stage 5 (Export, Maintenance, Keys) — реализован
+- **Текущий этап**: Stage 6 (фоновые задачи через tsp, оптимизация снепшотов, управление пользователями) — реализуется
 
 ---
 
@@ -77,6 +77,8 @@ htdocs/                  # Apache DocumentRoot
   .htaccess              # mod_rewrite: все запросы → index.php
   assets/
     css/style.css
+bin/
+  bootstrap-admin2.php   # автосоздание admin2 при первом старте контейнера
 src/
   Core/
     App.php              # Сервис-локатор + начальная загрузка + регистрация роутов
@@ -96,15 +98,23 @@ src/
   Auth/
     Authenticator.php    # Вход/выход, canUse/canEdit/canMove, guest_user, права по категориям
   Storage/
-    ConfigStorage.php    # Чтение PHP-конфигов из data/cfg/ (users.php, settings.php)
+    ConfigStorage.php    # Чтение PHP-конфигов из data/cfg/ (users.php, settings.php) + userSource()
     RepositoryStorage.php # CRUD (save/delete/move/update) + три категории: public/private/session
+    SnapshotCacheStorage.php # кеш списка снепшотов в сессии (TTL)
+    UserStorage.php       # CRUD YAML-пользователей (users.yaml)
+    UserBootstrap.php     # автосоздание admin2 при первом старте
   Restic/
     CommandRunner.php    # run() + runStream() + runStreamWithHeaders() — обёртка proc_open()
     RepositoryService.php # testConnection(), init(), backup(), backupSync()
     SnapshotService.php   # listSnapshots(), listLatestSnapshots(), getStats(), getSnapshot(), addTag(), removeTag(), copy()
     MaintenanceService.php # check(), prune(), rebuildIndex(), unlock(), forget(), stats()
     KeyService.php         # listKeys(), addKey(), removeKey(), changePassword()
-  Controllers/
+    ResticTaskService.php  # запуск тяжёлых restic-операций в фоне через tsp
+    Process/
+    TspClient.php          # низкоуровневая обёртка tsp (enqueue/list/cat/state/wait/...)
+    TspTaskManager.php     # метки user#hex, фильтрация по пользователю, status/streamOutput
+    TspCommandRunner.php   # адаптер контракта CommandRunner::run() поверх tsp
+    Controllers/
     DashboardController.php  # GET / → дашборд, POST /cache/invalidate
     AuthController.php       # GET/POST /login, GET /logout
     RepositoryController.php # list, addForm/add, detail, editForm/edit, check, delete, move, backup, select
@@ -113,7 +123,10 @@ src/
     ExportController.php     # GET /download, GET /export — скачивание файлов и снепшотов
     MaintenanceController.php # GET /maintenance, POST /maintenance/* — обслуживание
     KeyController.php        # GET /keys, POST /keys/* — управление ключами
-templates/
+    TaskController.php       # GET /tasks/stream, GET /tasks/status — фоновые задачи
+    UserController.php       # GET/POST /users/* — управление YAML-пользователями
+    AccountController.php    # GET/POST /account/password — self-service смена пароля
+    templates/
   layout.php             # Шапка, dropdown репозиториев, навигация, flash, <main>
   login.php              # Форма входа
   dashboard.php          # Дашборд: последние снепшоты выбранного репозитория
@@ -123,14 +136,20 @@ templates/
     detail.php           # Страница деталей: инфо + Check/Backup/Snapshots/Edit/Move/Delete
     edit.php             # Форма редактирования с backup_paths и S3
   snapshots/
-    list.php             # Таблица снепшотов + AJAX-тегирование + Browse + Export
+    list.php             # Таблица снепшотов + кнопка «Обновить» + блок «загрузка» + AJAX-тегирование
+    detail.php           # Детали снепшота + Stats/Copy (открывают /tasks/stream)
   browse/
     tree.php             # Дерево файлов/папок + хлебные крошки + Download
   maintenance/
     index.php            # Формы обслуживания (connection/check/stats/prune/rebuild-index/unlock/forget)
-    result.php           # Результат операции обслуживания
+    result.php           # Результат операции обслуживания (только для connection)
   keys/
     list.php             # Таблица ключей + формы add/remove/passwd
+  users/
+    list.php             # Список php (read-only) и yaml пользователей
+    form.php             # Форма add/edit YAML-пользователя
+  account/
+    password.php         # Self-service смена пароля
 data/
   cfg/
     users.php            # Новый формат: password, api_tokens, repos (use/edit по категориям)
@@ -197,7 +216,7 @@ docker/
 | GET   | `/repositories/detail` | RepositoryController::detail       | user != null + canUseRead |
 | GET   | `/repositories/edit`   | RepositoryController::editForm     | isLoggedIn + canEdit |
 | POST  | `/repositories/edit`   | RepositoryController::edit         | isLoggedIn + canEdit |
-| POST  | `/repositories/check`  | RepositoryController::check        | isLoggedIn |
+| POST  | `/repositories/check`  | RepositoryController::check        | isLoggedIn + canUseRead |
 | POST  | `/repositories/delete` | RepositoryController::delete       | isLoggedIn + canDelete |
 | POST  | `/repositories/move`   | RepositoryController::move         | isLoggedIn + canMove |
 | POST  | `/repositories/backup` | RepositoryController::backup       | isLoggedIn + canUseWrite |
@@ -224,6 +243,17 @@ docker/
 | POST  | `/keys/add`            | KeyController::add                 | isLoggedIn + canUseWrite |
 | POST  | `/keys/remove`         | KeyController::remove              | isLoggedIn + canUseWrite |
 | POST  | `/keys/passwd`         | KeyController::passwd              | isLoggedIn + canUseWrite |
+| GET   | `/tasks/stream`        | TaskController::stream             | user != null (своя задача или canManageProcesses) |
+| GET   | `/tasks/status`        | TaskController::status             | user != null (своя задача или canManageProcesses) |
+| POST  | `/snapshots/refresh`   | SnapshotController::refresh        | user != null + canUseRead |
+| GET   | `/users`               | UserController::list               | canManageUsers |
+| GET   | `/users/add`           | UserController::addForm            | canManageUsers |
+| POST  | `/users/add`           | UserController::add                | canManageUsers |
+| GET   | `/users/edit`          | UserController::editForm           | canManageUsers |
+| POST  | `/users/edit`          | UserController::edit               | canManageUsers |
+| POST  | `/users/delete`        | UserController::delete             | canManageUsers |
+| GET   | `/account/password`    | AccountController::passwordForm    | isYamlUser |
+| POST  | `/account/password`    | AccountController::changePassword  | isYamlUser |
 
 ### Логика аутентификации
 
@@ -234,7 +264,7 @@ docker/
   - `null` (неаутентифицирован)
 - Если `guest_user` равен `null` и пользователь не вошёл → `RepositoryController::list()` редиректит на `/login`
 - Если `guest_user` задан (например, `"guest"`) → неаутентифицированные пользователи могут видеть список репозиториев, но кнопка «Проверить» скрыта
-- Только пользователи с `isLoggedIn()` могут делать POST на `/repositories/check`
+- Только пользователи с `isLoggedIn()` и `canUseRead` на категорию репозитория могут делать POST на `/repositories/check`
 
 ### Категории репозиториев и модель прав
 
@@ -348,6 +378,57 @@ Fallback-правила для пользователей без секции `r
 
 ---
 
+## Фоновые задачи (tsp)
+
+- Бинарник `tsp` (task-spooler) ставится в Docker-образ (пакет `task-spooler`).
+- Тяжёлые restic-операции (backup, check, prune, repair index, unlock, forget, stats,
+  init, copy, stats-снепшота, список снепшотов) запускаются в фоне через
+  `ResticTaskService` → `TspTaskManager` → `TspClient`.
+- Метка задачи = `<username>#<hex>` (например, `alice#3f2a9c1b`). Метка — идентификатор
+  без отдельной БД. **Символ `#` в логинах запрещён** (валидация при создании
+  пользователей + `TspTaskManager::isValidLabel()`).
+- Обычный пользователь видит только задачи с префиксом `<его_username>#`;
+  `can_manage_processes` видит все задачи.
+- Web-режим: контроллер ставит задачу и редиректит на `/tasks/stream?label=...`,
+  где вывод стримится из output-файла tsp.
+- **Что НЕ переведено на tsp**: `RepositoryController::check` (`restic cat config`,
+  быстрый), `BrowseController` (`restic ls`), `ExportController` (потоковый `dump`
+  файла/архива — остаётся прямым), `KeyService` (`key add`/`key passwd` требуют stdin).
+- `TspCommandRunner` — адаптер контракта `CommandRunner::run()` поверх tsp
+  (enqueue → wait → cat) для будущих REST-эндпоинтов; со stdin делегирует прямому runner.
+
+## Пароль пользователя из secret/env (`password_var`)
+
+- `password_var` хранит **имя** переменной; значение переменной — **bcrypt-хеш**.
+- Порядок разрешения: Docker-secret `/run/secrets/<name>` → `getenv(<name>)` → поле
+  `password` учётки. Схема общая для всех пользователей (php и yaml).
+- Для `admin` дефолтное имя — `PHPRESTICADMIN_ADMIN_PASSWORD_HASH`; остальные
+  пользователи задают имя сами.
+- **Плейсхолдер-хеш `admin` в `users.php` намеренный** — без переменной/секрета вход
+  под `admin` невозможен.
+
+## Права пользователей (глобальные)
+
+- `can_manage_users` — создание/редактирование/удаление YAML-пользователей (`/users`). Default `false`.
+- `can_manage_processes` — просмотр фоновых задач всех пользователей. Default `false`.
+- Оба права есть у `admin` (users.php) и автосозданного `admin2`.
+- Self-service смена пароля (`/account/password`) — только для YAML-пользователей.
+
+## Автосоздание `admin2`
+
+- `bin/bootstrap-admin2.php` (через `UserBootstrap::ensureAdmin2()`) создаёт `admin2`
+  при первом старте, если `data/data/users.yaml` отсутствует.
+- `admin2` получает полные права + `can_manage_users` + `can_manage_processes` и
+  случайный пароль, который `docker/entrypoint.sh` печатает в stdout (лог контейнера).
+
+## Настройки
+
+- `tsp_binary` — путь к бинарнику tsp (default `'tsp'`).
+- `tsp_slots` — количество слотов очереди (default `1`).
+- `snapshot_cache_ttl` — TTL кеша списка снепшотов в сессии, секунды (default `600`).
+
+---
+
 ## Gotchas (неочевидные ловушки, найденные при отладке)
 
 ### restic CLI
@@ -382,6 +463,20 @@ Fallback-правила для пользователей без секции `r
 - **Интеграционные тесты требуют restic в PATH.** В workflow `test.yml` restic устанавливается на раннер отдельным шагом (через curl). Без этого все restic-зависимые тесты скипаются через `markTestSkipped`
 - **PR-образы тегируются `pr-{номер}`** при каждом пуше (workflow `build-and-publish.yml`). `latest` и версионные теги (`vX`, `vX.Y`) ставятся при публикации релиза (триггер `release: published`), а не на push в main
 - **Релизный workflow (`build-and-publish.yml`)** использует триггер `release: types: [published]` вместо `tags: ['v*']`, потому что `release-please` создаёт тег через `GITHUB_TOKEN`, а GitHub Actions не пропускает триггеры от собственного токена (защита от бесконечных циклов)
+
+### tsp / фоновые задачи
+
+- **tsp не запускает shell-парсер.** Для сложных команд — `sh -c '...'`. В коде команды передаются массивами (proc_open без shell).
+- **stdin отцепляется** от фоновой задачи — операции, требующие stdin (`key add`, `key passwd`), остаются прямыми (`TspCommandRunner` делегирует их прямому runner).
+- **`tsp -l` хрупок к парсингу** — формат колонок зависит от версии tsp. `TspClient::list()` извлекает только id/state/label; остальные колонки — best-effort.
+- **`tsp -E`** нужен для раздельного stderr; по умолчанию tsp пишет stdout в output-файл.
+- **Передача окружения в задачу**: `$env` задачи передаётся через proc_open-окружение
+  `tsp`-клиента. Есть риск, что долгоживущий tsp-сервер исполняет задачи со своим
+  окружением, а не с окружением клиента. Тесты фиксируют фактическое поведение:
+  `TspClientTest::testEnvIsPassedToJob` (одиночная задача) и решающий
+  `TspClientTest::testTwoTasksWithDifferentEnvs` (две задачи с разными окружениями,
+  каждая печатает своё). Если двухзадачный тест падает — перейти на fallback
+  (`/usr/bin/env KEY=VALUE ...` или spec-файл + `bin/tsp-runner.php`).
 
 ### Интерфейс
 

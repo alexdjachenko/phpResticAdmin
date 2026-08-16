@@ -258,5 +258,5 @@ class MaintenanceServiceTest extends TestCase
 
         $this->assertTrue($result['ok']);
         $this->assertSame('not-json', $result['output']);
-    }
-    }
+        }
+        }

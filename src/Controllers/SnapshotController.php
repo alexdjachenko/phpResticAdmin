@@ -10,6 +10,7 @@ namespace App\Controllers;
 
 use App\Core\App;
 use App\Core\Request;
+use App\Storage\SnapshotCacheStorage;
 
 class SnapshotController
 {
@@ -33,6 +34,7 @@ class SnapshotController
             echo App::response()->render('snapshots/list.php', [
                 'snapshots' => [],
                 'repo' => null,
+                'loading' => false,
                 'isLoggedIn' => $auth->isLoggedIn(),
                 'username' => $user,
             ]);
@@ -59,16 +61,120 @@ class SnapshotController
             return;
         }
 
-        $snapshots = App::snapshotService()->listSnapshots($repo);
+        $cache = new SnapshotCacheStorage();
+        $privileged = $auth->canManageProcesses();
+        $tasks = App::tasks();
+
+        $snapshots = $cache->get($repoId);
+        $loading = false;
+
+        if ($snapshots === null) {
+            $label = $cache->taskLabel($repoId);
+
+            if ($label !== null && $tasks->isValidLabel($label)) {
+                $job = $tasks->findByLabel($label);
+
+                if ($job === null) {
+                    // Задача пропала из очереди (например, после tsp -C) — запускаем новую
+                    $cache->clearTaskLabel($repoId);
+                    $started = App::resticTasks()->startListSnapshots($repo);
+                    $cache->setTaskLabel($repoId, $started['label']);
+                    $loading = true;
+                } elseif ($tasks->isFinished($user, $label, $privileged)) {
+                    $result = $tasks->catResult($user, $label, $privileged);
+                    if ($result !== null && $result['exitCode'] === 0) {
+                        $decoded = json_decode($result['output'], true);
+                        if (is_array($decoded)) {
+                            $snapshots = $decoded;
+                            $cache->set($repoId, $snapshots);
+                        }
+                    }
+                    $cache->clearTaskLabel($repoId);
+
+                    if ($snapshots === null) {
+                        App::session()->flash('error', __('snap.load_error'));
+                    }
+                } else {
+                    $loading = true;
+                }
+            } else {
+                $started = App::resticTasks()->startListSnapshots($repo);
+                $cache->setTaskLabel($repoId, $started['label']);
+                $loading = true;
+            }
+        }
+
         $csrfToken = App::security()->csrfToken();
 
         echo App::response()->render('snapshots/list.php', [
-            'snapshots' => $snapshots,
+            'snapshots' => $snapshots ?? [],
             'repo' => $repo,
+            'loading' => $loading,
             'isLoggedIn' => $auth->isLoggedIn(),
             'username' => $user,
             'csrfToken' => $csrfToken,
         ]);
+    }
+
+    /**
+     * POST /snapshots/refresh — сброс кеша списка снепшотов.
+     */
+    public function refresh(): void
+    {
+        $auth = App::auth();
+        $user = $auth->user();
+
+        if ($user === null) {
+            App::response()->redirect('/login');
+            return;
+        }
+
+        $request = new Request();
+        $security = App::security();
+
+        if (!$security->validateCsrf($request->post('_csrf_token', ''))) {
+            App::session()->flash('error', __('flash.csrf_error'));
+            App::response()->redirect('/snapshots');
+            return;
+        }
+
+        $repoId = (string) $request->post('repo_id', '');
+        if ($repoId === '') {
+            App::response()->redirect('/snapshots');
+            return;
+        }
+
+        $repositories = App::repoStorage()->loadAll($user);
+        $repo = null;
+        foreach ($repositories as $r) {
+            if (($r['id'] ?? '') === $repoId) {
+                $repo = $r;
+                break;
+            }
+        }
+
+        if ($repo === null) {
+            App::response()->error(404, __('flash.not_found'));
+            return;
+        }
+
+        if (!$auth->canUseRead($repo['category'] ?? 'public')) {
+            App::response()->error(403, __('error.forbidden'));
+            return;
+        }
+
+        $cache = new SnapshotCacheStorage();
+        $cache->invalidate($repoId);
+
+        $label = $cache->taskLabel($repoId);
+        if ($label !== null) {
+            $job = App::tasks()->findByLabel($label);
+            if ($job === null || App::tasks()->isFinished($user, $label, $auth->canManageProcesses())) {
+                $cache->clearTaskLabel($repoId);
+            }
+        }
+
+        App::response()->redirect('/snapshots?repo=' . urlencode($repoId));
     }
 
     /**
@@ -189,14 +295,15 @@ class SnapshotController
             return;
         }
 
-        $stats = App::snapshotService()->getStats($repo, $snapId);
+        $started = App::resticTasks()->startSnapshotStats($repo, $snapId);
 
         App::response()->json([
-            'ok' => $stats !== null,
-            'stats' => $stats,
+            'ok' => true,
+            'label' => $started['label'],
+            'stream_url' => '/tasks/stream?label=' . urlencode($started['label']),
             '_csrf_token' => App::security()->csrfToken(),
         ]);
-    }
+        }
 
     /**
      * POST /snapshots/tag — тегирование (AJAX).
@@ -320,11 +427,15 @@ class SnapshotController
             return;
         }
 
-        set_time_limit(0);
-        $result = App::snapshotService()->copy($sourceRepo, $destRepo, $snapId);
-        $result['_csrf_token'] = App::security()->csrfToken();
-        App::response()->json($result);
-    }
+        $started = App::resticTasks()->startSnapshotCopy($sourceRepo, $destRepo, $snapId);
+
+        App::response()->json([
+            'ok' => true,
+            'label' => $started['label'],
+            'stream_url' => '/tasks/stream?label=' . urlencode($started['label']),
+            '_csrf_token' => App::security()->csrfToken(),
+        ]);
+        }
 
     private function resolveRepoId(Request $request): ?string
     {

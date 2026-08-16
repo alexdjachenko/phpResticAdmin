@@ -17,6 +17,10 @@
 - Гибкие права по категориям (`public` / `private` / `session`).
 - Ограничение источников резервного копирования и локальных репозиториев разрешёнными корнями.
 - Пользователи из `users.php` и/или `users.yaml`.
+- Фоновые задачи обслуживания/бекапа через `tsp` (task spooler) с живым стримингом вывода.
+- Дашборд со статистикой репозиториев и мониторингом фоновых задач.
+- Управление YAML-пользователями и self-service смена пароля.
+- Пароль пользователя из Docker-секрета или переменной окружения (`password_var`).
 
 ## Быстрый старт
 
@@ -115,6 +119,44 @@ viewer:
         session:  { use: false, use_read: false, use_write: false, edit: false }
 ```
 
+YAML-пользователями также можно управлять из веб-интерфейса на `/users` (требуется `can_manage_users`).
+
+### Пароль через секрет / переменную окружения
+
+Любой пользователь (PHP или YAML) может задать `password_var` — **имя** переменной,
+содержащей bcrypt-хеш пароля. Хеш разрешается в порядке:
+
+1. Docker-секрет `/run/secrets/<name>`;
+2. переменная окружения `<name>`;
+3. поле `password` учётки.
+
+Для учётки `admin` используется дефолтное имя `PHPRESTICADMIN_ADMIN_PASSWORD_HASH`;
+плейсхолдер-хеш в `users.php` намеренно неверный, поэтому `admin` может войти только
+при заданном секрете/переменной.
+
+```bash
+# Сгенерировать хеш один раз
+php -r "echo password_hash('MyPassword', PASSWORD_DEFAULT);"
+
+# Вариант A: переменная окружения (admin)
+docker run -d -p 8080:80 -e PHPRESTICADMIN_ADMIN_PASSWORD_HASH='$2y$10$...' ghcr.io/alexdjachenko/phpresticadmin:latest
+
+# Вариант B: Docker-секрет (admin)
+echo -n '$2y$10$...' | docker secret create phpresticadmin_admin_password_hash -
+```
+
+### Первый вход (admin2)
+
+При первом старте контейнер создаёт `admin2` (полные права, включая `can_manage_users`
+и `can_manage_processes`) со случайным паролем и печатает его в лог контейнера:
+
+```bash
+docker logs <container>
+# Created initial admin2 user. Login: admin2, Password: ...
+```
+
+`admin2` создаётся только если `data/data/users.yaml` ещё не существует.
+
 ### Настройки
 
 `data/cfg/settings.php`:
@@ -142,6 +184,9 @@ return [
 | `repo_base_dir`       | Базовая директория для относительных локальных путей (по умолчанию `/backups`) |
 | `backup_paths_roots`  | Разрешённые корни для источников бекапа; пустой массив = без ограничений  |
 | `repo_paths_roots`    | Разрешённые корни для локальных репозиториев; пустой массив = без ограничений |
+| `tsp_binary`          | Путь к бинарнику `tsp` (по умолчанию `tsp`)                                  |
+| `tsp_slots`           | Количество слотов очереди фоновых задач (по умолчанию `1`)                    |
+| `snapshot_cache_ttl`  | TTL (секунды) кеша списка снепшотов в сессии (по умолчанию `600`)             |
 
 ## Типы репозиториев и поля расположения
 
@@ -176,6 +221,29 @@ return [
 - `use_read` / `use_write` без fallback: не заданы явно = `false`.
 - `canMove(from, to)` требует `use_read` в исходной категории и `use_write` в целевой.
 - `canInit` / `canDelete` по умолчанию равны `isLoggedIn()`, если не заданы.
+
+Два дополнительных глобальных (уровень пользователя) права:
+
+| Право                  | Метод                  | Что разрешает                                          |
+|------------------------|------------------------|--------------------------------------------------------|
+| `can_manage_users`     | `canManageUsers()`     | Управление YAML-пользователями на `/users`              |
+| `can_manage_processes` | `canManageProcesses()` | Видеть фоновые задачи всех пользователей                |
+
+Оба по умолчанию `false`; у `admin` и автосозданного `admin2` включены.
+
+## Фоновые задачи (tsp)
+
+Тяжёлые операции restic (backup, `check`, `prune`, `repair index`, `unlock`, `forget`,
+`stats`, `init`, копирование снепшота и статистика снепшота) выполняются в фоне через
+[task-spooler](https://manpages.ubuntu.com/manpages/jammy/man1/tsp.1.html) `tsp`.
+После старта задачи интерфейс редиректит на `/tasks/stream?label=...`, где вывод
+стримится в реальном времени. Активные и последние задачи видны на дашборде.
+
+Для standalone-установки (без Docker) требуется `tsp`:
+
+```bash
+sudo apt-get install task-spooler
+```
 
 ## CI/CD
 
