@@ -51,15 +51,52 @@ class Authenticator
             return false;
         }
 
-        $hash = $users[$username]['password'];
+        $hash = $this->resolvePasswordHash($username);
 
-        if (!password_verify($password, $hash)) {
+        if ($hash === null || $hash === '' || !password_verify($password, $hash)) {
             App::log('password_verify FAILED for ' . $username, 1);
             return false;
         }
 
         $this->session->set('auth_user', $username);
         return true;
+    }
+
+    /**
+     * Разрешает bcrypt-хеш пароля пользователя.
+     *
+     * Порядок: Docker-secret /run/secrets/<password_var> → getenv(<password_var>)
+     * → поле password учётки. Механизм общий для всех пользователей (php и yaml).
+     */
+    public function resolvePasswordHash(string $username): ?string
+    {
+        $users = $this->getUsers();
+        $userData = $users[$username] ?? null;
+
+        if ($userData === null) {
+            return null;
+        }
+
+        $passwordVar = $userData['password_var'] ?? null;
+        if (is_string($passwordVar) && $passwordVar !== '') {
+            $secretFile = '/run/secrets/' . $passwordVar;
+            if (is_file($secretFile)) {
+                $content = @file_get_contents($secretFile);
+                $hash = $content !== false ? trim($content) : '';
+                if ($hash !== '') {
+                    return $hash;
+                }
+            }
+
+            $envValue = getenv($passwordVar);
+            if (is_string($envValue) && $envValue !== '') {
+                return $envValue;
+            }
+        }
+
+        $password = $userData['password'] ?? null;
+
+        return is_string($password) && $password !== '' ? $password : null;
     }
 
     public function logout(): void
@@ -86,6 +123,18 @@ class Authenticator
     public function isLoggedIn(): bool
     {
         return $this->session->get('auth_user') !== null;
+    }
+
+    /**
+     * Является ли текущий пользователь YAML-пользователем (а не из users.php).
+     */
+    public function isYamlUser(): bool
+    {
+        $user = $this->user();
+        if ($user === null) {
+            return false;
+        }
+        return $this->configStorage->userSource($user) === 'yaml';
     }
 
     /**
@@ -144,6 +193,24 @@ class Authenticator
     {
         $userData = $this->getUserData();
         return $userData['can_delete'] ?? $this->isLoggedIn();
+    }
+
+    /**
+     * Глобальное право управлять YAML-пользователями (/users).
+     */
+    public function canManageUsers(): bool
+    {
+        $userData = $this->getUserData();
+        return $userData['can_manage_users'] ?? false;
+    }
+
+    /**
+     * Глобальное право видеть фоновые задачи всех пользователей.
+     */
+    public function canManageProcesses(): bool
+    {
+        $userData = $this->getUserData();
+        return $userData['can_manage_processes'] ?? false;
     }
 
     public function canMove(string $fromCategory, string $toCategory): bool

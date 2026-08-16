@@ -211,6 +211,71 @@ class ConfigStorageTest extends TestCase
         $this->assertArrayNotHasKey('bad', $users);
     }
 
+    /** loadPhpUsers возвращает только php-пользователей. */
+    public function testLoadPhpUsersReturnsOnlyPhp(): void
+    {
+        file_put_contents(
+            $this->configDir . '/users.php',
+            '<?php return ["admin" => ["password" => "hash123"]];'
+        );
+        file_put_contents(
+            $this->tmpDir . '/data/users.yaml',
+            "yamluser:\n    password: null\n"
+        );
+
+        $storage = new ConfigStorage($this->configDir);
+        $phpUsers = $storage->loadPhpUsers();
+
+        $this->assertArrayHasKey('admin', $phpUsers);
+        $this->assertArrayNotHasKey('yamluser', $phpUsers);
+    }
+
+    /** loadYamlUsers возвращает только yaml-пользователей. */
+    public function testLoadYamlUsersReturnsOnlyYaml(): void
+    {
+        file_put_contents(
+            $this->configDir . '/users.php',
+            '<?php return ["admin" => ["password" => "hash123"]];'
+        );
+        file_put_contents(
+            $this->tmpDir . '/data/users.yaml',
+            "yamluser:\n    password: null\n"
+        );
+
+        $storage = new ConfigStorage($this->configDir);
+        $yamlUsers = $storage->loadYamlUsers();
+
+        $this->assertArrayHasKey('yamluser', $yamlUsers);
+        $this->assertArrayNotHasKey('admin', $yamlUsers);
+    }
+
+    /** userSource определяет источник пользователя, php приоритетнее. */
+    public function testUserSourcePriority(): void
+    {
+        file_put_contents(
+            $this->configDir . '/users.php',
+            '<?php return ["shared" => ["password" => "from-php"]];'
+        );
+        file_put_contents(
+            $this->tmpDir . '/data/users.yaml',
+            "shared:\n    password: from-yaml\nyamlonly:\n    password: null\n"
+        );
+
+        $storage = new ConfigStorage($this->configDir);
+
+        $this->assertSame('php', $storage->userSource('shared'));
+        $this->assertSame('yaml', $storage->userSource('yamlonly'));
+        $this->assertNull($storage->userSource('missing'));
+    }
+
+    /** usersYamlPath возвращает путь в data/data/users.yaml. */
+    public function testUsersYamlPath(): void
+    {
+        $storage = new ConfigStorage($this->configDir);
+
+        $this->assertSame($this->tmpDir . '/data/users.yaml', $storage->usersYamlPath());
+    }
+
     private function removeDir(string $dir): void
     {
         if (!is_dir($dir)) {

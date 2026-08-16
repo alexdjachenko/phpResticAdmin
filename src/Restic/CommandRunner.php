@@ -18,7 +18,7 @@ class CommandRunner
      */
     public function run(array $command, array $env = [], ?string $stdin = null, int $timeout = 30): array
     {
-        $env = $this->ensureEnv($env);
+        $env = self::prepareEnv($env);
 
         $descriptorSpec = [
             0 => ['pipe', 'r'],
@@ -122,7 +122,7 @@ class CommandRunner
      */
     public function runStream(array $command, array $env = []): void
     {
-        $env = $this->ensureEnv($env);
+        $env = self::prepareEnv($env);
 
         set_time_limit(0);
 
@@ -180,7 +180,7 @@ class CommandRunner
      */
     public function runStreamWithHeaders(array $command, array $env, string $contentType, string $filename): void
     {
-        $env = $this->ensureEnv($env);
+        $env = self::prepareEnv($env);
 
         set_time_limit(0);
 
@@ -242,7 +242,7 @@ class CommandRunner
      * @param array<string, string> $env
      * @return array<string, string>
      */
-    private function ensureEnv(array $env): array
+    public static function prepareEnv(array $env): array
     {
         if (!isset($env['HOME'])) {
             $env['HOME'] = '/tmp';

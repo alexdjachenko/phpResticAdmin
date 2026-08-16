@@ -96,36 +96,23 @@ $summary = $snap['summary'] ?? [];
         .then(function(r) { return r.json(); })
         .then(function(data) {
             if (data._csrf_token) btn.dataset.csrf = data._csrf_token;
+
+            if (data.ok && data.stream_url) {
+                window.location.href = data.stream_url;
+                return;
+            }
+
             btn.textContent = <?= json_encode(__('snap.stats_load')) ?>;
             btn.disabled = false;
-
-            if (data.ok && data.stats) {
-                var s = data.stats;
-                var html = '<h3><?= htmlspecialchars(__('snap.stats_title'), ENT_QUOTES, 'UTF-8') ?></h3>';
-                html += '<table class="repo-info">';
-                if (s.total_size !== undefined) html += '<tr><th>Total Size</th><td>' + formatBytes(s.total_size) + '</td></tr>';
-                if (s.total_file_count !== undefined) html += '<tr><th>Files</th><td>' + s.total_file_count + '</td></tr>';
-                if (s.total_blob_count !== undefined) html += '<tr><th>Blobs</th><td>' + s.total_blob_count + '</td></tr>';
-                html += '</table>';
-                resultDiv.innerHTML = html;
-            } else {
-                resultDiv.innerHTML = '<p class="flash flash-error">' + (data.error || 'Error') + '</p>';
-            }
+            resultDiv.innerHTML = '<p class="flash flash-error">' + (data.error || 'Error') + '</p>';
         })
         .catch(function() {
             btn.textContent = <?= json_encode(__('snap.stats_load')) ?>;
             btn.disabled = false;
             resultDiv.innerHTML = '<p class="flash flash-error">Network error</p>';
         });
-    });
-
-    function formatBytes(b) {
-        if (b < 1024) return b + ' B';
-        if (b < 1048576) return (b / 1024).toFixed(2) + ' KiB';
-        if (b < 1073741824) return (b / 1048576).toFixed(2) + ' MiB';
-        return (b / 1073741824).toFixed(2) + ' GiB';
-    }
-    })();
+        });
+        })();
 
     <?php if (!empty($destRepos)): ?>
     (function() {
@@ -181,12 +168,13 @@ $summary = $snap['summary'] ?? [];
             }
             copyConfirm.disabled = false;
 
-            if (data.ok) {
-                copyResult.innerHTML = '<p class="flash flash-success">' + <?= json_encode(__('snap.copy_success')) ?> + '</p>';
-            } else {
-                copyResult.innerHTML = '<p class="flash flash-error">' + <?= json_encode(__('snap.copy_failed')) ?> + ' ' + (data.error || '') + '</p>';
+            if (data.ok && data.stream_url) {
+                window.location.href = data.stream_url;
+                return;
             }
-        })
+
+            copyResult.innerHTML = '<p class="flash flash-error">' + <?= json_encode(__('snap.copy_failed')) ?> + ' ' + (data.error || '') + '</p>';
+            })
         .catch(function() {
             copyConfirm.disabled = false;
             copyResult.innerHTML = '<p class="flash flash-error">Network error</p>';

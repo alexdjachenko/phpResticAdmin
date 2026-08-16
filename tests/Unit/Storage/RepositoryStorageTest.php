@@ -317,7 +317,7 @@ YAML;
         }
 
         /** Сохранение типоспецифичных полей расположения (local_path/s3_bucket/sftp_path/rest_url). */
-    public function testSaveWithTypeSpecificLocationFields(): void
+        public function testSaveWithTypeSpecificLocationFields(): void
     {
         $storage = new RepositoryStorage($this->tmpDir . '/repositories.yaml');
 
