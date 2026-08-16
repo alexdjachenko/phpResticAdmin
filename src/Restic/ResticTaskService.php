@@ -83,7 +83,8 @@ class ResticTaskService
         $command = ResticCommandBuilder::buildCommand(['stats', '--json', '--mode', 'raw-data'], $repo);
         $command[] = $snapId;
         $env = ResticCommandBuilder::buildEnv($repo);
-        return $this->tasks->start($this->username(), $command, $env);
+        // --json: отдельный stderr, чтобы предупреждения restic не ломали JSON
+        return $this->tasks->start($this->username(), $command, $env, true);
     }
 
     /**
@@ -94,7 +95,8 @@ class ResticTaskService
     {
         $command = ResticCommandBuilder::buildCommand(['snapshots', '--json'], $repo);
         $env = ResticCommandBuilder::buildEnv($repo);
-        return $this->tasks->start($this->username(), $command, $env);
+        // --json: отдельный stderr, чтобы предупреждения restic не ломали JSON
+        return $this->tasks->start($this->username(), $command, $env, true);
     }
 
     /**

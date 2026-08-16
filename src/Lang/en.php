@@ -110,7 +110,6 @@ return [
     'snap.summary_dirs'  => 'Dirs New',
     'snap.stats_load'    => 'Load Full Statistics',
     'snap.stats_loading' => 'Loading...',
-    'snap.stats_title'   => 'Repository Statistics',
     'browse.title'       => 'Browse',
     'browse.back'        => 'Back to snapshots',
     'browse.empty_dir'   => 'This directory is empty.',

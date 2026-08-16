@@ -30,14 +30,17 @@ class TspTaskManager
     /**
      * Ставит команду в очередь от имени пользователя.
      *
+     * $separateStderr = true включает `tsp -E`: stdout и stderr задачи пишутся
+     * в разные файлы. Нужно для JSON-задач, чтобы вывод stderr не ломал JSON.
+     *
      * @param array<int, string> $command
      * @param array<string, string> $env
      * @return array{label: string, id: int}
      */
-    public function start(string $username, array $command, array $env = []): array
+    public function start(string $username, array $command, array $env = [], bool $separateStderr = false): array
     {
         $label = $username . '#' . bin2hex(random_bytes(8));
-        return $this->tsp->enqueue($label, $command, $env);
+        return $this->tsp->enqueue($label, $command, $env, $separateStderr);
     }
 
     /**

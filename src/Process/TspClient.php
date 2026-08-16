@@ -47,13 +47,23 @@ class TspClient
     /**
      * Ставит команду в очередь с меткой label.
      *
+     * При $separateStderr = true используется флаг `tsp -E`: stdout задачи
+     * пишется в основной output-файл, а stderr — в отдельный файл `.e`.
+     * Это нужно для JSON-задач (restic snapshots/stats --json), чтобы
+     * предупреждения restic из stderr не ломали парсинг stdout.
+     *
      * @param array<int, string> $command
      * @param array<string, string> $env
      * @return array{id: int, label: string}
      */
-    public function enqueue(string $label, array $command, array $env = []): array
+    public function enqueue(string $label, array $command, array $env = [], bool $separateStderr = false): array
     {
-        $result = $this->run(array_merge(['-L', $label], $command), $env);
+        $args = ['-L', $label];
+        if ($separateStderr) {
+            $args[] = '-E';
+        }
+
+        $result = $this->run(array_merge($args, $command), $env);
 
         $id = -1;
         if ($result['exitCode'] === 0 && preg_match('/^\s*(\d+)\s*$/m', $result['stdout'], $m)) {
@@ -94,7 +104,7 @@ class TspClient
 
             $rest = $m[3];
             $label = null;
-            if (preg_match('/([A-Za-z0-9._-]+#[0-9a-f]{8,})/', $rest, $lm)) {
+            if (preg_match('/([A-Za-z0-9._-]+#[0-9a-f]+)/', $rest, $lm)) {
                 $label = $lm[1];
             }
 
@@ -132,6 +142,8 @@ class TspClient
 
     /**
      * Полный вывод задачи (tsp -c <id>). Блокируется до завершения задачи.
+     *
+     * При `-E` возвращает только stdout (stderr лежит в отдельном `.e`-файле).
      */
     public function cat(int $id): string
     {
@@ -170,6 +182,9 @@ class TspClient
     /**
      * Информация о задаче (tsp -i <id>).
      *
+     * Label извлекается из вывода `-i`; если в конкретной версии tsp `-i`
+     * не печатает label — берём его из списка задач (`list()`).
+     *
      * @return array{label: ?string, command: ?string}
      */
     public function info(int $id): array
@@ -178,8 +193,17 @@ class TspClient
         $text = $result['exitCode'] === 0 ? $result['stdout'] : '';
 
         $label = null;
-        if (preg_match('/([A-Za-z0-9._-]+#[0-9a-f]{8,})/', $text, $m)) {
+        if (preg_match('/([A-Za-z0-9._-]+#[0-9a-f]+)/', $text, $m)) {
             $label = $m[1];
+        }
+
+        if ($label === null) {
+            foreach ($this->list() as $job) {
+                if ($job['id'] === $id && $job['label'] !== null) {
+                    $label = $job['label'];
+                    break;
+                }
+            }
         }
 
         $command = null;

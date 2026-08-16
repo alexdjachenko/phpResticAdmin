@@ -68,7 +68,7 @@ class TspClientTest extends TestCase
     /** list() содержит только что поставленную задачу с её label. */
     public function testListContainsEnqueuedJob(): void
     {
-        $result = $this->tsp->enqueue('alice#abc123', ['/bin/echo', 'hello']);
+        $result = $this->tsp->enqueue('alice#3f2a9c1b', ['/bin/echo', 'hello']);
         $this->tsp->wait($result['id']);
 
         $jobs = $this->tsp->list();
@@ -82,7 +82,7 @@ class TspClientTest extends TestCase
         }
 
         $this->assertNotNull($found, 'enqueued job should appear in list()');
-        $this->assertSame('alice#abc123', $found['label']);
+        $this->assertSame('alice#3f2a9c1b', $found['label']);
     }
 
     /** cat возвращает stdout задачи. */
@@ -140,11 +140,11 @@ class TspClientTest extends TestCase
     /** info содержит label задачи. */
     public function testLabelAppearsInInfo(): void
     {
-        $result = $this->tsp->enqueue('alice#info1', ['/bin/echo', 'x']);
+        $result = $this->tsp->enqueue('alice#3f2a9c1b', ['/bin/echo', 'x']);
         $this->tsp->wait($result['id']);
 
         $info = $this->tsp->info($result['id']);
-        $this->assertSame('alice#info1', $info['label']);
+        $this->assertSame('alice#3f2a9c1b', $info['label']);
     }
 
     /**

@@ -110,7 +110,6 @@ return [
     'snap.summary_dirs'  => 'Новых каталогов',
     'snap.stats_load'    => 'Загрузить полную статистику',
     'snap.stats_loading' => 'Загрузка...',
-    'snap.stats_title'   => 'Статистика репозитория',
     'browse.title'       => 'Обзор',
     'browse.back'        => 'Назад к снепшотам',
     'browse.empty_dir'   => 'Эта директория пуста.',
