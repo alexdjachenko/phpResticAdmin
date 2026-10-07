@@ -203,7 +203,6 @@ class SnapshotController
             'csrfToken' => $csrfToken,
             'destRepos' => $destRepos,
             'statsEntry' => App::snapshotCache()->statsEntry($snapId),
-            'statsTtl' => (int) (App::configStorage()->loadSettings()['snapshot_stats_cache_ttl'] ?? 31536000),
             'isLoggedIn' => $auth->isLoggedIn(),
             'username' => $user,
         ]);

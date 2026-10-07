@@ -1,11 +1,29 @@
+# ================================================================
+# DEBUG / EXPERIMENT — временные разовые диагностики.
+#
+# Назначение: прогнать на раннере то, что нельзя проверить юнит-тестами
+# (реальные restic/tsp из образа, форматы вывода версий, поведение очереди).
+# Вывод печатается в лог сборки — его копируют в задачу.
+#
+# ВАЖНО: этот файл — ПЕСОЧНИЦА. Никогда не оставляйте тут секретов реальных
+# репозиториев. Шаги ниже используют /tmp и одноразовые репозитории.
+#
+# Готовые заготовки (шаблоны, раскомментируйте/адаптируйте нужное):
+#   1. Версии и форматы: restic/tsp, `key list --json` (поле current),
+#      `key passwd` (не принимает ID), `tsp -u`, формат строки `tsp -l`.
+#   2. Доставка окружения в задачу, стоящую в очереди (slots=1).
+#   3. Тайминг restic с окружением приложения и без (вклад restic-кеша).
+#
+# Для запуска вручную: Actions -> Debug / Experiment -> Run workflow.
+# ================================================================
+
 name: Debug / Experiment
 
 on:
-  push:
-    branches: [ main, '*' ]
-  pull_request:
-    branches: [ main ]
   workflow_dispatch:
+  # Запуск на push в любую ветку нужен редко — включайте точечно, во время отладки:
+  # push:
+  #   branches: [ '*' ]
 
 jobs:
   debug:
@@ -26,8 +44,8 @@ jobs:
           restic version
           tsp -V || true
 
-      # Step 0.6: key passwd/ID, поле current
-      - name: Restic — key passwd / key list current
+      # --- Заготовка 1: версии и форматы restic ключей ---
+      - name: Restic — key list --json (поле current) и key passwd
         run: |
           set -x
           export RESTIC_PASSWORD='primary-secret'
@@ -36,18 +54,18 @@ jobs:
 
           printf 'extra-secret\nextra-secret\n' | restic --repo /tmp/repo key add || true
 
-          echo "=== key list --json (пароль primary): current у пароля primary ==="
+          echo "=== key list --json (пароль primary) ==="
           restic --repo /tmp/repo key list --json || true
 
           echo "=== key list --json (пароль extra): current переключается ==="
           RESTIC_PASSWORD='extra-secret' restic --repo /tmp/repo key list --json || true
 
-          echo "=== key passwd <ID>: принимает ли ID (ожидаем отказ) ==="
+          echo "=== key passwd <ID>: принимает ли ID как аргумент (ожидаем отказ) ==="
           KEY_ID=$(RESTIC_PASSWORD='extra-secret' restic --repo /tmp/repo key list --json | tr ',' '\n' | grep -m1 '"id"' | cut -d'"' -f4)
           printf 'extra2\nextra2\n' | restic --repo /tmp/repo key passwd "$KEY_ID" || true
 
-      # Step 0.4: формат tsp -l и доставка per-job окружения в очередь (slots=1)
-      - name: tsp — формат строки, tsp -u, доставка env
+      # --- Заготовка 2: формат tsp -l, tsp -u, доставка env в очередь ---
+      - name: tsp — формат строки, tsp -u, доставка env в задачу в очереди
         run: |
           set -x
           export TMPDIR=/tmp/tspexp
@@ -58,13 +76,13 @@ jobs:
           echo "=== tsp -u (promote) ==="
           tsp -h 2>&1 | grep -i -- '-u' || true
 
-          echo "=== tsp -l: где стоит метка ==="
+          echo "=== tsp -l: где стоит метка в строке ==="
           tsp -L 'alice#checkrepo1abcdef0123456789ab' sh -c 'echo FIRST'
           tsp -l || true
 
-          echo "=== per-job env: две задачи с РАЗНЫМ окружением, вторая в очереди ==="
-          RESTIC_CACHE_DIR=/cache-a HOME=/home-a tsp -L 'alice#snapshotsrepo1aaaaaaaaaaaaaaaa ' sh -c 'sleep 3'
-          RESTIC_CACHE_DIR=/cache-b HOME=/home-b tsp -L 'bob#snapshotsrepo2bbbbbbbbbbbbbbbb ' sh -c 'echo "CACHE=[$RESTIC_CACHE_DIR] HOME=[$HOME]"'
+          echo "=== per-job env: вторая задача ждёт в очереди и видит СВОЙ env ==="
+          RESTIC_CACHE_DIR=/cache-a HOME=/home-a tsp -L 'alice#snapshotsrepo1aaaaaaaaaaaaaaaa' sh -c 'sleep 3'
+          RESTIC_CACHE_DIR=/cache-b HOME=/home-b tsp -L 'bob#snapshotsrepo2bbbbbbbbbbbbbbbb' sh -c 'echo "CACHE=[$RESTIC_CACHE_DIR] HOME=[$HOME]"'
           sleep 5
           echo "--- вывод второй задачи (ожидаем CACHE=[/cache-b] HOME=[/home-b]) ---"
           tsp -c 2 || true

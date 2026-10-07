@@ -95,15 +95,30 @@
 
 ## Фоновые задачи (App\Process и tsp)
 
-- Новый namespace `App\Process` — `TspClient`, `TspTaskManager`, `TspCommandRunner`.
+- Namespace `App\Process` — `TspClient`, `TaskLabel`, `TspTaskManager`, `TspCommandRunner`.
 - **Тяжёлые команды — только через `TspTaskManager`/`ResticTaskService`**, а не
   через `CommandRunner::run(..., timeout 0)` напрямую. Исключение — `ExportController`
   (потоковая выгрузка `dump` файла/архива остаётся прямой).
-- Метка задачи = `<username>#<hex>`. Символ `#` в логинах **запрещён**: валидация при
-  создании YAML-пользователей (`UserStorage`) + защитная проверка в менеджере задач
-  (`TspTaskManager::isValidLabel()`).
+- **Метка задачи — единый формат**: `<username>#<op>[repoId]<rand16>`. Строится и
+  разбирается только через `TaskLabel` (build/parse/isValid/OPS); не собирать метку
+  вручную и не парсить регулярками «hex сразу после #». Символ `#` в логинах
+  **запрещён**: валидация при создании YAML-пользователей (`UserStorage`) +
+  защитная проверка в `TaskLabel::parse()`.
 - `ResticTaskService` обязан собирать команды через `ResticCommandBuilder::buildCommand()`/
   `buildEnv()`, а не вручную.
+
+## Кеш (App\Cache)
+
+- **Кеш — только через `CacheInterface`.** Драйвер подставляется в конструктор
+  (или берётся через `App::cache()->for(CacheScope)`), новые самодельные кеши не
+  заводить (`static`-массивы, прямые `$_SESSION[...]` для кеша, свои `file_put_contents`).
+- Область выбирается в точке, где известен контекст объекта:
+  `System` — общее и безопасное к разделению; `User` — сессионное/приватное;
+  `Request` — мемоизация на запрос. **Данные приватных репозиториев — только User.**
+- `entry()` отдаёт `value`+`cached_at`+`stale`; просроченную запись при чтении **не
+  удалять** (её метаданные нужны выше). `remember()` = `get() ?? set(producer())`.
+- Потребители не знают о драйвере; смена механизма — только в `CacheManager`
+  (рецепт добавления драйвера — в AGENTS.md, раздел «Кеши и слои»).
 
 ## Пароль пользователя (password_var)
 

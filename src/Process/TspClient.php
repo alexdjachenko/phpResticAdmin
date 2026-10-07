@@ -78,7 +78,7 @@ class TspClient
      *
      * Парсинг `tsp -l` хрупок: формат колонок зависит от версии tsp.
      * Здесь извлекается надёжно только то, что нужно менеджеру задач:
-     * id, state, label (если метка в формате user#hex) и хвост строки
+     * id, state, label (через TaskLabel::extractFromTspLine) и хвост строки
      * для отображения команды.
      *
      * @return array<int, array{id: int, state: string, command: string, label: ?string, output: ?string, errorlevel: ?int}>

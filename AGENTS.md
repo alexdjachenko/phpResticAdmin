@@ -98,22 +98,30 @@ src/
   Auth/
     Authenticator.php    # Вход/выход, canUse/canEdit/canMove, guest_user, права по категориям
   Storage/
-    ConfigStorage.php    # Чтение PHP-конфигов из data/cfg/ (users.php, settings.php) + userSource()
+    ConfigStorage.php    # Чтение PHP-конфигов из data/cfg/ (users.php, settings.php) + userSource(); мемоизация на запрос
     RepositoryStorage.php # CRUD (save/delete/move/update) + три категории: public/private/session
-    SnapshotCacheStorage.php # кеш списка снепшотов в сессии (TTL)
+    SnapshotCacheStorage.php # доменная обёртка над кеш-слоем: список снепшотов и полная статистика (выбор области по категории репо)
+    SnapshotListState.php # автомат страницы списка снепшотов (list/progress/error/start), без HTTP
     UserStorage.php       # CRUD YAML-пользователей (users.yaml)
     UserBootstrap.php     # автосоздание admin2 при первом старте
+  Cache/
+    CacheScope.php        # enum областей кеша: System / User / Request
+    CacheInterface.php    # контракт одной области (get/entry/set/remove/remember)
+    CacheManager.php      # for(CacheScope): единственная точка выбора области и драйвера
+    SessionCache.php      # драйвер кеша в сессии (неймспейс user/system)
+    RequestCache.php      # драйвер кеша в памяти запроса
   Restic/
     CommandRunner.php    # run() + runStream() + runStreamWithHeaders() — обёртка proc_open()
     RepositoryService.php # testConnection(), init(), backup(), backupSync()
-    SnapshotService.php   # listSnapshots(), listLatestSnapshots(), getStats(), getSnapshot(), addTag(), removeTag(), copy()
+    SnapshotService.php   # listSnapshots(), getSnapshotById(), getStats(), parseStatsOutput(), addTag(), removeTag(), copy()
     MaintenanceService.php # check(), prune(), rebuildIndex(), unlock(), forget(), stats()
     KeyService.php         # listKeys(), addKey(), removeKey(), changePassword()
     ResticTaskService.php  # запуск тяжёлых restic-операций в фоне через tsp
     Process/
     TspClient.php          # низкоуровневая обёртка tsp (enqueue/list/cat/state/wait/...)
-    TspTaskManager.php     # метки user#hex, фильтрация по пользователю, status/streamOutput
-    TspCommandRunner.php   # адаптер контракта CommandRunner::run() поверх tsp
+    TaskLabel.php          # единый источник правды о схеме метки: build/parse/isValid/OPS
+    TspTaskManager.php     # менеджер задач: метки через TaskLabel, describe/listActiveFor/queuePosition/cancel/promote
+    TspCommandRunner.php   # адаптер контракта CommandRunner::run() поверх tsp (REST-шов)
     Controllers/
     DashboardController.php  # GET / → дашборд, POST /cache/invalidate
     AuthController.php       # GET/POST /login, GET /logout
@@ -123,7 +131,7 @@ src/
     ExportController.php     # GET /download, GET /export — скачивание файлов и снепшотов
     MaintenanceController.php # GET /maintenance, POST /maintenance/* — обслуживание
     KeyController.php        # GET /keys, POST /keys/* — управление ключами
-    TaskController.php       # GET /tasks/stream, GET /tasks/status — фоновые задачи
+    TaskController.php       # GET /tasks, /tasks/view, /tasks/stream, /tasks/status, /tasks/active, POST /tasks/cancel, /tasks/promote
     UserController.php       # GET/POST /users/* — управление YAML-пользователями
     AccountController.php    # GET/POST /account/password — self-service смена пароля
     templates/
@@ -240,12 +248,19 @@ docker/
 | POST  | `/maintenance/connection` | MaintenanceController::connection | isLoggedIn + canUseWrite |
 | POST  | `/maintenance/stats`   | MaintenanceController::stats       | isLoggedIn + canUseWrite |
 | GET   | `/keys`                | KeyController::list                | isLoggedIn + canUseRead |
+| POST  | `/keys/verify`         | KeyController::verify              | isLoggedIn + canUseRead |
 | POST  | `/keys/add`            | KeyController::add                 | isLoggedIn + canUseWrite |
 | POST  | `/keys/remove`         | KeyController::remove              | isLoggedIn + canUseWrite |
 | POST  | `/keys/passwd`         | KeyController::passwd              | isLoggedIn + canUseWrite |
+| GET   | `/tasks`               | TaskController::list               | user != null |
+| GET   | `/tasks/view`          | TaskController::view               | user != null (своя задача или canManageProcesses) |
 | GET   | `/tasks/stream`        | TaskController::stream             | user != null (своя задача или canManageProcesses) |
 | GET   | `/tasks/status`        | TaskController::status             | user != null (своя задача или canManageProcesses) |
+| GET   | `/tasks/active`        | TaskController::active             | user != null |
+| POST  | `/tasks/cancel`        | TaskController::cancel             | user != null (своя задача или canManageProcesses) |
+| POST  | `/tasks/promote`       | TaskController::promote            | user != null (своя задача или canManageProcesses) |
 | POST  | `/snapshots/refresh`   | SnapshotController::refresh        | user != null + canUseRead |
+| GET   | `/snapshots/stats/result` | SnapshotController::statsResult | user != null + canUseRead |
 | GET   | `/users`               | UserController::list               | canManageUsers |
 | GET   | `/users/add`           | UserController::addForm            | canManageUsers |
 | POST  | `/users/add`           | UserController::add                | canManageUsers |
@@ -356,12 +371,44 @@ Fallback-правила для пользователей без секции `r
 - `RepositoryService::init()` выполняет `restic init --repo <путь>`
 - `RepositoryService::backup()` выполняет `restic backup` со стримингом через `runStream()`
 - `SnapshotService::listSnapshots()` — `restic snapshots --json`, парсит JSON (таймаут 120с)
-- `SnapshotService::listLatestSnapshots($repo, $n)` — `restic snapshots --json --latest N` для дашборда и страницы репозитория (не тянет полный список с больших удалённых репозиториев)
+- `SnapshotService::getSnapshotById()` — `restic snapshots --json <id>` (лёгкий путь без полного списка)
+- **`--latest N` — не «последние N всего»**, а «последние N на каждую пару host+path».
+  Дашборд и страница репозитория режут «последние 5» в PHP из кешированного списка
+  (сортировка по `time` desc + `array_slice`).
 - `MaintenanceService::stats()` — `restic stats --json` для общей статистики репозитория
 - `MaintenanceService::rebuildIndex()` — `restic repair index` (команда `rebuild-index` устарела в restic)
 - Если пароль задан — передаёт `RESTIC_PASSWORD` в окружение; иначе добавляет `--insecure-no-password`
 - `RepositoryController::edit()` при смене типа с `s3` на другой НЕ очищает `env` (AWS-ключи). Это осознанно: если пользователь передумает и вернётся к `s3`, данные не потеряются. При обратном переключении поля в форме будут предзаполнены старыми значениями.
 - **Секретные поля в форме редактирования — «пустое поле = оставить как есть».** Пароль репозитория (`password`) и S3-секрет (`s3_secret`) перезаписываются только при непустом вводе; существующие значения берутся из сохранённого репозитория. Заполнение одного поля не сбрасывает другое.
+
+### Ключи restic (семантика)
+
+- **В restic «ключ» — это пароль.** Сколько разных паролей, столько ключей.
+- **`key list --json` содержит поле `current`** — им помечен ключ того пароля,
+  с которым запущена команда. Это и есть «поиск ключа по паролю»
+  (`KeyService::identifyKey()`).
+- **`key passwd` не принимает ID ключа** — меняет пароль ТОГО ключа, чей пароль подан;
+  старый ключ удаляется. Поэтому смена произвольного ключа выполнима (подаём его пароль);
+  новый id определяется диффом `key list` до/после.
+- **`key remove` не даёт удалить текущий ключ** — «текущий» = чей пароль подан. Поэтому
+  `key remove` запускается с паролем реквизитов, а защита «не удалять рабочий ключ»
+  ставится до вызова.
+- Галочка «обновить реквизиты источника» работает только если меняется рабочий ключ
+  приложения (`identified == workingKeyId`) и есть право `edit`.
+
+**Какой пароль в какую команду (часть контракта):**
+
+| Операция | Пароль в `RESTIC_PASSWORD` | Почему |
+|---|---|---|
+| `identifyKey()` / `verifyKey()` | введённый пользователем | помечает/проверяет конкретный ключ |
+| `listKeys()` (таблица/бейдж) | пароль реквизитов репо | бейдж обязан быть стабильным |
+| `key add` | пароль реквизитов репо | новый ключ в существующем репо |
+| `key remove <id>` | пароль реквизитов репо | restic сам запретит удалить рабочий |
+| `key passwd` | пароль идентифицированного ключа | его restic и заменит |
+
+Мемоизация: `KeyService` кеширует ТОЛЬКО листинг по паролю реквизитов (один ключ
+на `repoId`); `identifyKey` чужим паролем делает разовый запрос без кеша (иначе
+отрицательный результат вернулся бы как актуальный).
 
 ### Механика текущего репозитория
 
@@ -381,21 +428,143 @@ Fallback-правила для пользователей без секции `r
 ## Фоновые задачи (tsp)
 
 - Бинарник `tsp` (task-spooler) ставится в Docker-образ (пакет `task-spooler`).
+- **tsp — единственный источник правды о задачах.** Никакой второй очереди/БД нет:
+  всё, что нужно UI, извлекается из метки задачи (см. ниже).
 - Тяжёлые restic-операции (backup, check, prune, repair index, unlock, forget, stats,
   init, copy, stats-снепшота, список снепшотов) запускаются в фоне через
   `ResticTaskService` → `TspTaskManager` → `TspClient`.
-- Метка задачи = `<username>#<hex>` (например, `alice#3f2a9c1b`). Метка — идентификатор
-  без отдельной БД. **Символ `#` в логинах запрещён** (валидация при создании
-  пользователей + `TspTaskManager::isValidLabel()`).
-- Обычный пользователь видит только задачи с префиксом `<его_username>#`;
-  `can_manage_processes` видит все задачи.
-- Web-режим: контроллер ставит задачу и редиректит на `/tasks/stream?label=...`,
-  где вывод стримится из output-файла tsp.
+- **Схема метки** (единственный источник правды — `App\Process\TaskLabel`):
+
+  ```
+  <username>#<op><repoId><rand16>   # операции по репозиторию
+  <username>#<op><rand16>          # глобальные (без repoId)
+  ```
+
+  - `op` — код операции из `TaskLabel::OPS` (словарь ниже);
+  - `repoId` — id репозитория; **длина не проверяется** (в `repositories.yaml` id
+    правят руками, hex-формат не гарантирован);
+  - `rand16` — 16 hex-символов (`bin2hex(random_bytes(8))`), уникальность задачи.
+
+  Словарь `op` (соответствие строкам операций в коде):
+
+  | Строка операции | `op` |
+  |---|---|
+  | `backup` | `backup` |
+  | `snapshots` | `snapshots` |
+  | `check` / `prune` / `unlock` / `forget` / `stats` | те же |
+  | `repair index` | `repair` |
+  | `init` | `init` |
+  | `copy` | `copysnap` |
+  | `stats --mode raw-data <snapId>` (stats снепшота) | `snapstats` |
+  | REST-шов (`TspCommandRunner`) | `run` (глобальная) |
+
+  `snapstats` отличается от репозиторного `stats` намеренно: иначе «уже запущено —
+  не ставим» заблокирует чужую операцию.
+
+- **Разбор метки** идёт по словарю от длинных к коротким, `rand16` — последние 16
+  символов; метка из `tsp -l` извлекается якорно (`TaskLabel::extractFromTspLine()`) —
+  иначе операции, начинающиеся с hex-буквы (`check`, `forget`), молча усекались бы.
+- **Символ `#` в логинах запрещён** (валидация при создании пользователей +
+  `TaskLabel::parse()`).
+- Обычный пользователь видит только свои задачи (`<его_username>#...`);
+  `can_manage_processes` видит все. **Дедупликация/«что идёт по репозиторию»** — по
+  `op+repoId` по всем пользователям (`TspTaskManager::listActiveFor()`), потому что
+  exclusive-лок restic глобальный.
+- **UX в web**: форма тяжёлой операции (`data-ajax-task`) делает `fetch`-POST;
+  контроллер отвечает JSON `{ok, label, title}` (AJAX) или `303` + flash (без JS).
+  Успех открывает общую модалку (`window.TaskUI.open`) с живым выводом
+  (`/tasks/stream` + `ReadableStream`), кнопками «Остановить»/«Поднять в начало»/
+  «Готово — обновить данные». В шапке — индикатор `#task-tray`, опрашивает
+  `/tasks/active` только при видимой вкладке. **Серверных `return_url` нет** —
+  навигация на фронтенде.
+- **Очередь показывается честно**: `queued` — «в очереди, позиция N»
+  (`TspTaskManager::queuePosition()`) + кнопка «поднять в начало» (`tsp -u`).
+- **`Session::close()` — только последним действием запроса** (перед стримингом/
+  блокирующим ожиданием): после него нельзя ни писать flash, ни выпускать CSRF.
 - **Что НЕ переведено на tsp**: `RepositoryController::check` (`restic cat config`,
   быстрый), `BrowseController` (`restic ls`), `ExportController` (потоковый `dump`
   файла/архива — остаётся прямым), `KeyService` (`key add`/`key passwd` требуют stdin).
-- `TspCommandRunner` — адаптер контракта `CommandRunner::run()` поверх tsp
-  (enqueue → wait → cat) для будущих REST-эндпоинтов; со stdin делегирует прямому runner.
+- `TspCommandRunner` — адаптер контракта `CommandRunner::run()` поверх tsp для будущих
+  REST-эндпоинтов (метка `op = run`, владелец и задача видны владельцу; со stdin
+  делегирует прямому runner). Не удалять как «мёртвый код» (шов под REST).
+
+## Кеши и слои
+
+Кеш — отдельный слой `App\Cache` с тремя областями (контекстами) и сменяемым
+механизмом. Потребители работают только через `CacheInterface` и не знают, где и
+чем хранится значение.
+
+### Три области
+
+| Область | Драйвер | Где лежит | Что кешируется |
+|---|---|---|---|
+| **System** (`CacheScope::System`) | `SessionCache` (неймспейс `system`) | `$_SESSION['cache_system_*']` | производные restic/tsp, безопасные к разделению (список снепшотов публичного репо, статистика снепшота) |
+| **User** (`CacheScope::User`) | `SessionCache` (неймспейс `user`) | `$_SESSION['cache_user_*']` | привязаное к браузеру/сессии (приватные репозитории, `restic_version`) |
+| **Request** (`CacheScope::Request`) | `RequestCache` | память процесса | мемоизация горячего пути на один запрос |
+
+Правило выбора области:
+- результат restic/tsp, одинаковый для всех ⇒ **System**;
+- производное от сессии/UI либо данные приватного/сессионного репозитория ⇒ **User**;
+- посчитать один раз за запрос ⇒ **Request**.
+
+**Ключевой инвариант безопасности:** данные приватного/сессионного репозитория
+никогда не должны попадать в System-область. Поэтому область выбирается в точке,
+где известен контекст объекта (например, `SnapshotCacheStorage::scopeFor()` по
+категории репозитория), а не закрепляется за классом.
+
+### Точка подмены механизма
+
+`CacheManager` — единственное место, знающее об областях и драйверах:
+- `App::cache()->for(CacheScope): CacheInterface` (и удобные `system()`/`user()`/`request()`);
+- неизвестное/пустое `settings['cache_driver']` ⇒ `session` + `App::log(..., 0)`;
+- `App::resetCaches()` очищает область текущего запроса (для тестов и debug-инвалидации).
+
+Сегодня есть только драйвер `session` (System деградирует до per-client). File/redis/
+apcu — задача будущего этапа; рецепт добавления драйвера см. ниже.
+
+### Инвентарь кешей
+
+| Что | Область | Владелец | Ключ/суффикс | TTL | Инвалидация |
+|---|---|---|---|---|---|
+| Список снепшотов репо | System (public) / User (private/session) | `SnapshotCacheStorage` | `repos/<repoId>/snapshots.json` | `snapshot_cache_ttl` | `invalidateList()` (refresh, delete репо) |
+| Полная статистика снепшота | System | `SnapshotCacheStorage` | `snapshots/<snapId>/stats.json` | `snapshot_stats_cache_ttl` | перезапись при `snapstats` |
+| `restic_version` | Request поверх User | `App::resticVersion()` | `restic_version` | — | сброс сессии / `resetCaches()` |
+| Список задач tsp | Request | `TspTaskManager` | `tsp.list` | — | `App::resetCaches()` |
+| Настройки/пользователи | Request | `ConfigStorage` | `cfg.<md5(dir)>.<name>` | — | `forgetYamlUsers()` после записи |
+| Базовое окружение процесса | Request | `CommandRunner` | `env.base`, `env.process` | — | `resetEnvCache()` / `resetCaches()` |
+| Листинг ключей (реквизиты) | Request | `KeyService` | `keys.list.<repoId>` | — | `forgetKeyList()` после мутации |
+
+### Что кешем НЕ является (не переносить в кеш-слой)
+
+`auth_user`, flash-сообщения, `lang`, `current_repo`, `session_repos`, `snapshot_list_state`
+— это **состояние сессии/домена**, а не производные данные. У них своя семантика
+(например, flash самоуничтожается после чтения). «Унифицировать» их нельзя.
+
+### Правило «швы не удалять»
+
+- `App\Cache\*` (включая пользовательскую/системную область и `cache_driver`),
+- `TspCommandRunner` + `App::tspRunner()`,
+
+— это заготовки следующих этапов (REST) и точки смены механизма, а не мёртвый код.
+Их удаление — отдельное изменение плана с явным обоснованием, а не «уборка».
+REST/CLI работают только с `system()` + `request()` (сессии нет — пользовательская
+область молча деградирует).
+
+### Как добавить драйвер кеша (рецепт)
+
+1. Реализовать `CacheInterface` в `src/Cache/<Name>Cache.php`. Семантика:
+   `entry()` = `value`+`cached_at`+`stale` (просрочку **не удалять**); `remember()` =
+   `get() ?? set(producer())`; исключения наружу не бросать (только `App::log()` и
+   `null`/no-op).
+2. Зарегистрировать имя драйвера в `CacheManager` (неизвестное имя ⇒ `session` +
+   лог уровня 0).
+3. Добавить значение в `data/cfg/settings.php` (`cache_driver`).
+4. Написать тест `tests/Unit/Cache/<Name>CacheTest.php` по образцу `SessionCacheTest`
+   (TTL, просрочка не удаляется, битые данные, деградация).
+5. **Не менять точки вызова** — ни один сервис не должен знать о драйвере.
+
+Запрещено заводить самодельные кеши вне слоя: `static`-массивы «на запрос», прямые
+`$_SESSION[...]` для кеша, собственные `file_put_contents` в кеш-каталог.
 
 ## Пароль пользователя из secret/env (`password_var`)
 
@@ -425,7 +594,12 @@ Fallback-правила для пользователей без секции `r
 
 - `tsp_binary` — путь к бинарнику tsp (default `'tsp'`).
 - `tsp_slots` — количество слотов очереди (default `1`).
-- `snapshot_cache_ttl` — TTL кеша списка снепшотов в сессии, секунды (default `600`).
+- `snapshot_cache_ttl` — TTL кеша списка снепшотов, секунды (default `600`).
+- `snapshot_stats_cache_ttl` — TTL кеша полной статистики снепшота (default `31536000`;
+  объект снепшота неизменяем).
+- `task_poll_interval` — интервал опроса активных задач в UI, мс (default `3000`).
+- `cache_driver` — драйвер **системной** области кеша (default `session`; неизвестное
+  значение ⇒ `session` + `App::log(..., 0)`). Точка смены механизма на будущее.
 
 ---
 
@@ -434,7 +608,7 @@ Fallback-правила для пользователей без секции `r
 ### restic CLI
 
 - **`restic ls --json` выдаёт NDJSON (JSON Lines), а не массив.** Каждая строка — отдельный JSON-объект. `json_decode($stdout, true)` на всём выводе падает, нужно парсить построчно.
-- **`restic snapshots --json` в старых версиях (0.14, Debian bookworm) не содержит `summary.total_size`.** Для получения размеров использовать `restic stats --json --mode raw-data <ids...>`. В коде: `SnapshotService::enrichWithSizes()`.
+- **`restic snapshots --json` в старых версиях (0.14, Debian bookworm) может не содержать `summary.total_size`.** Список показывает `summary.total_bytes_processed`; полная статистика — `restic stats --json --mode raw-data <id>`.
 - **`--insecure-no-password` — глобальный флаг, должен стоять ДО подкоманды** (`restic --insecure-no-password --repo /x snapshots`), а не после позиционных аргументов (иначе restic примет его за snapshot ID). В коде: `ResticCommandBuilder::buildCommand()` обеспечивает правильный порядок для всех сервисов и контроллеров. **Важно:** `RepositoryService` был исправлен (Stage 5 regression) — до исправления флаги ставились после подкоманды (`restic init --repo /path --insecure-no-password`), что ломало init в restic 0.19+.
 - **`restic ls` возвращает записи `.` и `..`** среди вывода. `empty('..')` → false, поэтому фильтровать явно: `$name === '.' || $name === '..'`.
 - **restic требует `$HOME` для кеша** (`.cache/restic`). В Docker-контейнере переменная не задана → падает `ls`, `find` и др. `CommandRunner::ensureEnv()` проставляет `HOME=/tmp`.
@@ -468,20 +642,19 @@ Fallback-правила для пользователей без секции `r
 
 - **tsp не запускает shell-парсер.** Для сложных команд — `sh -c '...'`. В коде команды передаются массивами (proc_open без shell).
 - **stdin отцепляется** от фоновой задачи — операции, требующие stdin (`key add`, `key passwd`), остаются прямыми (`TspCommandRunner` делегирует их прямому runner).
-- **`tsp -l` хрупок к парсингу** — формат колонок зависит от версии tsp. `TspClient::list()` извлекает только id/state/label; остальные колонки — best-effort.
+- **`tsp -l` хрупок к парсингу** — формат колонок зависит от версии tsp. `TspClient::list()` берёт около id/state/label; метка извлекается якорно (`TaskLabel::extractFromTspLine()`, в квадратных скобках перед командой). Остальные колонки — best-effort.
 - **`tsp -E`** нужен для раздельного stderr; по умолчанию tsp пишет stdout и stderr в один output-файл. Для JSON-задач (`startListSnapshots`, `startSnapshotStats`) stderr отделяется через `-E`, чтобы предупреждения restic не ломали JSON.
 - **Передача окружения в задачу**: `$env` задачи передаётся через proc_open-окружение
-  `tsp`-клиента. Есть риск, что долгоживущий tsp-сервер исполняет задачи со своим
-  окружением, а не с окружением клиента. Тесты фиксируют фактическое поведение:
-  `TspClientTest::testEnvIsPassedToJob` (одиночная задача) и решающий
-  `TspClientTest::testTwoTasksWithDifferentEnvs` (две задачи с разными окружениями,
-  каждая печатает своё). Если двухзадачный тест падает — перейти на fallback
-  (`/usr/bin/env KEY=VALUE ...` или spec-файл + `bin/tsp-runner.php`).
+  `tsp`-клиента. на версии из образа подтверждено, что окружение доходит до задачи,
+  даже если она стоит в очереди (фиксирует `TspClientTest::testTwoTasksWithDifferentEnvs`:
+  при `slots=1` вторая задача ждёт и всё равно видит свой env). Fallback
+  (`/usr/bin/env KEY=VALUE ...` или spec-файл + `bin/tsp-runner.php`) не нужен.
+  Если решающий тест когда-нибудь упадёт — вернуться к fallback.
 
 ### Интерфейс
 
 - **`current_repo` в сессии переживает между вкладками.** При открытии новой вкладки дашборд показывает данные последнего выбранного репо. Дашборд делает `redirect('/repositories')`, сбрасывая `current_repo`.
-- **Стриминг (`Content-Type: text/plain`) даёт чёрную страницу без навигации.** Поэтому backup и прочие тяжёлые операции переводятся на фоновые tsp-задачи с выводом через `/tasks/stream` (шаблон `repositories/backup.php` больше не используется и удалён).
+- **Стриминг (`Content-Type: text/plain`) на отдельной вкладке даёт чёрную страницу без навигации.** Поэтому тяжёлые операции показывают вывод в модалке поверх текущей страницы (`fetch`/`ReadableStream`), а не редиректят в `/tasks/stream`; страница под модалкой не меняется.
 - **`restic dump /` создаёт tar-архив**, который нужно отдавать с `Content-Type: application/x-tar`
 - **`restic key add` и `restic key passwd` требуют подтверждения пароля через stdin** (два ввода)
 - **`restic check` может быть долгим** — для CI использовать `--read-data-subset=1/100`

@@ -12,12 +12,12 @@ A lightweight, framework-free PHP web UI for managing [restic](https://restic.ne
 
 - Browse snapshots and file trees, download individual files or whole snapshots (tar).
 - Run maintenance operations: `check`, `prune`, `forget`, `repair index`, `unlock`, `init`.
-- Manage encryption keys: list, add, remove, change password.
+- Manage encryption keys: list, add, remove, change password; the key matching the configured repository credentials is highlighted.
 - Backends: local, Amazon S3, S3-compatible, SFTP, REST server.
 - Fine-grained per-category permissions (`public` / `private` / `session`).
 - Restriction of backup sources and local repository paths to allowed roots.
 - Users from `users.php` and/or `users.yaml`.
-- Background maintenance/backup tasks via `tsp` (task spooler) with live output streaming.
+- Background maintenance/backup tasks via `tsp` (task spooler) with live output in an in-page modal and an active-task indicator in the header.
 - Dashboard with repository statistics and background-task monitoring.
 - YAML user management and self-service password change.
 - User password via Docker secret or environment variable (`password_var`).
@@ -187,7 +187,10 @@ return [
 | `repo_paths_roots`    | Allowed roots for local repository paths; empty array = no restriction   |
 | `tsp_binary`          | Path to the `tsp` binary (default `tsp`)                                 |
 | `tsp_slots`           | Number of queue slots for background tasks (default `1`)                 |
-| `snapshot_cache_ttl`  | TTL (seconds) of the snapshot-list cache in session (default `600`)      |
+| `snapshot_cache_ttl`  | TTL (seconds) of the snapshot-list cache (default `600`)                 |
+| `snapshot_stats_cache_ttl` | TTL (seconds) of the full snapshot-statistics cache (default `31536000`) |
+| `task_poll_interval`  | Poll interval for the active-tasks indicator, ms (default `3000`)        |
+| `cache_driver`        | Driver of the system cache area (default `session`)                      |
 
 ## Repository types and location fields
 
@@ -237,14 +240,27 @@ Both default to `false`; `admin` and the auto-created `admin2` have them enabled
 Heavy restic operations (backup, `check`, `prune`, `repair index`, `unlock`, `forget`,
 `stats`, `init`, snapshot copy and snapshot statistics) run in the background through
 the [task-spooler](https://manpages.ubuntu.com/manpages/jammy/man1/tsp.1.html) `tsp`.
-After starting a task, the UI redirects to `/tasks/stream?label=...`, where the output
-is streamed live. Active and recent tasks are shown on the dashboard.
+Starting a task opens an in-page modal with live output (`/tasks/stream`); the header
+shows an active-task indicator. `tsp` is the single source of truth — task names are
+derived from the task label, and no second queue or database is kept.
+
+Snapshot lists and per-snapshot statistics are cached on the cache layer; the cache
+automatically releases the PHP session lock while a task streams.
 
 The standalone (non-Docker) installation requires `tsp`:
 
 ```bash
 sudo apt-get install task-spooler
 ```
+
+## Keys
+
+In restic a key is a password: there are as many keys as distinct passwords. The keys
+page lists keys and marks the one matching the repository credentials
+(«source credentials»), lets you verify a password against a key (the row is
+highlighted), add a password, remove a key by password or id, and change a key's
+password. `key remove` never removes the application's working key; changing the
+working key can update the stored repository credentials.
 
 ## CI/CD
 
