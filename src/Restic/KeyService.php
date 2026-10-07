@@ -25,6 +25,11 @@ use App\Cache\CacheInterface;
  *   key remove <id>           — пароль реквизитов репозитория;
  *   key passwd                — пароль идентифицированного ключа;
  *   key add                   — пароль реквизитов репозитория.
+ *
+ * Мемоизация (область текущего запроса): кешируется ТОЛЬКО листинг по паролю
+ * реквизитов репозитория — один ключ на repoId. Любая мутация сбрасывает его.
+ * Проверка чужого пароля кеш не трогает (иначе отрицательный результат,
+ * закешированный до `key add`/`key passwd`, возвращался бы как актуальный).
  */
 class KeyService
 {
@@ -54,14 +59,31 @@ class KeyService
     }
 
     /**
+     * Список ключей репозитория (листинг с паролем реквизитов, мемоизация на запрос).
+     *
+     * @param array<string, mixed> $repository
+     * @return array<int, array<string, mixed>>
+     */
+    public function listKeys(array $repository): array
+    {
+        return $this->repoKeyList($repository);
+    }
+
+    /**
      * Идентифицирует ключ по паролю: id ключа, помеченного `current`.
+     *
+     * Для пароля реквизитов переиспользует мемоизированный листинг; для
+     * произвольного пароля делает разовый запрос без кеширования.
      *
      * @param array<string, mixed> $repository
      * @return array{id: string, current: bool}|null
      */
     public function identifyKey(array $repository, string $password): ?array
     {
-        $keys = $this->requestKeyList($repository, $password);
+        $repoPassword = $repository['password'] ?? null;
+        $keys = ($repoPassword !== null && $password === $repoPassword)
+            ? $this->repoKeyList($repository)
+            : $this->fetchKeyList($repository, $password);
 
         foreach ($keys as $key) {
             if (!empty($key['current']) && !empty($key['id'])) {
@@ -70,17 +92,6 @@ class KeyService
         }
 
         return null;
-    }
-
-    /**
-     * Список ключей репозитория (листинг с паролем реквизитов).
-     *
-     * @param array<string, mixed> $repository
-     * @return array<int, array<string, mixed>>
-     */
-    public function listKeys(array $repository): array
-    {
-        return $this->requestKeyList($repository, $repository['password'] ?? null);
     }
 
     /**
@@ -98,8 +109,13 @@ class KeyService
             return null;
         }
 
-        $identified = $this->identifyKey($repository, $password);
-        return $identified['id'] ?? null;
+        foreach ($this->repoKeyList($repository) as $key) {
+            if (!empty($key['current']) && !empty($key['id'])) {
+                return (string) $key['id'];
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -130,9 +146,8 @@ class KeyService
         }
 
         $after = $this->keyIds($repository);
-        $newId = $this->diffId($before, $after);
 
-        return ['ok' => true, 'key_id' => $newId, 'error_code' => null, 'error' => ''];
+        return ['ok' => true, 'key_id' => $this->diffId($before, $after), 'error_code' => null, 'error' => ''];
     }
 
     /**
@@ -151,8 +166,7 @@ class KeyService
             return ['ok' => false, 'key_id' => null, 'error_code' => 'password_taken', 'error' => ''];
         }
 
-        $identified = $this->identifyKey($repository, $oldPassword);
-        if ($identified === null) {
+        if ($this->identifyKey($repository, $oldPassword) === null) {
             return ['ok' => false, 'key_id' => null, 'error_code' => 'old_password_invalid', 'error' => ''];
         }
 
@@ -174,9 +188,8 @@ class KeyService
         }
 
         $after = $this->keyIds($repository);
-        $newId = $this->diffId($before, $after);
 
-        return ['ok' => true, 'key_id' => $newId, 'error_code' => null, 'error' => ''];
+        return ['ok' => true, 'key_id' => $this->diffId($before, $after), 'error_code' => null, 'error' => ''];
     }
 
     /**
@@ -232,17 +245,16 @@ class KeyService
     }
 
     /**
-     * Листинг ключей с мемоизацией на запрос (по реквизитам либо по override-паролю).
+     * Листинг по реквизитам репозитория с мемоизацией на текущий запрос.
      *
      * @param array<string, mixed> $repository
      * @return array<int, array<string, mixed>>
      */
-    private function requestKeyList(array $repository, ?string $password): array
+    private function repoKeyList(array $repository): array
     {
-        $repoId = (string) ($repository['id'] ?? '');
-        $cacheKey = 'keys.list.' . $repoId . '.' . md5($password ?? "\0insecure");
-
+        $cacheKey = 'keys.list.' . (string) ($repository['id'] ?? '');
         $cache = $this->requestCache();
+
         if ($cache !== null) {
             $cached = $cache->get($cacheKey);
             if (is_array($cached)) {
@@ -250,7 +262,7 @@ class KeyService
             }
         }
 
-        $keys = $this->fetchKeyList($repository, $password);
+        $keys = $this->fetchKeyList($repository, $repository['password'] ?? null);
 
         if ($cache !== null) {
             $cache->set($cacheKey, $keys);
@@ -260,15 +272,18 @@ class KeyService
     }
 
     /**
+     * Разовый листинг без кеширования (для произвольного пароля и диффов).
+     *
      * @param array<string, mixed> $repository
      * @return array<int, array<string, mixed>>
      */
     private function fetchKeyList(array $repository, ?string $password): array
     {
         if ($password === null) {
-            $command = ResticCommandBuilder::buildCommand(['key', 'list', '--json'], $repository);
-            $env = ResticCommandBuilder::buildEnv($repository);
-            $result = $this->runner->run($command, $env);
+            $result = $this->runner->run(
+                ResticCommandBuilder::buildCommand(['key', 'list', '--json'], $repository),
+                ResticCommandBuilder::buildEnv($repository)
+            );
         } else {
             $result = $this->runWithPassword($repository, $password, ['key', 'list', '--json']);
         }
@@ -330,13 +345,9 @@ class KeyService
     private function forgetKeyList(array $repository): void
     {
         $cache = $this->requestCache();
-        if ($cache === null) {
-            return;
+        if ($cache !== null) {
+            $cache->remove('keys.list.' . (string) ($repository['id'] ?? ''));
         }
-
-        $repoId = (string) ($repository['id'] ?? '');
-        // Сбрасываем и листинг по реквизитам, и по возможным override-паролям.
-        $cache->remove('keys.list.' . $repoId . '.' . md5(($repository['password'] ?? '') ?: "\0insecure"));
     }
 
     private function requestCache(): ?CacheInterface

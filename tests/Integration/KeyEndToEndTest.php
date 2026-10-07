@@ -8,6 +8,8 @@
 
 namespace App\Tests\Integration;
 
+use App\Cache\RequestCache;
+use App\Core\App;
 use App\Restic\CommandRunner;
 use App\Restic\KeyService;
 use App\Restic\RepositoryService;
@@ -47,6 +49,9 @@ class KeyEndToEndTest extends TestCase
 
     protected function setUp(): void
     {
+        // Изолируем кеш области запроса между тестами (в одном процессе).
+        App::resetCaches();
+
         $this->tmpDir = sys_get_temp_dir() . '/phpresticadmin_key_' . uniqid();
         $this->repoDir = $this->tmpDir . '/restic-repo';
         mkdir($this->tmpDir, 0777, true);
@@ -69,13 +74,20 @@ class KeyEndToEndTest extends TestCase
 
     protected function tearDown(): void
     {
+        App::resetCaches();
         $this->removeDir($this->tmpDir);
+    }
+
+    /** Сервис с изолированным кешем запроса. */
+    private function service(): KeyService
+    {
+        return new KeyService(new CommandRunner(), new RequestCache());
     }
 
     /** После init ровно 1 ключ, и он помечен current. */
     public function testListKeys(): void
     {
-        $service = new KeyService(new CommandRunner());
+        $service = $this->service();
         $keys = $service->listKeys($this->repo);
 
         $this->assertCount(1, $keys, 'should have exactly 1 key after init');
@@ -85,7 +97,7 @@ class KeyEndToEndTest extends TestCase
     /** Идентификация по паролю: рабочий пароль → рабочий ключ; рабочий ключ стабилен. */
     public function testIdentifyAndWorkingKey(): void
     {
-        $service = new KeyService(new CommandRunner());
+        $service = $this->service();
 
         $working = $service->workingKeyId($this->repo);
         $this->assertNotNull($working, 'working key must be identified by repo credentials');
@@ -110,7 +122,7 @@ class KeyEndToEndTest extends TestCase
     /** Повторное добавление существующего пароля не создаёт ключ. */
     public function testAddExistingPasswordIsRejected(): void
     {
-        $service = new KeyService(new CommandRunner());
+        $service = $this->service();
 
         $result = $service->addKey($this->repo, $this->repoPassword);
 
@@ -122,7 +134,7 @@ class KeyEndToEndTest extends TestCase
     /** Рабочий ключ нельзя удалить по паролю. */
     public function testRemoveWorkingKeyIsBlocked(): void
     {
-        $service = new KeyService(new CommandRunner());
+        $service = $this->service();
 
         $result = $service->removeKeyByPassword($this->repo, $this->repoPassword);
 
@@ -134,7 +146,7 @@ class KeyEndToEndTest extends TestCase
     /** Удаление дополнительного ключа по паролю работает. */
     public function testRemoveExtraKeyByPassword(): void
     {
-        $service = new KeyService(new CommandRunner());
+        $service = $this->service();
         $add = $service->addKey($this->repo, 'extraPass2');
         $this->assertTrue($add['ok']);
 
@@ -150,7 +162,7 @@ class KeyEndToEndTest extends TestCase
      */
     public function testChangeExtraKeyPassword(): void
     {
-        $service = new KeyService(new CommandRunner());
+        $service = $this->service();
         $add = $service->addKey($this->repo, 'extraOld1');
         $this->assertTrue($add['ok']);
 
@@ -168,7 +180,7 @@ class KeyEndToEndTest extends TestCase
     /** Смена пароля РАБОЧЕГО ключа: с новым паролем репозиторий доступен. */
     public function testChangeWorkingKeyPassword(): void
     {
-        $service = new KeyService(new CommandRunner());
+        $service = $this->service();
 
         $result = $service->changePassword($this->repo, $this->repoPassword, 'workingNew1');
         $this->assertTrue($result['ok'], 'working key passwd should succeed: ' . $result['error']);
