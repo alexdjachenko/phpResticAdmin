@@ -118,4 +118,39 @@ class SnapshotServiceTest extends TestCase
 
         $this->assertNull($service->getSnapshotById($this->repo, 'abc123'));
     }
+
+    /** parseStatsOutput: объект {...}. */
+    public function testParseStatsObject(): void
+    {
+        $stats = SnapshotService::parseStatsOutput('{"total_size":1024,"total_file_count":3}');
+
+        $this->assertNotNull($stats);
+        $this->assertSame(1024, $stats['total_size']);
+        $this->assertSame(3, $stats['total_file_count']);
+    }
+
+    /** parseStatsOutput: массив [{...}] → первый элемент. */
+    public function testParseStatsArray(): void
+    {
+        $stats = SnapshotService::parseStatsOutput('[{"total_size":2048,"total_file_count":5}]');
+
+        $this->assertNotNull($stats);
+        $this->assertSame(2048, $stats['total_size']);
+    }
+
+    /** parseStatsOutput: total_bytes_processed тоже принимается. */
+    public function testParseStatsProcessedField(): void
+    {
+        $stats = SnapshotService::parseStatsOutput('{"total_bytes_processed":4096}');
+        $this->assertNotNull($stats);
+        $this->assertSame(4096, $stats['total_bytes_processed']);
+    }
+
+    /** parseStatsOutput: битый JSON / пустой массив / без ключей → null. */
+    public function testParseStatsInvalid(): void
+    {
+        $this->assertNull(SnapshotService::parseStatsOutput('not json'));
+        $this->assertNull(SnapshotService::parseStatsOutput('[]'));
+        $this->assertNull(SnapshotService::parseStatsOutput('{"other":1}'));
+    }
 }

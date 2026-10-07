@@ -8,29 +8,31 @@
 
 namespace App\Tests\Unit\Restic;
 
+use App\Cache\RequestCache;
 use App\Restic\CommandRunner;
 use App\Restic\KeyService;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Юнит-тест KeyService (управление ключами restic через моки CommandRunner).
+ * Юнит-тест KeyService (управление ключами restic через мок CommandRunner).
  *
- * Цель: проверить listKeys, addKey, removeKey, changePassword, verifyKey —
- *       без реального restic, через PHPUnit mocks.
+ * Цель: проверить контракт «какой пароль в какую команду», идентификацию ключа
+ *       по `current`, дифф id для новых ключей, отказы до опасных вызовов.
  *
  * Сценарий:
- *   - listKeys: валидный JSON, пустой вывод, невалидный JSON, ошибка (exitCode != 0).
- *   - addKey: проверка пароля в stdin, с паролем через RESTIC_PASSWORD,
- *     без пароля через --insecure-no-password.
- *   - removeKey: проверка аргументов команды.
- *   - changePassword: проверка пароля в stdin и аргументов.
- *   - verifyKey: успех при exitCode=0, провал при exitCode!=0, пароль в env.
+ *   - verifyKey: `cat config`, таймаут 10, пароль в env.
+ *   - identifyKey: ответ по current; null, когда ни один ключ не помечен.
+ *   - listKeys: листинг с паролем реквизитов.
+ *   - workingKeyId: null при пустом пароле; null при неверном пароле; id при совпадении.
+ *   - addKey: duplicate без вызова `key add`; key_id из диффа списка.
+ *   - removeKeyByPassword: отказ current_key ДО вызова `key remove`.
+ *   - changePassword: RESTIC_PASSWORD = oldPassword; отказы same_password/password_taken.
  *
- * Критерий успеха: моки проверяют переданные аргументы и stdin, сервис возвращает ожидаемые структуры.
+ * Критерий успеха: моки проверяют аргументы/env/stdin, сервис возвращает ожидаемое.
  */
 class KeyServiceTest extends TestCase
 {
-    /** @var array{id: string, name: string, type: string, path: string, password: ?string} */
+    /** @var array<string, mixed> */
     private array $repo;
     private string $repoPath;
 
@@ -46,285 +48,230 @@ class KeyServiceTest extends TestCase
         ];
     }
 
-    /** listKeys парсит валидный JSON. */
-    public function testListKeysParsesJson(): void
+    private function service(CommandRunner $runner): KeyService
     {
-        $json = '[{"id":"abc123","current":true,"userName":"host","created":"2025-01-01T00:00:00Z"}]';
-
-        $mock = $this->createMock(CommandRunner::class);
-        $mock->expects($this->once())
-            ->method('run')
-            ->willReturn(['exitCode' => 0, 'stdout' => $json, 'stderr' => '']);
-
-        $service = new KeyService($mock);
-        $keys = $service->listKeys($this->repo);
-
-        $this->assertCount(1, $keys);
-        $this->assertSame('abc123', $keys[0]['id']);
-        $this->assertTrue($keys[0]['current']);
+        return new KeyService($runner, new RequestCache());
     }
 
-    /** listKeys: пустой stdout → пустой массив. */
-    public function testListKeysHandlesEmptyOutput(): void
+    /** Извлекает подкоманду из argv. */
+    private function subcommand(array $cmd): string
     {
-        $mock = $this->createMock(CommandRunner::class);
-        $mock->expects($this->once())
-            ->method('run')
-            ->willReturn(['exitCode' => 0, 'stdout' => '', 'stderr' => '']);
-
-        $service = new KeyService($mock);
-        $keys = $service->listKeys($this->repo);
-
-        $this->assertSame([], $keys);
+        foreach (['key', 'cat', 'snapshots', 'stats'] as $token) {
+            if (in_array($token, $cmd, true)) {
+                $i = array_search($token, $cmd, true);
+                return $token === 'key' ? ('key ' . ($cmd[$i + 1] ?? '')) : $token;
+            }
+        }
+        return '';
     }
 
-    /** listKeys: невалидный JSON → пустой массив (защита). */
-    public function testListKeysHandlesInvalidJson(): void
-    {
-        $mock = $this->createMock(CommandRunner::class);
-        $mock->expects($this->once())
-            ->method('run')
-            ->willReturn(['exitCode' => 0, 'stdout' => 'not json', 'stderr' => '']);
-
-        $service = new KeyService($mock);
-        $keys = $service->listKeys($this->repo);
-
-        $this->assertSame([], $keys);
-    }
-
-    /** listKeys: exitCode != 0 → пустой массив. */
-    public function testListKeysHandlesErrorExitCode(): void
-    {
-        $mock = $this->createMock(CommandRunner::class);
-        $mock->expects($this->once())
-            ->method('run')
-            ->willReturn(['exitCode' => 1, 'stdout' => '', 'stderr' => 'error']);
-
-        $service = new KeyService($mock);
-        $keys = $service->listKeys($this->repo);
-
-        $this->assertSame([], $keys);
-    }
-
-    /** addKey: пароль передаётся в stdin (с подтверждением). */
-    public function testAddKeySendsPasswordToStdin(): void
-    {
-        $capturedStdin = null;
-        $mock = $this->createMock(CommandRunner::class);
-        $mock->expects($this->exactly(2))
-            ->method('run')
-            ->willReturnCallback(function ($cmd, $env = [], $stdin = null, $timeout = null) use (&$capturedStdin) {
-                if ($capturedStdin === null && in_array('snapshots', $cmd, true)) {
-                    // verifyKey: пароль не дубликат
-                    return ['exitCode' => 1, 'stdout' => '', 'stderr' => 'wrong password'];
-                }
-                // addKey
-                $capturedStdin = $stdin;
-                return ['exitCode' => 0, 'stdout' => '', 'stderr' => ''];
-            });
-
-        $service = new KeyService($mock);
-        $result = $service->addKey($this->repo, 'secret123');
-
-        $this->assertTrue($result['ok']);
-        // restic key add требует двойного ввода пароля
-        $this->assertSame("secret123\nsecret123\n", $capturedStdin);
-    }
-
-    /** removeKey: в команде присутствуют remove, ID ключа и путь к репо. */
-    public function testRemoveKeyBuildsCorrectCommand(): void
+    /** verifyKey: cat config, таймаут 10, пароль в env. */
+    public function testVerifyKeyUsesCatConfig(): void
     {
         $capturedCommand = null;
-        $mock = $this->createMock(CommandRunner::class);
-        $mock->expects($this->once())
-            ->method('run')
-            ->with(
-                $this->callback(function (array $cmd) use (&$capturedCommand) {
-                    $capturedCommand = $cmd;
-                    return true;
-                }),
-                $this->anything(),
-                $this->anything()
-            )
-            ->willReturn(['exitCode' => 0, 'stdout' => '', 'stderr' => '']);
-
-        $service = new KeyService($mock);
-        $result = $service->removeKey($this->repo, 'abc123');
-
-        $this->assertTrue($result['ok']);
-        $this->assertNotNull($capturedCommand);
-        $this->assertContains('remove', $capturedCommand);
-        $this->assertContains('abc123', $capturedCommand);
-        $this->assertContains($this->repoPath, $capturedCommand);
-    }
-
-    /** changePassword: новый пароль передаётся в stdin, команда содержит passwd и НЕ содержит ID ключа. */
-    public function testChangePasswordSendsNewPasswordToStdin(): void
-    {
-        $capturedStdin = null;
-        $capturedCommand = null;
-        $mock = $this->createMock(CommandRunner::class);
-        $mock->expects($this->once())
-            ->method('run')
-            ->with(
-                $this->callback(function (array $cmd) use (&$capturedCommand) {
-                    $capturedCommand = $cmd;
-                    return true;
-                }),
-                $this->anything(),
-                $this->callback(function (?string $stdin) use (&$capturedStdin) {
-                    $capturedStdin = $stdin;
-                    return true;
-                })
-            )
-            ->willReturn(['exitCode' => 0, 'stdout' => '', 'stderr' => '']);
-
-        $service = new KeyService($mock);
-        $result = $service->changePassword($this->repo, 'newpass456');
-
-        $this->assertTrue($result['ok']);
-        $this->assertNotNull($capturedStdin);
-        // Подтверждение нового пароля
-        $this->assertSame("newpass456\nnewpass456\n", $capturedStdin);
-        $this->assertContains('passwd', $capturedCommand);
-        // restic 0.19+ key passwd не принимает ID ключа
-        $this->assertNotContains('abc123', $capturedCommand);
-    }
-
-    /** addKey с паролем: RESTIC_PASSWORD в env, --insecure-no-password отсутствует. */
-    public function testAddKeyWithPasswordUsesEnv(): void
-    {
-        $repoWithPassword = array_merge($this->repo, ['password' => 'secret123']);
         $capturedEnv = null;
-        $capturedCommand = null;
-        $callCount = 0;
+        $capturedTimeout = null;
 
         $mock = $this->createMock(CommandRunner::class);
-        $mock->expects($this->exactly(2))
+        $mock->expects($this->once())
             ->method('run')
-            ->willReturnCallback(function ($cmd, $env = [], $stdin = null, $timeout = null) use (&$capturedCommand, &$capturedEnv, &$callCount) {
-                $callCount++;
-                if ($callCount === 1) {
-                    // verifyKey: пароль не дубликат
-                    return ['exitCode' => 1, 'stdout' => '', 'stderr' => 'wrong password'];
-                }
-                // addKey
+            ->willReturnCallback(function ($cmd, $env = [], $stdin = null, $timeout = null) use (&$capturedCommand, &$capturedEnv, &$capturedTimeout) {
                 $capturedCommand = $cmd;
                 $capturedEnv = $env;
+                $capturedTimeout = $timeout;
                 return ['exitCode' => 0, 'stdout' => '', 'stderr' => ''];
             });
 
-        $service = new KeyService($mock);
-        $result = $service->addKey($repoWithPassword, 'secret123');
+        $result = $this->service($mock)->verifyKey($this->repo, 'secret');
 
         $this->assertTrue($result['ok']);
-        $this->assertNotNull($capturedEnv);
-        $this->assertArrayHasKey('RESTIC_PASSWORD', $capturedEnv);
-        $this->assertSame('secret123', $capturedEnv['RESTIC_PASSWORD']);
-        $this->assertNotContains('--insecure-no-password', $capturedCommand);
+        $this->assertContains('cat', $capturedCommand);
+        $this->assertContains('config', $capturedCommand);
+        $this->assertSame(10, $capturedTimeout);
+        $this->assertSame('secret', $capturedEnv['RESTIC_PASSWORD']);
     }
 
-    /** addKey без пароля: --insecure-no-password в команде, RESTIC_PASSWORD нет в env. */
-    public function testAddKeyWithoutPasswordUsesInsecureFlag(): void
-    {
-        $capturedCommand = null;
-        $callCount = 0;
-
-        $mock = $this->createMock(CommandRunner::class);
-        $mock->expects($this->exactly(2))
-            ->method('run')
-            ->willReturnCallback(function ($cmd, $env = [], $stdin = null, $timeout = null) use (&$capturedCommand, &$callCount) {
-                $callCount++;
-                if ($callCount === 1) {
-                    // verifyKey: пароль не дубликат
-                    return ['exitCode' => 1, 'stdout' => '', 'stderr' => 'wrong password'];
-                }
-                // addKey
-                $capturedCommand = $cmd;
-                // Проверяем что RESTIC_PASSWORD НЕ передаётся (репо без пароля)
-                if (isset($env['RESTIC_PASSWORD'])) {
-                    return ['exitCode' => 99, 'stdout' => '', 'stderr' => 'RESTIC_PASSWORD should not be set'];
-                }
-                return ['exitCode' => 0, 'stdout' => '', 'stderr' => ''];
-            });
-
-        $service = new KeyService($mock);
-        $result = $service->addKey($this->repo, 'secret123');
-
-        $this->assertTrue($result['ok']);
-        $this->assertNotNull($capturedCommand);
-        $this->assertContains('--insecure-no-password', $capturedCommand);
-    }
-
-    /** addKey: отказ если ключ с таким паролем уже существует. */
-    public function testAddKeyRejectsDuplicatePassword(): void
-    {
-        $mock = $this->createMock(CommandRunner::class);
-        // Первый вызов — verifyKey успешен (exitCode=0, пароль уже работает)
-        // addKey не должен вызываться вообще
-        $mock->expects($this->once())
-            ->method('run')
-            ->willReturn(['exitCode' => 0, 'stdout' => '[]', 'stderr' => '']);
-
-        $service = new KeyService($mock);
-        $result = $service->addKey($this->repo, 'existingPassword');
-
-        $this->assertFalse($result['ok'], 'addKey should fail when password already matches a key');
-        $this->assertStringContainsString('already exists', $result['error']);
-    }
-
-    /** verifyKey: успех при exitCode=0. */
-    public function testVerifyKeyReturnsTrueOnSuccess(): void
-    {
-        $mock = $this->createMock(CommandRunner::class);
-        $mock->expects($this->once())
-            ->method('run')
-            ->willReturn(['exitCode' => 0, 'stdout' => '[]', 'stderr' => '']);
-
-        $service = new KeyService($mock);
-        $result = $service->verifyKey($this->repo, 'secret123');
-
-        $this->assertTrue($result['ok']);
-    }
-
-    /** verifyKey: провал при exitCode!=0. */
-    public function testVerifyKeyReturnsFalseOnFailure(): void
-    {
-        $mock = $this->createMock(CommandRunner::class);
-        $mock->expects($this->once())
-            ->method('run')
-            ->willReturn(['exitCode' => 1, 'stdout' => '', 'stderr' => 'wrong password']);
-
-        $service = new KeyService($mock);
-        $result = $service->verifyKey($this->repo, 'wrongPassword');
-
-        $this->assertFalse($result['ok']);
-        $this->assertNotEmpty($result['error']);
-    }
-
-    /** verifyKey: пароль пробрасывается в env. */
-    public function testVerifyKeyPassesPasswordInEnv(): void
+    /** listKeys: листинг с паролем реквизитов. */
+    public function testListKeysUsesRepoCredentials(): void
     {
         $capturedEnv = null;
+        $repo = array_merge($this->repo, ['password' => 'repo-pass']);
+
         $mock = $this->createMock(CommandRunner::class);
         $mock->expects($this->once())
             ->method('run')
-            ->with(
-                $this->anything(),
-                $this->callback(function (array $env) use (&$capturedEnv) {
+            ->willReturnCallback(function ($cmd, $env = []) use (&$capturedEnv) {
+                $capturedEnv = $env;
+                return ['exitCode' => 0, 'stdout' => '[{"id":"abc","current":true}]', 'stderr' => ''];
+            });
+
+        $keys = $this->service($mock)->listKeys($repo);
+
+        $this->assertCount(1, $keys);
+        $this->assertSame('repo-pass', $capturedEnv['RESTIC_PASSWORD']);
+    }
+
+    /** identifyKey: возвращает ключ с current=true. */
+    public function testIdentifyKeyReturnsCurrentKey(): void
+    {
+        $mock = $this->createMock(CommandRunner::class);
+        $mock->expects($this->once())
+            ->method('run')
+            ->willReturn(['exitCode' => 0, 'stdout' => '[{"id":"k1","current":false},{"id":"k2","current":true}]', 'stderr' => '']);
+
+        $identified = $this->service($mock)->identifyKey($this->repo, 'pw');
+
+        $this->assertNotNull($identified);
+        $this->assertSame('k2', $identified['id']);
+    }
+
+    /** identifyKey: null, когда ни один ключ не помечен current. */
+    public function testIdentifyKeyReturnsNullWithoutCurrent(): void
+    {
+        $mock = $this->createMock(CommandRunner::class);
+        $mock->expects($this->once())
+            ->method('run')
+            ->willReturn(['exitCode' => 0, 'stdout' => '[{"id":"k1","current":false}]', 'stderr' => '']);
+
+        $this->assertNull($this->service($mock)->identifyKey($this->repo, 'pw'));
+    }
+
+    /** workingKeyId: null при пустом пароле, без обращения к restic. */
+    public function testWorkingKeyIdNullWithoutPassword(): void
+    {
+        $mock = $this->createMock(CommandRunner::class);
+        $mock->expects($this->never())->method('run');
+
+        $this->assertNull($this->service($mock)->workingKeyId($this->repo));
+    }
+
+    /** workingKeyId: null при неверном пароле; id при совпадении. */
+    public function testWorkingKeyId(): void
+    {
+        $repo = array_merge($this->repo, ['password' => 'repo-pass']);
+
+        $mock = $this->createMock(CommandRunner::class);
+        $mock->expects($this->once())
+            ->method('run')
+            ->willReturn(['exitCode' => 0, 'stdout' => '[{"id":"worker","current":true}]', 'stderr' => '']);
+
+        $this->assertSame('worker', $this->service($mock)->workingKeyId($repo));
+
+        $mock2 = $this->createMock(CommandRunner::class);
+        $mock2->expects($this->once())
+            ->method('run')
+            ->willReturn(['exitCode' => 0, 'stdout' => '[{"id":"x","current":false}]', 'stderr' => '']);
+
+        $this->assertNull($this->service($mock2)->workingKeyId($repo));
+    }
+
+    /** addKey: duplicate определяется идентификацией, `key add` не вызывается. */
+    public function testAddKeyRejectsDuplicate(): void
+    {
+        $mock = $this->createMock(CommandRunner::class);
+        $mock->expects($this->once())
+            ->method('run')
+            ->willReturn(['exitCode' => 0, 'stdout' => '[{"id":"k2","current":true}]', 'stderr' => '']);
+
+        $result = $this->service($mock)->addKey($this->repo, 'existing');
+
+        $this->assertFalse($result['ok']);
+        $this->assertSame('duplicate', $result['error_code']);
+        $this->assertSame('k2', $result['key_id']);
+    }
+
+    /** addKey: key_id берётся из диффа списка (id, которого не было). */
+    public function testAddKeyDiffReturnsNewId(): void
+    {
+        $calls = 0;
+        $mock = $this->createMock(CommandRunner::class);
+        $mock->expects($this->exactly(4))
+            ->method('run')
+            ->willReturnCallback(function ($cmd) use (&$calls) {
+                $calls++;
+                $sub = $this->subcommand($cmd);
+                if ($sub === 'key list') {
+                    if ($calls === 1) { return ['exitCode' => 0, 'stdout' => '[]', 'stderr' => '']; } // identify: не дубликат
+                    if ($calls === 2) { return ['exitCode' => 0, 'stdout' => '[{"id":"old","current":true}]', 'stderr' => '']; } // before
+                    return ['exitCode' => 0, 'stdout' => '[{"id":"old","current":true},{"id":"new","current":true}]', 'stderr' => '']; // after
+                }
+                // key add
+                return ['exitCode' => 0, 'stdout' => 'saved new key', 'stderr' => ''];
+            });
+
+        $result = $this->service($mock)->addKey($this->repo, 'brand-new');
+
+        $this->assertTrue($result['ok']);
+        $this->assertSame('new', $result['key_id']);
+    }
+
+    /** removeKeyByPassword: отказ current_key ДО вызова `key remove`. */
+    public function testRemoveKeyByPasswordRefusesWorkingKey(): void
+    {
+        $repo = array_merge($this->repo, ['password' => 'repo-pass']);
+
+        $mock = $this->createMock(CommandRunner::class);
+        // Только идентификация (листинг с паролем реквизитов, мемоизируется),
+        // но НЕ `key remove`: рабочий ключ — отказ до вызова.
+        $mock->expects($this->once())
+            ->method('run')
+            ->willReturnCallback(function (array $cmd) {
+                $this->assertStringNotContainsString('remove', implode(' ', $cmd), 'key remove must not be called');
+                return ['exitCode' => 0, 'stdout' => '[{"id":"worker","current":true}]', 'stderr' => ''];
+            });
+
+        $result = $this->service($mock)->removeKeyByPassword($repo, 'repo-pass');
+
+        $this->assertFalse($result['ok']);
+        $this->assertSame('current_key', $result['error_code']);
+    }
+
+    /** changePassword: RESTIC_PASSWORD = oldPassword; отказы same/taken. */
+    public function testChangePasswordUsesOldPasswordAndRefusals(): void
+    {
+        $repo = array_merge($this->repo, ['password' => 'repo-pass']);
+
+        // same_password — без обращений к restic.
+        $noRun = $this->createMock(CommandRunner::class);
+        $noRun->expects($this->never())->method('run');
+        $same = $this->service($noRun)->changePassword($repo, 'pw', 'pw');
+        $this->assertSame('same_password', $same['error_code']);
+
+        // password_taken: новый пароль уже соответствует ключу.
+        $taken = $this->createMock(CommandRunner::class);
+        $taken->expects($this->once())
+            ->method('run')
+            ->willReturn(['exitCode' => 0, 'stdout' => '[{"id":"k","current":true}]', 'stderr' => '']);
+        $result = $this->service($taken)->changePassword($repo, 'old', 'taken');
+        $this->assertSame('password_taken', $result['error_code']);
+
+        // Успешная смена: key passwd запускается с RESTIC_PASSWORD = old.
+        $capturedEnv = null;
+        $capturedStdin = null;
+        $calls = 0;
+        $ok = $this->createMock(CommandRunner::class);
+        $ok->expects($this->exactly(5))
+            ->method('run')
+            ->willReturnCallback(function ($cmd, $env = [], $stdin = null) use (&$capturedEnv, &$capturedStdin, &$calls) {
+                $calls++;
+                $sub = $this->subcommand($cmd);
+                if ($sub === 'key passwd') {
                     $capturedEnv = $env;
-                    return true;
-                }),
-                $this->anything(),
-                $this->anything()
-            )
-            ->willReturn(['exitCode' => 0, 'stdout' => '[]', 'stderr' => '']);
+                    $capturedStdin = $stdin;
+                    return ['exitCode' => 0, 'stdout' => '', 'stderr' => ''];
+                }
+                // identify(new)→нет; identify(old)→есть; before; after
+                if ($calls === 1) { return ['exitCode' => 0, 'stdout' => '[]', 'stderr' => '']; }
+                if ($calls === 2) { return ['exitCode' => 0, 'stdout' => '[{"id":"oldkey","current":true}]', 'stderr' => '']; }
+                if ($calls === 3) { return ['exitCode' => 0, 'stdout' => '[{"id":"oldkey","current":true}]', 'stderr' => '']; }
+                return ['exitCode' => 0, 'stdout' => '[{"id":"newkey","current":true}]', 'stderr' => ''];
+            });
 
-        $service = new KeyService($mock);
-        $service->verifyKey($this->repo, 'secret123');
+        $success = $this->service($ok)->changePassword($repo, 'old-secret', 'new-secret');
 
-        $this->assertNotNull($capturedEnv);
-        $this->assertArrayHasKey('RESTIC_PASSWORD', $capturedEnv);
-        $this->assertSame('secret123', $capturedEnv['RESTIC_PASSWORD']);
-        }
-        }
+        $this->assertTrue($success['ok']);
+        $this->assertSame('newkey', $success['key_id']);
+        $this->assertSame('old-secret', $capturedEnv['RESTIC_PASSWORD'], 'key passwd must run with the identified key password');
+        $this->assertSame("new-secret\nnew-secret\n", $capturedStdin);
+    }
+}

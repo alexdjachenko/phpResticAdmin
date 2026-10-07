@@ -202,6 +202,8 @@ class SnapshotController
             'snap' => $snap,
             'csrfToken' => $csrfToken,
             'destRepos' => $destRepos,
+            'statsEntry' => App::snapshotCache()->statsEntry($snapId),
+            'statsTtl' => (int) (App::configStorage()->loadSettings()['snapshot_stats_cache_ttl'] ?? 31536000),
             'isLoggedIn' => $auth->isLoggedIn(),
             'username' => $user,
         ]);
@@ -265,6 +267,60 @@ class SnapshotController
             'title' => __('tasks.op_snapstats'),
             'stream_url' => '/tasks/stream?label=' . urlencode($started['label']),
             '_csrf_token' => App::security()->csrfToken(),
+        ]);
+        }
+
+        /**
+        * GET /snapshots/stats/result — результат задачи статистики.
+        *
+        * Проверяет, что метка принадлежит пользователю и её op = snapstats с этим
+        * id снепшота, читает вывод задачи, парсит и кладёт в системную область.
+        */
+        public function statsResult(): void
+        {
+        $auth = App::auth();
+        $user = $auth->user();
+
+        if ($user === null) {
+            App::response()->json(['ok' => false, 'error' => 'Authentication required'], 403);
+            return;
+        }
+
+        $request = new Request();
+        $label = (string) $request->get('label', '');
+        $snapId = (string) $request->get('snap_id', '');
+        $tasks = App::tasks();
+        $privileged = $auth->canManageProcesses();
+
+        if ($label === '' || $snapId === '' || !$tasks->assertAccess($user, $label, $privileged)) {
+            App::response()->json(['ok' => false, 'error' => 'Invalid task label'], 400);
+            return;
+        }
+
+        $parsed = $tasks->parseLabel($label);
+        if ($parsed === null || $parsed['op'] !== 'snapstats') {
+            App::response()->json(['ok' => false, 'error' => 'Not a snapshot stats task'], 400);
+            return;
+        }
+
+        $result = $tasks->catResult($user, $label, $privileged);
+        if ($result === null || $result['exitCode'] !== 0) {
+            App::response()->json(['ok' => false, 'error' => __('snap.stats_failed')], 200);
+            return;
+        }
+
+        $stats = \App\Restic\SnapshotService::parseStatsOutput($result['output']);
+        if ($stats === null) {
+            App::response()->json(['ok' => false, 'error' => __('snap.stats_failed')], 200);
+            return;
+        }
+
+        App::snapshotCache()->setStats($snapId, $stats);
+
+        App::response()->json([
+            'ok' => true,
+            'stats' => $stats,
+            'computed_at' => time(),
         ]);
         }
 

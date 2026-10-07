@@ -237,7 +237,7 @@ class App
     public static function keyService(): KeyService
     {
         if (self::$keyService === null) {
-            self::$keyService = new KeyService(self::runner());
+            self::$keyService = new KeyService(self::runner(), self::cache()->request());
         }
         return self::$keyService;
     }
@@ -435,6 +435,11 @@ class App
         $router->map('POST', '/snapshots/stats', function () {
             $controller = new \App\Controllers\SnapshotController();
             $controller->stats();
+        });
+
+        $router->map('GET', '/snapshots/stats/result', function () {
+            $controller = new \App\Controllers\SnapshotController();
+            $controller->statsResult();
         });
 
         $router->map('GET', '/browse', function () {

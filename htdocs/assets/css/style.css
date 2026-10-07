@@ -1073,3 +1073,34 @@ button:hover,
 #task-modal-cancel { background: #e74c3c; }
 .task-modal-full { margin-left: auto; color: #3498db; text-decoration: none; }
 .muted { color: #7f8c8d; }
+
+.key-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 12px;
+    background: #ecf0f1;
+    color: #555;
+}
+
+.key-badge-source {
+    background: #d4edda;
+    color: #155724;
+}
+
+.key-row-match {
+    background: #fff3cd;
+}
+
+.keys-hint {
+    color: #555;
+    font-size: 13px;
+}
+
+.keys-result {
+    margin-top: 8px;
+    font-size: 13px;
+}
+
+.keys-result-ok { color: #155724; }
+.keys-result-error { color: #721c24; }

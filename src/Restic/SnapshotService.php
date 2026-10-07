@@ -61,13 +61,37 @@ class SnapshotService
             return null;
         }
 
-        $decoded = json_decode($result['stdout'], true);
+        return self::parseStatsOutput($result['stdout']);
+    }
+
+    /**
+     * Разбирает JSON-вывод `restic stats --json`.
+     *
+     * Терпимо к обеим формам: `{...}` и `[{...}]`. При битом JSON или
+     * отсутствии ожидаемых ключей возвращает null.
+     *
+     * @return array<string, mixed>|null
+     */
+    public static function parseStatsOutput(string $json): ?array
+    {
+        $decoded = json_decode(trim($json), true);
 
         if (!is_array($decoded)) {
             return null;
         }
 
-        return $decoded[0] ?? $decoded;
+        if ($decoded === []) {
+            return null;
+        }
+
+        // [{...}] → первый элемент; {...} → как есть.
+        $stats = isset($decoded[0]) && is_array($decoded[0]) ? $decoded[0] : $decoded;
+
+        if (!isset($stats['total_size']) && !isset($stats['total_bytes_processed'])) {
+            return null;
+        }
+
+        return $stats;
     }
 
     /**
