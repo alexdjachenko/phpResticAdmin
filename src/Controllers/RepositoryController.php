@@ -196,7 +196,10 @@ class RepositoryController
         }
         $canMove = !empty($availableCategories);
 
-        $latestSnapshots = App::snapshotService()->listLatestSnapshots($repo, 5);
+        // «Последние 5» режем в PHP из кешированного списка: `restic snapshots
+        // --latest 5` означал бы «5 на каждую пару host+path», а не «5 всего».
+        $allSnapshots = App::snapshotCache()->list($repo);
+        $latestSnapshots = $allSnapshots !== null ? self::lastSnapshots($allSnapshots, 5) : [];
 
         $csrfToken = App::security()->csrfToken();
 
@@ -210,7 +213,8 @@ class RepositoryController
             'canMove' => $canMove,
             'availableCategories' => $availableCategories,
             'latestSnapshots' => $latestSnapshots,
-            'hasMoreSnapshots' => count($latestSnapshots) >= 5,
+            'hasMoreSnapshots' => $allSnapshots !== null && count($allSnapshots) > 5,
+            'needLoad' => $allSnapshots === null,
             'csrfToken' => $csrfToken,
             'isLoggedIn' => $auth->isLoggedIn(),
             'username' => $user,
@@ -687,6 +691,9 @@ class RepositoryController
 
         App::repoStorage()->delete($category, $repoId, $user);
 
+        // Снимаем кеш списка снепшотов репозитория (каталог данных уходит вместе с ним).
+        App::snapshotCache()->invalidateList($found);
+
         // Сбросить current_repo если удалённый id совпадает
         if (App::session()->get('current_repo') === $repoId) {
             App::session()->remove('current_repo');
@@ -775,5 +782,20 @@ class RepositoryController
             'rest' => 'rest_url',
             default => 'local_path',
         };
+    }
+
+    /**
+     * Последние N снепшотов по времени (desc) из полного списка.
+     *
+     * @param array<int, array<string, mixed>> $snapshots
+     * @return array<int, array<string, mixed>>
+     */
+    private static function lastSnapshots(array $snapshots, int $n): array
+    {
+        usort($snapshots, static function (array $a, array $b): int {
+            return strcmp((string) ($b['time'] ?? ''), (string) ($a['time'] ?? ''));
+        });
+
+        return array_slice($snapshots, 0, $n);
     }
 }

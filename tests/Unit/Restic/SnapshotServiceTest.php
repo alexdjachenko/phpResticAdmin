@@ -13,15 +13,15 @@ use App\Restic\SnapshotService;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Юнит-тест SnapshotService (listSnapshots, listLatestSnapshots через моки).
+ * Юнит-тест SnapshotService (через мок CommandRunner).
  *
- * Цель: проверить формирование команд restic для списка снепшотов,
- *       в том числе флаг --latest N для последних снепшотов.
+ * Цель: проверить формирование команд restic для чтения одного снепшота и
+ *       разбор ответа (лёгкий путь без полного списка).
  *
  * Сценарий:
- *   - listLatestSnapshots добавляет --json и --latest N перед позиционными
- *     аргументами, парсит JSON-ответ.
- *   - listLatestSnapshots возвращает [] при ошибке restic.
+ *   - getSnapshotById строит `snapshots --json <id>` (без --latest), парсит первый.
+ *   - getSnapshot() запрашивает по ID, а не полный listSnapshots.
+ *   - getSnapshotById при ошибке restic → null.
  *
  * Критерий успеха: моки проверяют аргументы команды и возврат данных.
  */
@@ -41,62 +41,9 @@ class SnapshotServiceTest extends TestCase
         ];
     }
 
-    /** listLatestSnapshots добавляет --latest N и парсит JSON. */
-    public function testListLatestSnapshotsAddsLatestFlag(): void
+    /** getSnapshotById строит snapshots --json <id> без --latest и парсит первый элемент. */
+    public function testGetSnapshotByIdQueriesSingleSnapshot(): void
     {
-        $capturedCommand = null;
-        $mock = $this->createMock(CommandRunner::class);
-        $mock->expects($this->once())
-            ->method('run')
-            ->with(
-                $this->callback(function (array $cmd) use (&$capturedCommand) {
-                    $capturedCommand = $cmd;
-                    return true;
-                }),
-                $this->anything(),
-                $this->anything(),
-                120
-            )
-            ->willReturn([
-                'exitCode' => 0,
-                'stdout' => '[{"id":"abc123","short_id":"abc123"}]',
-                'stderr' => '',
-            ]);
-
-        $service = new SnapshotService($mock);
-        $snapshots = $service->listLatestSnapshots($this->repo, 5);
-
-        $this->assertCount(1, $snapshots);
-        $this->assertSame('abc123', $snapshots[0]['short_id']);
-
-        $this->assertNotNull($capturedCommand);
-        $latestPos = array_search('--latest', $capturedCommand, true);
-        $this->assertIsInt($latestPos, '--latest flag should be present');
-        $this->assertSame('5', $capturedCommand[$latestPos + 1] ?? null, '--latest should be followed by the limit');
-        $this->assertContains('--json', $capturedCommand);
-    }
-
-    /** listLatestSnapshots возвращает пустой массив при ошибке restic. */
-    public function testListLatestSnapshotsReturnsEmptyOnError(): void
-    {
-        $mock = $this->createMock(CommandRunner::class);
-        $mock->expects($this->once())
-            ->method('run')
-            ->willReturn([
-                'exitCode' => 1,
-                'stdout' => '',
-                'stderr' => 'Is there a repository at this location?',
-            ]);
-
-        $service = new SnapshotService($mock);
-        $snapshots = $service->listLatestSnapshots($this->repo, 5);
-
-        $this->assertSame([], $snapshots);
-        }
-
-        /** getSnapshotById строит snapshots --json <id> без --latest и парсит первый элемент. */
-        public function testGetSnapshotByIdQueriesSingleSnapshot(): void
-        {
         $capturedCommand = null;
         $mock = $this->createMock(CommandRunner::class);
         $mock->expects($this->once())
@@ -126,11 +73,11 @@ class SnapshotServiceTest extends TestCase
         $this->assertContains('--json', $capturedCommand);
         $this->assertContains('abc123', $capturedCommand);
         $this->assertNotContains('--latest', $capturedCommand);
-        }
+    }
 
-        /** getSnapshot запрашивает один снепшот по ID, а не полный listSnapshots. */
-        public function testGetSnapshotQueriesById(): void
-        {
+    /** getSnapshot запрашивает один снепшот по ID, а не полный listSnapshots. */
+    public function testGetSnapshotQueriesById(): void
+    {
         $capturedCommand = null;
         $mock = $this->createMock(CommandRunner::class);
         $mock->expects($this->once())
@@ -157,11 +104,11 @@ class SnapshotServiceTest extends TestCase
         $this->assertNotNull($capturedCommand);
         $this->assertContains('abc123', $capturedCommand, 'getSnapshot must query by ID, not list all snapshots');
         $this->assertNotContains('--latest', $capturedCommand);
-        }
+    }
 
-        /** getSnapshotById при ошибке restic → null. */
-        public function testGetSnapshotByIdReturnsNullOnError(): void
-        {
+    /** getSnapshotById при ошибке restic → null. */
+    public function testGetSnapshotByIdReturnsNullOnError(): void
+    {
         $mock = $this->createMock(CommandRunner::class);
         $mock->expects($this->once())
             ->method('run')
@@ -170,5 +117,5 @@ class SnapshotServiceTest extends TestCase
         $service = new SnapshotService($mock);
 
         $this->assertNull($service->getSnapshotById($this->repo, 'abc123'));
-        }
-        }
+    }
+}

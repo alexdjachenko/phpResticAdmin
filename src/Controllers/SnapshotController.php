@@ -10,7 +10,6 @@ namespace App\Controllers;
 
 use App\Core\App;
 use App\Core\Request;
-use App\Storage\SnapshotCacheStorage;
 
 class SnapshotController
 {
@@ -32,9 +31,8 @@ class SnapshotController
 
         if ($repoId === null) {
             echo App::response()->render('snapshots/list.php', [
-                'snapshots' => [],
                 'repo' => null,
-                'loading' => false,
+                'view' => ['state' => 'list', 'snapshots' => []],
                 'isLoggedIn' => $auth->isLoggedIn(),
                 'username' => $user,
             ]);
@@ -61,60 +59,31 @@ class SnapshotController
             return;
         }
 
-        $cache = new SnapshotCacheStorage();
         $privileged = $auth->canManageProcesses();
-        $tasks = App::tasks();
+        $view = App::snapshotListState()->resolve($repo, $user, $privileged);
 
-        $snapshots = $cache->get($repoId);
-        $loading = false;
-
-        if ($snapshots === null) {
-            $label = $cache->taskLabel($repoId);
-
-            if ($label !== null && $tasks->isValidLabel($label)) {
-                $job = $tasks->findByLabel($label);
-
-                if ($job === null) {
-                    // Задача пропала из очереди (например, после tsp -C) — запускаем новую
-                    $cache->clearTaskLabel($repoId);
-                    $started = App::resticTasks()->startListSnapshots($repo);
-                    $cache->setTaskLabel($repoId, $started['label']);
-                    $loading = true;
-                } elseif ($tasks->isFinished($user, $label, $privileged)) {
-                    $result = $tasks->catResult($user, $label, $privileged);
-                    if ($result !== null && $result['exitCode'] === 0) {
-                        $decoded = json_decode($result['output'], true);
-                        if (is_array($decoded)) {
-                            $snapshots = $decoded;
-                            $cache->set($repoId, $snapshots);
-                        }
-                    }
-                    $cache->clearTaskLabel($repoId);
-
-                    if ($snapshots === null) {
-                        App::session()->flash('error', __('snap.load_error'));
-                    }
-                } else {
-                    $loading = true;
-                }
+        // Автомат решил, что нужен старт: ставим задачу и фиксируем её метку.
+        if ($view['state'] === 'start') {
+            $started = App::resticTasks()->startListSnapshots($repo);
+            if ($started['id'] < 0) {
+                App::snapshotCache()->setListError($repo, __('snap.load_error'));
+                $view = ['state' => 'error', 'error' => __('snap.load_error'), 'task_label' => null];
             } else {
-                $started = App::resticTasks()->startListSnapshots($repo);
-                $cache->setTaskLabel($repoId, $started['label']);
-                $loading = true;
+                App::snapshotCache()->markTask($repo, $started['label']);
+                $view = ['state' => 'progress', 'task_label' => $started['label'], 'task_state' => 'queued', 'position' => null];
             }
         }
 
         $csrfToken = App::security()->csrfToken();
 
         echo App::response()->render('snapshots/list.php', [
-            'snapshots' => $snapshots ?? [],
             'repo' => $repo,
-            'loading' => $loading,
+            'view' => $view,
             'isLoggedIn' => $auth->isLoggedIn(),
             'username' => $user,
             'csrfToken' => $csrfToken,
         ]);
-    }
+        }
 
     /**
      * POST /snapshots/refresh — сброс кеша списка снепшотов.
@@ -163,19 +132,12 @@ class SnapshotController
             return;
         }
 
-        $cache = new SnapshotCacheStorage();
-        $cache->invalidate($repoId);
+        // Инвалидация записи: задачу поставит list() при следующем заходе
+        // (refresh = «снять запись», а не «запустить задачу самому»).
+        App::snapshotCache()->invalidateList($repo);
 
-        $label = $cache->taskLabel($repoId);
-        if ($label !== null) {
-            $job = App::tasks()->findByLabel($label);
-            if ($job === null || App::tasks()->isFinished($user, $label, $auth->canManageProcesses())) {
-                $cache->clearTaskLabel($repoId);
-            }
+        App::response()->redirect('/snapshots?repo=' . urlencode($repoId), 303);
         }
-
-        App::response()->redirect('/snapshots?repo=' . urlencode($repoId));
-    }
 
     /**
      * GET /snapshots/detail — страница снепшота со сводкой и кнопкой «Stats».

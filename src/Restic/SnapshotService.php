@@ -43,37 +43,6 @@ class SnapshotService
     }
 
     /**
-     * Возвращает N последних снепшотов (restic snapshots --json --latest N).
-     *
-     * Используется на дашборде и странице репозитория, чтобы не тянуть
-     * полный список с больших удалённых репозиториев.
-     *
-     * @param array<string, mixed> $repository
-     * @return array<int, array<string, mixed>>
-     */
-    public function listLatestSnapshots(array $repository, int $limit = 5): array
-    {
-        $command = ResticCommandBuilder::buildCommand(
-            ['snapshots', '--json', '--latest', (string) $limit],
-            $repository
-        );
-        $env = ResticCommandBuilder::buildEnv($repository);
-        $result = $this->runner->run($command, $env, null, 120);
-
-        if ($result['exitCode'] !== 0) {
-            return [];
-        }
-
-        $decoded = json_decode($result['stdout'], true);
-
-        if (!is_array($decoded)) {
-            return [];
-        }
-
-        return $decoded;
-    }
-
-    /**
      * Возвращает полную статистику одного снепшота (restic stats --json).
      * Тяжёлая операция, вызывается только по запросу пользователя.
      *

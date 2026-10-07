@@ -21,6 +21,8 @@ use App\Restic\ResticTaskService;
 use App\Restic\SnapshotService;
 use App\Storage\ConfigStorage;
 use App\Storage\RepositoryStorage;
+use App\Storage\SnapshotCacheStorage;
+use App\Storage\SnapshotListState;
 
 class App
 {
@@ -41,6 +43,7 @@ class App
     private static ?Security $security = null;
     private static ?Response $response = null;
     private static ?CacheManager $cache = null;
+    private static ?SnapshotCacheStorage $snapshotCache = null;
 
     private static int $debugLevel = 0;
 
@@ -146,7 +149,7 @@ class App
      */
     public static function resticVersion(): string
     {
-        return self::cache()->request()->remember('restic_version', null, function (): string {
+        $version = self::cache()->request()->remember('restic_version', null, function (): string {
             return self::cache()->user()->remember('restic_version', null, function (): string {
                 $result = self::runner()->run(['restic', 'version']);
                 if ($result['exitCode'] === 0 && preg_match('/restic (\S+)/', $result['stdout'], $m)) {
@@ -155,6 +158,8 @@ class App
                 return 'unknown';
             });
         });
+
+        return is_string($version) ? $version : 'unknown';
     }
 
     public static function configStorage(): ConfigStorage
@@ -291,6 +296,27 @@ class App
             self::$cache = new CacheManager();
         }
         return self::$cache;
+    }
+
+    /**
+     * Доменная обёртка кеша производных от restic данных (список/статистика).
+     */
+    public static function snapshotCache(): SnapshotCacheStorage
+    {
+        if (self::$snapshotCache === null) {
+            $settings = self::configStorage()->loadSettings();
+            self::$snapshotCache = new SnapshotCacheStorage(
+                self::cache(),
+                isset($settings['snapshot_cache_ttl']) ? (int) $settings['snapshot_cache_ttl'] : null,
+                isset($settings['snapshot_stats_cache_ttl']) ? (int) $settings['snapshot_stats_cache_ttl'] : null
+            );
+        }
+        return self::$snapshotCache;
+    }
+
+    public static function snapshotListState(): SnapshotListState
+    {
+        return new SnapshotListState(self::snapshotCache(), self::tasks());
     }
 
     /**

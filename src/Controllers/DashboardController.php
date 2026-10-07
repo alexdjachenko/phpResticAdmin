@@ -27,6 +27,7 @@ class DashboardController
         $currentRepoId = App::session()->get('current_repo');
         $repo = null;
         $latestSnapshots = [];
+        $needLoad = false;
 
         $visibleRepositories = [];
         foreach ($repositories as $r) {
@@ -57,11 +58,21 @@ class DashboardController
             }
 
             if ($repo !== null) {
-                $latestSnapshots = App::snapshotService()->listLatestSnapshots($repo, 5);
-            }
-        }
+                // «Последние 5» режем в PHP из кешированного списка (семантика
+                // «5 всего», а не «5 на каждую пару host+path»).
+                $allSnapshots = App::snapshotCache()->list($repo);
+                if ($allSnapshots === null) {
+                    $needLoad = true;
+                } else {
+                    usort($allSnapshots, static function (array $a, array $b): int {
+                        return strcmp((string) ($b['time'] ?? ''), (string) ($a['time'] ?? ''));
+                    });
+                    $latestSnapshots = array_slice($allSnapshots, 0, 5);
+                }
+                }
+                }
 
-        $tasks = App::tasks()->listForUser($user, $auth->canManageProcesses());
+                $tasks = App::tasks()->listForUser($user, $auth->canManageProcesses());
         foreach ($tasks as &$task) {
             $label = (string) ($task['label'] ?? '');
             $described = $label !== '' ? App::tasks()->describe($label) : null;
@@ -84,6 +95,7 @@ class DashboardController
         echo App::response()->render('dashboard.php', [
             'repo' => $repo,
             'latestSnapshots' => $latestSnapshots,
+            'needLoad' => $needLoad,
             'repoCount' => $repoCount,
             'repoStats' => $repoStats,
             'activeTasks' => $activeTasks,
@@ -114,6 +126,12 @@ class DashboardController
         }
 
         $result = App::invalidateCaches();
+
+        // Сбрасываем область текущего запроса (мемоизации tsp/настроек/окружения).
+        // Системные записи (списки/статистика снепшотов) НЕ сносим: иначе кнопка
+        // вызывала бы лавину обращений к restic.
+        App::resetCaches();
+
         $result['ok'] = true;
         $result['_csrf_token'] = App::security()->csrfToken();
 

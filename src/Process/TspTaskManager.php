@@ -397,7 +397,8 @@ class TspTaskManager
      */
     private function all(): array
     {
-        return App::cache()->request()->remember('tsp.list', null, fn () => $this->tsp->list());
+        $list = App::cache()->request()->remember('tsp.list', null, fn () => $this->tsp->list());
+        return is_array($list) ? $list : [];
     }
 
     /**

@@ -106,7 +106,12 @@ $locationValue = $repo[$locationField] ?? $repo['path'] ?? '';
     <div class="repo-status" id="repo-status" data-repo-id="<?= htmlspecialchars($repo['id'] ?? '', ENT_QUOTES, 'UTF-8') ?>"></div>
 </div>
 
-<?php if (!empty($latestSnapshots)): ?>
+<?php if (!empty($needLoad)): ?>
+<div class="repo-snapshots">
+    <h3><?= htmlspecialchars(__('repo.latest_snaps'), ENT_QUOTES, 'UTF-8') ?></h3>
+    <p><a href="/snapshots?repo=<?= htmlspecialchars(urlencode($repo['id'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars(__('snap.load_button'), ENT_QUOTES, 'UTF-8') ?></a></p>
+</div>
+<?php elseif (!empty($latestSnapshots)): ?>
 <div class="repo-snapshots">
     <h3><?= htmlspecialchars(__('repo.latest_snaps'), ENT_QUOTES, 'UTF-8') ?></h3>
     <table class="snapshot-table">

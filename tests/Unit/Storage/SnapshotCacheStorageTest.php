@@ -8,26 +8,34 @@
 
 namespace App\Tests\Unit\Storage;
 
-use App\Core\Session;
+use App\Cache\CacheManager;
 use App\Storage\SnapshotCacheStorage;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Юнит-тест SnapshotCacheStorage (кеш списка снепшотов в сессии).
+ * Юнит-тест SnapshotCacheStorage (доменная обёртка над кеш-слоем).
  *
- * Цель: проверить set/get/invalidate, TTL и жизненный цикл метки задачи.
+ * Цель: проверить выбор области кеша по категории репозитория и жизненный
+ *       цикл записей списка/статистики.
  *
  * Сценарий:
- *   - set → get возвращает данные.
- *   - invalidate → get возвращает null.
- *   - устаревшая запись (cached_at в прошлом) → get возвращает null.
- *   - taskLabel lifecycle: setTaskLabel → taskLabel → clearTaskLabel → null.
+ *   - публичный репозиторий пишет в системную область, приватный/сессионный —
+ *     в пользовательскую (проверяем по ключам сессии: cache_system_* / cache_user_*);
+ *   - set → entry/list возвращают данные; markTask хранит метку без данных;
+ *   - setListError хранит ошибку;
+ *   - просроченная запись не удаляется, list() возвращает null, entry.stale = true;
+ *   - invalidateList убирает запись;
+ *   - статистика снепшота (глобальная) пишется в системную область.
  *
  * Критерий успеха: все assert проходят.
  */
 class SnapshotCacheStorageTest extends TestCase
 {
-    private Session $session;
+    private CacheManager $cache;
+    /** @var array<string, mixed> */
+    private array $repoPublic;
+    /** @var array<string, mixed> */
+    private array $repoPrivate;
 
     protected function setUp(): void
     {
@@ -35,73 +43,116 @@ class SnapshotCacheStorageTest extends TestCase
             @session_start();
         }
         $_SESSION = [];
-        $this->session = new Session();
-        $this->session->start();
+
+        $this->cache = new CacheManager('session');
+        $this->repoPublic = ['id' => 'pub1', 'category' => 'public'];
+        $this->repoPrivate = ['id' => 'priv1', 'category' => 'private'];
     }
 
     protected function tearDown(): void
     {
         $_SESSION = [];
         if (session_status() === PHP_SESSION_ACTIVE) {
-            session_destroy();
+            @session_destroy();
         }
     }
 
-    /** set → get возвращает сохранённые данные. */
-    public function testSetAndGet(): void
+    /** Публичный репозиторий → системная область; приватный → пользовательская. */
+    public function testScopeIsChosenByRepoCategory(): void
     {
-        $storage = new SnapshotCacheStorage($this->session, 600);
-        $storage->set('repo1', [['id' => 'abc']]);
+        $storage = new SnapshotCacheStorage($this->cache, 600, 31536000);
 
-        $this->assertSame([['id' => 'abc']], $storage->get('repo1'));
+        $storage->setList($this->repoPublic, [['id' => 'a']]);
+        $storage->setList($this->repoPrivate, [['id' => 'b']]);
+
+        $this->assertArrayHasKey('cache_system_repos/pub1/snapshots.json', $_SESSION, 'public repo must use the system area');
+        $this->assertArrayHasKey('cache_user_repos/priv1/snapshots.json', $_SESSION, 'private repo must use the user area');
+        $this->assertArrayNotHasKey('cache_user_repos/pub1/snapshots.json', $_SESSION);
+        $this->assertArrayNotHasKey('cache_system_repos/priv1/snapshots.json', $_SESSION);
     }
 
-    /** invalidate → get возвращает null. */
-    public function testInvalidate(): void
+    /** set → list возвращает данные, entry содержит время и признак свежести. */
+    public function testSetListAndReadBack(): void
     {
-        $storage = new SnapshotCacheStorage($this->session, 600);
-        $storage->set('repo1', [['id' => 'abc']]);
-        $storage->invalidate('repo1');
+        $storage = new SnapshotCacheStorage($this->cache, 600, 31536000);
+        $storage->setList($this->repoPublic, [['id' => 'abc']], 'alice#snapshotsr10123456789abcdef');
 
-        $this->assertNull($storage->get('repo1'));
+        $this->assertSame([['id' => 'abc']], $storage->list($this->repoPublic));
+
+        $entry = $storage->listEntry($this->repoPublic);
+        $this->assertNotNull($entry);
+        $this->assertSame([['id' => 'abc']], $entry['snapshots']);
+        $this->assertSame('alice#snapshotsr10123456789abcdef', $entry['task_label']);
+        $this->assertNull($entry['error']);
+        $this->assertFalse($entry['stale']);
     }
 
-    /** Устаревшая запись возвращает null и удаляется. */
-    public function testExpiredEntryReturnsNull(): void
+    /** markTask хранит метку задачи без данных списка. */
+    public function testMarkTaskStoresLabelWithoutSnapshots(): void
     {
-        $_SESSION['snapshot_cache_repo1'] = [
-            'cached_at' => time() - 100,
-            'snapshots' => [['id' => 'old']],
+        $storage = new SnapshotCacheStorage($this->cache, 600, 31536000);
+        $storage->markTask($this->repoPublic, 'alice#snapshotsr10123456789abcdef');
+
+        $entry = $storage->listEntry($this->repoPublic);
+        $this->assertNotNull($entry);
+        $this->assertSame('alice#snapshotsr10123456789abcdef', $entry['task_label']);
+        $this->assertNull($entry['snapshots']);
+        $this->assertNull($storage->list($this->repoPublic));
+    }
+
+    /** setListError хранит ошибку. */
+    public function testSetListError(): void
+    {
+        $storage = new SnapshotCacheStorage($this->cache, 600, 31536000);
+        $storage->setListError($this->repoPrivate, 'boom', 'label');
+
+        $entry = $storage->listEntry($this->repoPrivate);
+        $this->assertNotNull($entry);
+        $this->assertSame('boom', $entry['error']);
+        $this->assertNull($entry['snapshots']);
+    }
+
+    /** Просроченная запись не удаляется: entry.stale = true, list → null. */
+    public function testStaleEntryIsNotDeleted(): void
+    {
+        $_SESSION['cache_system_repos/pub1/snapshots.json'] = [
+            'cached_at' => time() - 1000,
+            'value' => ['task_label' => null, 'error' => null, 'snapshots' => [['id' => 'x']], 'started_at' => null, 'duration' => null],
         ];
 
-        $storage = new SnapshotCacheStorage($this->session, 10);
-        $this->assertNull($storage->get('repo1'));
-        $this->assertArrayNotHasKey('snapshot_cache_repo1', $_SESSION);
+        $storage = new SnapshotCacheStorage($this->cache, 10, 31536000);
+
+        $this->assertNull($storage->list($this->repoPublic));
+
+        $entry = $storage->listEntry($this->repoPublic);
+        $this->assertNotNull($entry);
+        $this->assertTrue($entry['stale']);
+        $this->assertSame([['id' => 'x']], $entry['snapshots']);
+        $this->assertArrayHasKey('cache_system_repos/pub1/snapshots.json', $_SESSION, 'stale entry must not be deleted');
     }
 
-    /** Свежая запись возвращает данные. */
-    public function testFreshEntryReturnsData(): void
+    /** invalidateList убирает запись. */
+    public function testInvalidateList(): void
     {
-        $_SESSION['snapshot_cache_repo2'] = [
-            'cached_at' => time(),
-            'snapshots' => [['id' => 'fresh']],
-        ];
+        $storage = new SnapshotCacheStorage($this->cache, 600, 31536000);
+        $storage->setList($this->repoPublic, [['id' => 'abc']]);
+        $storage->invalidateList($this->repoPublic);
 
-        $storage = new SnapshotCacheStorage($this->session, 10);
-        $this->assertSame([['id' => 'fresh']], $storage->get('repo2'));
+        $this->assertNull($storage->listEntry($this->repoPublic));
+        $this->assertArrayNotHasKey('cache_system_repos/pub1/snapshots.json', $_SESSION);
     }
 
-    /** taskLabel lifecycle. */
-    public function testTaskLabelLifecycle(): void
+    /** Статистика снепшота пишется в системную область (id глобально уникален). */
+    public function testStatsUseSystemArea(): void
     {
-        $storage = new SnapshotCacheStorage($this->session, 600);
+        $storage = new SnapshotCacheStorage($this->cache, 600, 31536000);
+        $storage->setStats('snap123', ['total_size' => 10]);
 
-        $this->assertNull($storage->taskLabel('repo1'));
+        $this->assertArrayHasKey('cache_system_snapshots/snap123/stats.json', $_SESSION);
+        $this->assertSame(['total_size' => 10], $storage->stats('snap123'));
 
-        $storage->setTaskLabel('repo1', 'alice#abc123');
-        $this->assertSame('alice#abc123', $storage->taskLabel('repo1'));
-
-        $storage->clearTaskLabel('repo1');
-        $this->assertNull($storage->taskLabel('repo1'));
+        $entry = $storage->statsEntry('snap123');
+        $this->assertNotNull($entry);
+        $this->assertFalse($entry['stale']);
     }
 }

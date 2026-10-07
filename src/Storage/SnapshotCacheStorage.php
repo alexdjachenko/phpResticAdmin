@@ -8,86 +8,182 @@
 
 namespace App\Storage;
 
-use App\Core\App;
-use App\Core\Session;
+use App\Cache\CacheManager;
+use App\Cache\CacheScope;
 
 /**
- * Кеш списка снепшотов в сессии (на TTL из settings `snapshot_cache_ttl`).
+ * Доменная обёртка над кеш-слоем для производных от restic данных:
+ * списка снепшотов репозитория и полной статистики одного снепшота.
  *
- * Помимо самих данных хранит метку фоновой tsp-задачи, которая сейчас
- * загружает список. Это позволяет странице списка не запускать повторную
- * задачу, пока предыдущая ещё выполняется.
+ * Уровень кеша выбирается здесь, в точке, где известен контекст объекта:
+ * данные публичного репозитория можно хранить в системной области, данные
+ * приватного/сессионного — только в пользовательской (иначе возможна утечка
+ * между пользователями). Статистика снепшота глобальна (id снепшота
+ * неизменяем), поэтому всегда системная.
+ *
+ * Данные хранятся в области под ключом `repos/<repoId>/snapshots.json`
+ * (список) и `snapshots/<snapId>/stats.json` (статистика).
  */
 class SnapshotCacheStorage
 {
-    private const CACHE_PREFIX = 'snapshot_cache_';
-    private const TASK_PREFIX = 'snapshot_task_';
+    private CacheManager $cache;
+    private ?int $listTtl;
+    private ?int $statsTtl;
 
-    private Session $session;
-    private int $ttl;
-
-    public function __construct(?Session $session = null, ?int $ttl = null)
+    public function __construct(CacheManager $cache, ?int $listTtl = null, ?int $statsTtl = null)
     {
-        $this->session = $session ?? App::session();
+        $this->cache = $cache;
+        $this->listTtl = $listTtl;
+        $this->statsTtl = $statsTtl;
+    }
 
-        if ($ttl === null) {
-            $settings = App::configStorage()->loadSettings();
-            $ttl = (int) ($settings['snapshot_cache_ttl'] ?? 600);
-        }
-        $this->ttl = $ttl;
+    public function listTtl(): ?int
+    {
+        return $this->listTtl;
     }
 
     /**
-     * Свежий кеш списка снепшотов или null.
+     * Область кеша для данных репозитория.
+     */
+    public function scopeFor(array $repo): CacheScope
+    {
+        return ($repo['category'] ?? 'public') === 'public'
+            ? CacheScope::System
+            : CacheScope::User;
+    }
+
+    /**
+     * Запись списка снепшотов целиком (включая признак просрочки).
+     *
+     * @return array{computed_at: int, task_label: ?string, error: ?string, snapshots: ?array, started_at: ?int, duration: ?int, stale: bool}|null
+     */
+    public function listEntry(array $repo): ?array
+    {
+        $entry = $this->cache->for($this->scopeFor($repo))->entry($this->listKey($repo), $this->listTtl);
+        if ($entry === null) {
+            return null;
+        }
+
+        $value = is_array($entry['value']) ? $entry['value'] : [];
+
+        return [
+            'computed_at' => $entry['cached_at'],
+            'task_label' => $value['task_label'] ?? null,
+            'error' => $value['error'] ?? null,
+            'snapshots' => is_array($value['snapshots'] ?? null) ? $value['snapshots'] : null,
+            'started_at' => isset($value['started_at']) ? (int) $value['started_at'] : null,
+            'duration' => isset($value['duration']) ? (int) $value['duration'] : null,
+            'stale' => $entry['stale'],
+        ];
+    }
+
+    /**
+     * Свежий список снепшотов или null (если записи нет либо она просрочена).
      *
      * @return array<int, array<string, mixed>>|null
      */
-    public function get(string $repoId): ?array
+    public function list(array $repo): ?array
     {
-        $entry = $this->session->get(self::CACHE_PREFIX . $repoId);
+        $entry = $this->listEntry($repo);
 
-        if (!is_array($entry)) {
+        if ($entry === null || $entry['stale'] || $entry['snapshots'] === null) {
             return null;
         }
 
-        $cachedAt = $entry['cached_at'] ?? null;
-        if (!is_int($cachedAt) || (time() - $cachedAt) > $this->ttl) {
-            $this->session->remove(self::CACHE_PREFIX . $repoId);
-            return null;
-        }
-
-        return $entry['snapshots'] ?? null;
+        return $entry['snapshots'];
     }
 
     /**
      * @param array<int, array<string, mixed>> $snapshots
      */
-    public function set(string $repoId, array $snapshots): void
+    public function setList(array $repo, array $snapshots, ?string $taskLabel = null, ?int $duration = null): void
     {
-        $this->session->set(self::CACHE_PREFIX . $repoId, [
-            'cached_at' => time(),
+        $this->cache->for($this->scopeFor($repo))->set($this->listKey($repo), [
+            'task_label' => $taskLabel,
+            'error' => null,
             'snapshots' => $snapshots,
+            'started_at' => null,
+            'duration' => $duration,
         ]);
     }
 
-    public function invalidate(string $repoId): void
+    /**
+     * Фиксирует ошибку загрузки списка (без авто-повтора на стороне автомата).
+     */
+    public function setListError(array $repo, string $error, ?string $taskLabel = null): void
     {
-        $this->session->remove(self::CACHE_PREFIX . $repoId);
+        $this->cache->for($this->scopeFor($repo))->set($this->listKey($repo), [
+            'task_label' => $taskLabel,
+            'error' => $error,
+            'snapshots' => null,
+            'started_at' => null,
+            'duration' => null,
+        ]);
     }
 
-    public function taskLabel(string $repoId): ?string
+    /**
+     * Помечает, что список загружает фоновая задача (данные ещё не готовы).
+     */
+    public function markTask(array $repo, string $taskLabel): void
     {
-        $label = $this->session->get(self::TASK_PREFIX . $repoId);
-        return is_string($label) && $label !== '' ? $label : null;
+        $this->cache->for($this->scopeFor($repo))->set($this->listKey($repo), [
+            'task_label' => $taskLabel,
+            'error' => null,
+            'snapshots' => null,
+            'started_at' => time(),
+            'duration' => null,
+        ]);
     }
 
-    public function setTaskLabel(string $repoId, string $label): void
+    public function invalidateList(array $repo): void
     {
-        $this->session->set(self::TASK_PREFIX . $repoId, $label);
+        $this->cache->for($this->scopeFor($repo))->remove($this->listKey($repo));
     }
 
-    public function clearTaskLabel(string $repoId): void
+    /**
+     * Полная статистика одного снепшота (системная область, глобальна по id).
+     *
+     * @return array<string, mixed>|null
+     */
+    public function stats(string $snapId): ?array
     {
-        $this->session->remove(self::TASK_PREFIX . $repoId);
+        $value = $this->cache->for(CacheScope::System)->get($this->statsKey($snapId), $this->statsTtl);
+
+        return is_array($value) ? $value : null;
+    }
+
+    /**
+     * @return array{computed_at: int, stats: array<string, mixed>, stale: bool}|null
+     */
+    public function statsEntry(string $snapId): ?array
+    {
+        $entry = $this->cache->for(CacheScope::System)->entry($this->statsKey($snapId), $this->statsTtl);
+        if ($entry === null || !is_array($entry['value'])) {
+            return null;
+        }
+
+        return [
+            'computed_at' => $entry['cached_at'],
+            'stats' => $entry['value'],
+            'stale' => $entry['stale'],
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $stats
+     */
+    public function setStats(string $snapId, array $stats): void
+    {
+        $this->cache->for(CacheScope::System)->set($this->statsKey($snapId), $stats);
+    }
+
+    private function listKey(array $repo): string
+    {
+        return 'repos/' . (string) ($repo['id'] ?? '') . '/snapshots.json';
+    }
+
+    private function statsKey(string $snapId): string
+    {
+        return 'snapshots/' . $snapId . '/stats.json';
     }
 }

@@ -80,6 +80,10 @@
 
 <?php if ($repoCount === 0): ?>
     <p><?= __('dash.no_repos') ?></p>
+<?php elseif ($repo !== null && !empty($needLoad)): ?>
+    <p>
+        <a href="/snapshots?repo=<?= htmlspecialchars(urlencode($repo['id'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars(__('snap.load_button'), ENT_QUOTES, 'UTF-8') ?></a>
+    </p>
 <?php elseif ($repo !== null && !empty($latestSnapshots)): ?>
     <h3><?= htmlspecialchars(__('dash.recent_snaps', ['{repo}' => $repo['name'] ?? '']), ENT_QUOTES, 'UTF-8') ?></h3>
     <div class="dashboard-snapshots">
