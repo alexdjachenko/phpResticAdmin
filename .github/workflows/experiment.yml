@@ -26,7 +26,7 @@ jobs:
           restic version
           tsp -V || true
 
-      # Проверки из Step 0.6: key passwd/ID, поле current, tsp -u, формат tsp -l
+      # Step 0.6: key passwd/ID, поле current
       - name: Restic — key passwd / key list current
         run: |
           set -x
@@ -34,21 +34,20 @@ jobs:
           export HOME=/tmp
           rm -rf /tmp/repo && restic init --repo /tmp/repo
 
-          echo "=== key add (новый пароль extra-secret) ==="
           printf 'extra-secret\nextra-secret\n' | restic --repo /tmp/repo key add || true
 
-          echo "=== key list --json (с паролем primary) ==="
+          echo "=== key list --json (пароль primary): current у пароля primary ==="
           restic --repo /tmp/repo key list --json || true
 
-          echo "=== key list --json (с паролем extra) — проверяем поле current ==="
+          echo "=== key list --json (пароль extra): current переключается ==="
           RESTIC_PASSWORD='extra-secret' restic --repo /tmp/repo key list --json || true
 
-          echo "=== key passwd <ID> — принимает ли ID ==="
+          echo "=== key passwd <ID>: принимает ли ID (ожидаем отказ) ==="
           KEY_ID=$(RESTIC_PASSWORD='extra-secret' restic --repo /tmp/repo key list --json | tr ',' '\n' | grep -m1 '"id"' | cut -d'"' -f4)
-          echo "extra key id=[$KEY_ID]"
           printf 'extra2\nextra2\n' | restic --repo /tmp/repo key passwd "$KEY_ID" || true
 
-      - name: tsp — форматы и доставка окружения в очередь
+      # Step 0.4: формат tsp -l и доставка per-job окружения в очередь (slots=1)
+      - name: tsp — формат строки, tsp -u, доставка env
         run: |
           set -x
           export TMPDIR=/tmp/tspexp
@@ -56,18 +55,18 @@ jobs:
           export TS_SOCKET=/tmp/tspexp/socket
           export TS_SLOTS=1
 
-          echo "=== tsp -u (promote) существует? ==="
+          echo "=== tsp -u (promote) ==="
           tsp -h 2>&1 | grep -i -- '-u' || true
 
-          echo "=== tsp -l: формат строки с меткой ==="
+          echo "=== tsp -l: где стоит метка ==="
           tsp -L 'alice#checkrepo1abcdef0123456789ab' sh -c 'echo FIRST'
           tsp -l || true
 
-          echo "=== доставка env в задачу, стоящую в очереди (slots=1) ==="
-          tsp -L 'alice#runaaaaaaaaaaaaaaaaaaaaaaaaaaaa' sh -c 'sleep 3'
-          tsp -L 'alice#runbbbbbbbbbbbbbbbbbbbbbbbbbbb' sh -c 'echo "PWD=[${RESTIC_PASSWORD:+SET}] CACHE=[$RESTIC_CACHE_DIR] HOME=[$HOME]"'
+          echo "=== per-job env: две задачи с РАЗНЫМ окружением, вторая в очереди ==="
+          RESTIC_CACHE_DIR=/cache-a HOME=/home-a tsp -L 'alice#snapshotsrepo1aaaaaaaaaaaaaaaa ' sh -c 'sleep 3'
+          RESTIC_CACHE_DIR=/cache-b HOME=/home-b tsp -L 'bob#snapshotsrepo2bbbbbbbbbbbbbbbb ' sh -c 'echo "CACHE=[$RESTIC_CACHE_DIR] HOME=[$HOME]"'
           sleep 5
-          echo "--- output второй задачи ---"
+          echo "--- вывод второй задачи (ожидаем CACHE=[/cache-b] HOME=[/home-b]) ---"
           tsp -c 2 || true
           tsp -l || true
 

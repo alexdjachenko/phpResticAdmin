@@ -43,7 +43,6 @@ class App
     private static ?CacheManager $cache = null;
 
     private static int $debugLevel = 0;
-    private static ?string $resticVersion = null;
 
     public static function boot(): void
     {
@@ -138,30 +137,24 @@ class App
         return 'dev';
     }
 
+    /**
+     * Версия restic.
+     *
+     * Мемоизация на запрос (область Request) поверх кеша в сессии (область User):
+     * один запуск `restic version` за запрос, результат переиспользуется между
+     * запросами в рамках сессии.
+     */
     public static function resticVersion(): string
     {
-        if (self::$resticVersion !== null) {
-            return self::$resticVersion;
-        }
-
-        // Статический кеш сбрасывается между HTTP-запросами (PHP в Apache),
-        // поэтому результат `restic version` дополнительно кешируем в сессию.
-        $cached = self::session()->get('restic_version');
-        if (is_string($cached) && $cached !== '') {
-            self::$resticVersion = $cached;
-            return self::$resticVersion;
-        }
-
-        $result = self::runner()->run(['restic', 'version']);
-        if ($result['exitCode'] === 0 && preg_match('/restic (\S+)/', $result['stdout'], $m)) {
-            self::$resticVersion = $m[1];
-        } else {
-            self::$resticVersion = 'unknown';
-        }
-
-        self::session()->set('restic_version', self::$resticVersion);
-
-        return self::$resticVersion;
+        return self::cache()->request()->remember('restic_version', null, function (): string {
+            return self::cache()->user()->remember('restic_version', null, function (): string {
+                $result = self::runner()->run(['restic', 'version']);
+                if ($result['exitCode'] === 0 && preg_match('/restic (\S+)/', $result['stdout'], $m)) {
+                    return $m[1];
+                }
+                return 'unknown';
+            });
+        });
     }
 
     public static function configStorage(): ConfigStorage

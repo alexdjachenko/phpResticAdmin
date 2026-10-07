@@ -14,15 +14,29 @@ class Session
 
     public function start(): void
     {
-        if ($this->started) {
-            return;
-        }
-
+        // Переоткрываем по фактическому статусу, а не по флагу: после close()
+        // сессия должна открываться снова.
         if (session_status() === PHP_SESSION_NONE) {
             session_start();
         }
 
         $this->started = true;
+    }
+
+    /**
+     * Закрывает сессию для записи, освобождая файловую блокировку.
+     *
+     * Вызывать ПОСЛЕДНИМ действием запроса: после этого запись в сессию не
+     * сохраняется. До вызова должны быть выполнены все операции, пишущие в
+     * сессию (flash-сообщения, выпуск нового CSRF-токена), иначе они потеряются.
+     */
+    public function close(): void
+    {
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+
+        $this->started = false;
     }
 
     /**
