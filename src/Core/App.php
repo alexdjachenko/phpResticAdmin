@@ -511,6 +511,16 @@ class App
             $controller->passwd();
         });
 
+        $router->map('GET', '/tasks', function () {
+            $controller = new \App\Controllers\TaskController();
+            $controller->list();
+        });
+
+        $router->map('GET', '/tasks/view', function () {
+            $controller = new \App\Controllers\TaskController();
+            $controller->view();
+        });
+
         $router->map('GET', '/tasks/stream', function () {
             $controller = new \App\Controllers\TaskController();
             $controller->stream();
@@ -519,6 +529,21 @@ class App
         $router->map('GET', '/tasks/status', function () {
             $controller = new \App\Controllers\TaskController();
             $controller->status();
+        });
+
+        $router->map('GET', '/tasks/active', function () {
+            $controller = new \App\Controllers\TaskController();
+            $controller->active();
+        });
+
+        $router->map('POST', '/tasks/cancel', function () {
+            $controller = new \App\Controllers\TaskController();
+            $controller->cancel();
+        });
+
+        $router->map('POST', '/tasks/promote', function () {
+            $controller = new \App\Controllers\TaskController();
+            $controller->promote();
         });
 
         $router->map('POST', '/snapshots/refresh', function () {
