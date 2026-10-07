@@ -490,6 +490,129 @@ class AuthenticatorTest extends TestCase
         $this->assertFalse($auth->canUseWrite('session'));
     }
 
+    /** Вход с паролем из переменной окружения (password_var). */
+    public function testLoginResolvesPasswordFromEnvVar(): void
+    {
+        $hash = password_hash('secret123', PASSWORD_DEFAULT);
+        putenv('PHPRESTICADMIN_TEST_PASSWORD_HASH=' . $hash);
+
+        $this->writeUsersConfig($this->tmpDir, [
+            'envuser' => ['password' => null, 'password_var' => 'PHPRESTICADMIN_TEST_PASSWORD_HASH'],
+        ]);
+        $configStorage = new ConfigStorage($this->tmpDir);
+        $auth = new Authenticator($configStorage, $this->session);
+
+        $this->assertTrue($auth->login('envuser', 'secret123'));
+
+        putenv('PHPRESTICADMIN_TEST_PASSWORD_HASH');
+    }
+
+    /** Вход с паролем из Docker-secret (password_var). Скипается вне writable /run/secrets. */
+    public function testLoginResolvesPasswordFromSecretFile(): void
+    {
+        if (!is_dir('/run/secrets') || !is_writable('/run/secrets')) {
+            $this->markTestSkipped('/run/secrets is not writable in this environment');
+        }
+
+        $hash = password_hash('secret123', PASSWORD_DEFAULT);
+        file_put_contents('/run/secrets/PHPRESTICADMIN_TEST_SECRET', $hash);
+
+        $this->writeUsersConfig($this->tmpDir, [
+            'secretuser' => ['password' => null, 'password_var' => 'PHPRESTICADMIN_TEST_SECRET'],
+        ]);
+        $configStorage = new ConfigStorage($this->tmpDir);
+        $auth = new Authenticator($configStorage, $this->session);
+
+        $this->assertTrue($auth->login('secretuser', 'secret123'));
+
+        @unlink('/run/secrets/PHPRESTICADMIN_TEST_SECRET');
+    }
+
+    /** Вход с паролем из поля password учётки (fallback). */
+    public function testLoginFallsBackToUserPassword(): void
+    {
+        $hash = password_hash('fallback123', PASSWORD_DEFAULT);
+        $this->writeUsersConfig($this->tmpDir, [
+            'fallbackuser' => ['password' => $hash],
+        ]);
+        $configStorage = new ConfigStorage($this->tmpDir);
+        $auth = new Authenticator($configStorage, $this->session);
+
+        $this->assertTrue($auth->login('fallbackuser', 'fallback123'));
+    }
+
+    /** Без секрета/env и без пароля → вход отклоняется. */
+    public function testLoginFailsWhenNoHashResolved(): void
+    {
+        $this->writeUsersConfig($this->tmpDir, [
+            'nohashuser' => ['password' => null, 'password_var' => 'MISSING_VAR_XYZ'],
+        ]);
+        $configStorage = new ConfigStorage($this->tmpDir);
+        $auth = new Authenticator($configStorage, $this->session);
+
+        $this->assertFalse($auth->login('nohashuser', 'whatever'));
+    }
+
+    /** can_manage_users по умолчанию false. */
+    public function testCanManageUsersDefaultsFalse(): void
+    {
+        $auth = new Authenticator($this->configStorage, $this->session);
+        $auth->login('admin', 'secret123');
+
+        $this->assertFalse($auth->canManageUsers());
+    }
+
+    /** can_manage_users = true, когда задан. */
+    public function testCanManageUsersTrueWhenSet(): void
+    {
+        $this->writeUsersConfig($this->tmpDir, [
+            'manager' => ['password' => password_hash('mgr', PASSWORD_DEFAULT), 'can_manage_users' => true],
+        ]);
+        $configStorage = new ConfigStorage($this->tmpDir);
+        $auth = new Authenticator($configStorage, $this->session);
+        $auth->login('manager', 'mgr');
+
+        $this->assertTrue($auth->canManageUsers());
+    }
+
+    /** can_manage_processes по умолчанию false. */
+    public function testCanManageProcessesDefaultsFalse(): void
+    {
+        $auth = new Authenticator($this->configStorage, $this->session);
+        $auth->login('admin', 'secret123');
+
+        $this->assertFalse($auth->canManageProcesses());
+    }
+
+    /** YAML-пользователь определяется как isYamlUser = true. */
+    public function testIsYamlUserTrueForYamlUser(): void
+    {
+        $cfgDir = $this->tmpDir . '/cfg';
+        mkdir($cfgDir, 0777, true);
+        mkdir($this->tmpDir . '/data', 0777, true);
+
+        $hash = password_hash('yamlpass', PASSWORD_DEFAULT);
+        file_put_contents(
+            $this->tmpDir . '/data/users.yaml',
+            \Symfony\Component\Yaml\Yaml::dump(['yamluser' => ['password' => $hash]])
+        );
+
+        $configStorage = new ConfigStorage($cfgDir);
+        $auth = new Authenticator($configStorage, $this->session);
+        $auth->login('yamluser', 'yamlpass');
+
+        $this->assertTrue($auth->isYamlUser());
+    }
+
+    /** PHP-пользователь не является YAML-пользователем. */
+    public function testIsYamlUserFalseForPhpUser(): void
+    {
+        $auth = new Authenticator($this->configStorage, $this->session);
+        $auth->login('admin', 'secret123');
+
+        $this->assertFalse($auth->isYamlUser());
+    }
+
     /**
      * Записывает PHP-конфиг users.php через var_export.
      * @param string $dir Директория для сохранения

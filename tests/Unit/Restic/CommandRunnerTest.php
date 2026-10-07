@@ -8,6 +8,7 @@
 
 namespace App\Tests\Unit\Restic;
 
+use App\Core\App;
 use App\Restic\CommandRunner;
 use PHPUnit\Framework\TestCase;
 
@@ -15,7 +16,8 @@ use PHPUnit\Framework\TestCase;
  * Юнит-тест CommandRunner (обёртка proc_open).
  *
  * Цель: проверить выполнение команд через proc_open: захват stdout/stderr,
- *       передачу stdin, переменные окружения, таймаут, обработку ошибок.
+ *       передачу stdin, переменные окружения, таймаут, обработку ошибок, а
+ *       также базовое окружение prepareEnv и сброс его мемоизации.
  *
  * Сценарий:
  *   - Несуществующая команда → ненулевой exitCode, stderr не пуст.
@@ -25,8 +27,9 @@ use PHPUnit\Framework\TestCase;
  *   - stdin передаётся в процесс (/bin/cat).
  *   - Таймаут: sleep 5 с таймаутом 1с.
  *   - Переменные окружения пробрасываются (/bin/sh).
+ *   - prepareEnv: HOME=/tmp; переданные значения сохраняются; resetEnvCache.
  *
- * Критерий успеха: все assertSame/assertStringContainsString проходят.
+ * Критерий успеха: все assert проходят.
  */
 class CommandRunnerTest extends TestCase
 {
@@ -34,7 +37,13 @@ class CommandRunnerTest extends TestCase
 
     protected function setUp(): void
     {
+        App::resetCaches();
         $this->runner = new CommandRunner();
+    }
+
+    protected function tearDown(): void
+    {
+        App::resetCaches();
     }
 
     /** Несуществующий бинарник → ненулевой exitCode, stderr содержит имя команды. */
@@ -130,5 +139,35 @@ class CommandRunnerTest extends TestCase
             $result['stderr']
         ));
         $this->assertStringContainsString('phpResticAdminTestValue', $result['stdout']);
+    }
+
+    /** prepareEnv проставляет HOME=/tmp, если он не задан. */
+    public function testPrepareEnvSetsHome(): void
+    {
+        $env = CommandRunner::prepareEnv([]);
+
+        $this->assertSame('/tmp', $env['HOME']);
+    }
+
+    /** prepareEnv не перетирает переданные значения. */
+    public function testPrepareEnvKeepsProvidedValues(): void
+    {
+        $env = CommandRunner::prepareEnv(['HOME' => '/custom', 'RESTIC_CACHE_DIR' => '/rc']);
+
+        $this->assertSame('/custom', $env['HOME']);
+        $this->assertSame('/rc', $env['RESTIC_CACHE_DIR']);
+    }
+
+    /** resetEnvCache удаляет мемоизированное базовое окружение. */
+    public function testResetEnvCacheDropsMemoizedBase(): void
+    {
+        $cache = App::cache()->request();
+        $cache->set('env.base', ['HOME' => '/stale']);
+        $cache->set('env.process', ['FOO' => 'bar']);
+
+        CommandRunner::resetEnvCache();
+
+        $this->assertNull($cache->get('env.base'));
+        $this->assertNull($cache->get('env.process'));
     }
 }

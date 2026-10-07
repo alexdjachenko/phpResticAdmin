@@ -8,29 +8,31 @@
 
 namespace App\Tests\Integration;
 
+use App\Cache\RequestCache;
+use App\Core\App;
 use App\Restic\CommandRunner;
 use App\Restic\KeyService;
 use App\Restic\RepositoryService;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Интеграционный тест управления ключами restic (key list/add/remove/passwd).
+ * Интеграционный тест управления ключами restic (реальный restic).
  *
- * Цель: проверить операции с ключами доступа к репозиторию через KeyService:
- *       просмотр списка, добавление, удаление, смена пароля.
+ * Цель: проверить идентификацию ключа по паролю, безопасные удаление/смену и
+ *       что рабочий ключ приложения не «переезжает» и не удаляется.
  *
  * Сценарий:
- *   1. Инициализируется репозиторий С паролем (нужен для операций с ключами).
- *   2. key list — проверяется, что после init есть ровно 1 текущий ключ.
- *   3. key add — добавляется новый ключ, проверяется что стало 2.
- *   4. key remove — удаляется добавленный ключ, проверяется что остался 1.
- *   5. key passwd — меняется пароль, проверяется что ключ доступен с новым.
+ *   1. init репозитория С паролем (repoPassword — рабочие реквизиты).
+ *   2. identifyKey: ключ рабочего пароля помечен current; чужой пароль — свой ключ.
+ *   3. workingKeyId указывает на рабочий ключ и НЕ меняется после identifyKey чужим паролем.
+ *   4. Повторное добавление существующего пароля не создаёт ключ.
+ *   5. Смена пароля дополнительного ключа: старый пароль этого ключа не работает,
+ *      новый работает, рабочий ключ приложения продолжает работать.
+ *   6. Удаление рабочего ключа по паролю блокируется (current_key).
  *
  * Критерий успеха:
- *   - key list возвращает валидный JSON с 1 ключом (current=true).
- *   - После add — 2 ключа.
- *   - После remove — снова 1 ключ.
- *   - После passwd — ключ доступен с новым паролем.
+ *   - рабочая идентификация и защита рабочего ключа;
+ *   - дополнительный ключ меняется, рабочий ключ остаётся рабочим.
  *
  * Требует: restic в PATH.
  */
@@ -42,12 +44,14 @@ class KeyEndToEndTest extends TestCase
     private string $repoDir;
     /** @var array<string, mixed> Конфигурация тестового репозитория */
     private array $repo;
-    /** @var string Пароль репозитория (нужен для key-операций) */
+    /** @var string Пароль рабочего ключа (реквизиты) */
     private string $repoPassword = 'testpass123';
 
     protected function setUp(): void
     {
-        // Создаём изолированную временную директорию
+        // Изолируем кеш области запроса между тестами (в одном процессе).
+        App::resetCaches();
+
         $this->tmpDir = sys_get_temp_dir() . '/phpresticadmin_key_' . uniqid();
         $this->repoDir = $this->tmpDir . '/restic-repo';
         mkdir($this->tmpDir, 0777, true);
@@ -61,7 +65,6 @@ class KeyEndToEndTest extends TestCase
             'password' => $this->repoPassword,
         ];
 
-        // Инициализируем репозиторий С ПАРОЛЕМ (операции с ключами без пароля бессмысленны)
         $repoService = new RepositoryService(new CommandRunner());
         $result = $repoService->init($this->repo);
         if (!$result['ok']) {
@@ -71,71 +74,120 @@ class KeyEndToEndTest extends TestCase
 
     protected function tearDown(): void
     {
+        App::resetCaches();
         $this->removeDir($this->tmpDir);
     }
 
-    /**
-     * Проверяет, что после init в репозитории ровно 1 ключ, и он текущий.
-     */
+    /** Сервис с изолированным кешем запроса. */
+    private function service(): KeyService
+    {
+        return new KeyService(new CommandRunner(), new RequestCache());
+    }
+
+    /** После init ровно 1 ключ, и он помечен current. */
     public function testListKeys(): void
     {
-        $service = new KeyService(new CommandRunner());
+        $service = $this->service();
         $keys = $service->listKeys($this->repo);
 
         $this->assertCount(1, $keys, 'should have exactly 1 key after init');
         $this->assertTrue($keys[0]['current'] ?? false, 'initial key should be current');
     }
 
-    /**
-     * Проверяет полный цикл: add key → list (2 ключа) → remove → list (1 ключ).
-     */
-    public function testAddAndRemoveKey(): void
+    /** Идентификация по паролю: рабочий пароль → рабочий ключ; рабочий ключ стабилен. */
+    public function testIdentifyAndWorkingKey(): void
     {
-        $service = new KeyService(new CommandRunner());
+        $service = $this->service();
 
-        // Шаг 1: добавляем новый ключ
-        $result = $service->addKey($this->repo, 'newpass456');
-        $this->assertTrue($result['ok'], 'key add should succeed: ' . $result['error']);
+        $working = $service->workingKeyId($this->repo);
+        $this->assertNotNull($working, 'working key must be identified by repo credentials');
 
-        // Шаг 2: проверяем, что теперь 2 ключа
-        $keys = $service->listKeys($this->repo);
-        $this->assertCount(2, $keys, 'should have 2 keys after adding');
+        $identified = $service->identifyKey($this->repo, $this->repoPassword);
+        $this->assertNotNull($identified);
+        $this->assertSame($working, $identified['id']);
 
-        // Находим НЕ текущий ключ для удаления
-        $newKeyId = null;
-        foreach ($keys as $key) {
-            if (empty($key['current'])) {
-                $newKeyId = $key['id'];
-                break;
-            }
-        }
-        $this->assertNotNull($newKeyId, 'should find a non-current key');
+        // Добавляем дополнительный ключ и проверяем, что бейдж (workingKeyId) не «переезжает».
+        $add = $service->addKey($this->repo, 'extraPass1');
+        $this->assertTrue($add['ok'], 'key add should succeed: ' . $add['error']);
+        $this->assertNotSame($working, $add['key_id'], 'new key must differ from the working key');
 
-        // Шаг 3: удаляем добавленный ключ
-        $removeResult = $service->removeKey($this->repo, $newKeyId);
-        $this->assertTrue($removeResult['ok'], 'key remove should succeed: ' . $removeResult['error']);
+        $this->assertSame($working, $service->workingKeyId($this->repo), 'working key must not move');
 
-        // Шаг 4: проверяем, что снова 1 ключ
-        $keysAfter = $service->listKeys($this->repo);
-        $this->assertCount(1, $keysAfter, 'should have 1 key after removal');
+        // identifyKey чужим паролем не влияет на рабочий ключ.
+        $extraIdentified = $service->identifyKey($this->repo, 'extraPass1');
+        $this->assertNotNull($extraIdentified);
+        $this->assertSame($add['key_id'], $extraIdentified['id']);
+    }
+
+    /** Повторное добавление существующего пароля не создаёт ключ. */
+    public function testAddExistingPasswordIsRejected(): void
+    {
+        $service = $this->service();
+
+        $result = $service->addKey($this->repo, $this->repoPassword);
+
+        $this->assertFalse($result['ok']);
+        $this->assertSame('duplicate', $result['error_code']);
+        $this->assertCount(1, $service->listKeys($this->repo), 'no new key must be created');
+    }
+
+    /** Рабочий ключ нельзя удалить по паролю. */
+    public function testRemoveWorkingKeyIsBlocked(): void
+    {
+        $service = $this->service();
+
+        $result = $service->removeKeyByPassword($this->repo, $this->repoPassword);
+
+        $this->assertFalse($result['ok']);
+        $this->assertSame('current_key', $result['error_code']);
+        $this->assertCount(1, $service->listKeys($this->repo), 'working key must survive');
+    }
+
+    /** Удаление дополнительного ключа по паролю работает. */
+    public function testRemoveExtraKeyByPassword(): void
+    {
+        $service = $this->service();
+        $add = $service->addKey($this->repo, 'extraPass2');
+        $this->assertTrue($add['ok']);
+
+        $result = $service->removeKeyByPassword($this->repo, 'extraPass2');
+        $this->assertTrue($result['ok'], 'extra key removal should succeed: ' . $result['error']);
+
+        $this->assertCount(1, $service->listKeys($this->repo), 'extra key must be removed');
     }
 
     /**
-     * Проверяет смену пароля репозитория и доступ с новым паролем.
-     *
-     * Примечание: restic 0.19+ key passwd больше не принимает ID ключа.
+     * Смена пароля ДОПОЛНИТЕЛЬНОГО ключа: старый пароль этого ключа не работает,
+     * новый работает, рабочий ключ приложения продолжает работать.
      */
-    public function testChangePassword(): void
+    public function testChangeExtraKeyPassword(): void
     {
-        $service = new KeyService(new CommandRunner());
+        $service = $this->service();
+        $add = $service->addKey($this->repo, 'extraOld1');
+        $this->assertTrue($add['ok']);
 
-        $result = $service->changePassword($this->repo, 'changed789');
-        $this->assertTrue($result['ok'], 'key passwd should succeed: ' . $result['error']);
+        $result = $service->changePassword($this->repo, 'extraOld1', 'extraNew1');
+        $this->assertTrue($result['ok'], 'extra key passwd should succeed: ' . $result['error']);
 
-        // Assert: ключ доступен с НОВЫМ паролем
-        $repoWithNewPassword = array_merge($this->repo, ['password' => 'changed789']);
-        $keysAfter = $service->listKeys($repoWithNewPassword);
-        $this->assertCount(1, $keysAfter, 'key should still exist after password change');
+        // Старый пароль дополнительного ключа больше не работает.
+        $this->assertNull($service->identifyKey($this->repo, 'extraOld1'), 'old extra password must stop working');
+        // Новый пароль работает.
+        $this->assertNotNull($service->identifyKey($this->repo, 'extraNew1'), 'new extra password must work');
+        // Рабочий ключ приложения продолжает работать.
+        $this->assertNotNull($service->workingKeyId($this->repo), 'working key must keep working');
+    }
+
+    /** Смена пароля РАБОЧЕГО ключа: с новым паролем репозиторий доступен. */
+    public function testChangeWorkingKeyPassword(): void
+    {
+        $service = $this->service();
+
+        $result = $service->changePassword($this->repo, $this->repoPassword, 'workingNew1');
+        $this->assertTrue($result['ok'], 'working key passwd should succeed: ' . $result['error']);
+
+        $repoWithNew = array_merge($this->repo, ['password' => 'workingNew1']);
+        $keysAfter = $service->listKeys($repoWithNew);
+        $this->assertCount(1, $keysAfter, 'repository must remain accessible with the new password');
     }
 
     private function removeDir(string $dir): void

@@ -10,6 +10,7 @@ namespace App\Controllers;
 
 use App\Core\App;
 use App\Core\Request;
+use App\Process\TaskLabel;
 
 class MaintenanceController
 {
@@ -173,24 +174,17 @@ class MaintenanceController
             return;
         }
 
-        set_time_limit(0);
-        $result = App::maintenanceService()->stats($repo);
+        $started = App::resticTasks()->startMaintenance('stats', $repo);
 
-        echo App::response()->render('maintenance/result.php', [
-            'action' => __('maint.stats'),
-            'result' => $result,
-            'repo' => $repo,
-            'isLoggedIn' => $auth->isLoggedIn(),
-            'username' => $user,
-        ]);
-    }
+        $this->respondTaskStarted($started['label'], $this->operationTitle('stats'), false);
+        }
 
     /**
      * POST /maintenance/check
      */
     public function check(): void
     {
-        $this->runMaintenance('check', __('maint.check'));
+        $this->runMaintenance('check');
     }
 
     /**
@@ -198,7 +192,7 @@ class MaintenanceController
      */
     public function prune(): void
     {
-        $this->runMaintenance('prune', __('maint.prune'));
+        $this->runMaintenance('prune');
     }
 
     /**
@@ -206,7 +200,7 @@ class MaintenanceController
      */
     public function rebuildIndex(): void
     {
-        $this->runMaintenance('rebuildIndex', __('maint.rebuild_index'));
+        $this->runMaintenance('repair index');
     }
 
     /**
@@ -214,7 +208,7 @@ class MaintenanceController
      */
     public function unlock(): void
     {
-        $this->runMaintenance('unlock', __('maint.unlock'));
+        $this->runMaintenance('unlock');
     }
 
     /**
@@ -270,17 +264,10 @@ class MaintenanceController
             return;
         }
 
-        set_time_limit(0);
-        $result = App::repoService()->init($repo);
+        $started = App::resticTasks()->startInit($repo);
 
-        echo App::response()->render('maintenance/result.php', [
-            'action' => __('maint.init'),
-            'result' => $result,
-            'repo' => $repo,
-            'isLoggedIn' => $auth->isLoggedIn(),
-            'username' => $user,
-        ]);
-    }
+        $this->respondTaskStarted($started['label'], __('tasks.op_init'), false);
+        }
 
     /**
      * POST /maintenance/forget
@@ -340,20 +327,12 @@ class MaintenanceController
             'dry_run' => $request->post('dry_run', '0') === '1',
         ];
 
-        set_time_limit(0);
-        $result = App::maintenanceService()->forget($repo, $policy);
+        $started = App::resticTasks()->startMaintenance('forget', $repo, $policy);
 
-        echo App::response()->render('maintenance/result.php', [
-            'action' => __('maint.forget'),
-            'result' => $result,
-            'repo' => $repo,
-            'isLoggedIn' => $auth->isLoggedIn(),
-            'username' => $user,
-            'dryRun' => $policy['dry_run'],
-        ]);
-    }
+        $this->respondTaskStarted($started['label'], $this->operationTitle('forget'), (bool) $policy['dry_run']);
+        }
 
-    private function runMaintenance(string $method, string $actionName): void
+    private function runMaintenance(string $operation): void
     {
         $auth = App::auth();
         $user = $auth->user();
@@ -398,17 +377,47 @@ class MaintenanceController
             return;
         }
 
-        set_time_limit(0);
-        $result = App::maintenanceService()->$method($repo);
+        $started = App::resticTasks()->startMaintenance($operation, $repo);
 
-        echo App::response()->render('maintenance/result.php', [
-            'action' => $actionName,
-            'result' => $result,
-            'repo' => $repo,
-            'isLoggedIn' => $auth->isLoggedIn(),
-            'username' => $user,
-        ]);
-    }
+        $this->respondTaskStarted($started['label'], $this->operationTitle($operation), false);
+        }
+
+        /**
+        * Единый ответ после старта фоновой задачи.
+        *
+        * AJAX (fetch) — JSON с меткой/заголовком; обычная отправка формы —
+        * редирект на исходную страницу с flash (без текстового терминала).
+        */
+        private function respondTaskStarted(string $label, string $title, bool $dryRun, string $fallback = '/maintenance'): void
+        {
+        $request = new Request();
+
+        if ($request->isAjax()) {
+            $url = '/tasks/stream?label=' . urlencode($label);
+            if ($dryRun) {
+                $url .= '&dry_run=1';
+            }
+
+            App::response()->json([
+                'ok' => true,
+                'label' => $label,
+                'title' => $title,
+                'dry_run' => $dryRun,
+                'stream_url' => $url,
+                '_csrf_token' => App::security()->csrfToken(),
+            ]);
+            return;
+        }
+
+        App::session()->flash('success', __('flash.task_started', ['{title}' => $title]));
+        $referer = $_SERVER['HTTP_REFERER'] ?? $fallback;
+        App::response()->redirect($referer, 303);
+        }
+
+        private function operationTitle(string $operation): string
+        {
+        return __('tasks.op_' . TaskLabel::opForOperation($operation));
+        }
 
     private function resolveRepoId(Request $request): ?string
     {

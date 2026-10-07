@@ -9,13 +9,20 @@
 namespace App\Core;
 
 use App\Auth\Authenticator;
+use App\Cache\CacheManager;
+use App\Process\TspClient;
+use App\Process\TspCommandRunner;
+use App\Process\TspTaskManager;
 use App\Restic\CommandRunner;
 use App\Restic\KeyService;
 use App\Restic\MaintenanceService;
 use App\Restic\RepositoryService;
+use App\Restic\ResticTaskService;
 use App\Restic\SnapshotService;
 use App\Storage\ConfigStorage;
 use App\Storage\RepositoryStorage;
+use App\Storage\SnapshotCacheStorage;
+use App\Storage\SnapshotListState;
 
 class App
 {
@@ -29,11 +36,16 @@ class App
     private static ?SnapshotService $snapshotService = null;
     private static ?MaintenanceService $maintenanceService = null;
     private static ?KeyService $keyService = null;
+    private static ?TspClient $tsp = null;
+    private static ?TspTaskManager $tasks = null;
+    private static ?TspCommandRunner $tspRunner = null;
+    private static ?ResticTaskService $resticTasks = null;
     private static ?Security $security = null;
     private static ?Response $response = null;
+    private static ?CacheManager $cache = null;
+    private static ?SnapshotCacheStorage $snapshotCache = null;
 
     private static int $debugLevel = 0;
-    private static ?string $resticVersion = null;
 
     public static function boot(): void
     {
@@ -128,17 +140,26 @@ class App
         return 'dev';
     }
 
+    /**
+     * Версия restic.
+     *
+     * Мемоизация на запрос (область Request) поверх кеша в сессии (область User):
+     * один запуск `restic version` за запрос, результат переиспользуется между
+     * запросами в рамках сессии.
+     */
     public static function resticVersion(): string
     {
-        if (self::$resticVersion === null) {
-            $result = self::runner()->run(['restic', 'version']);
-            if ($result['exitCode'] === 0 && preg_match('/restic (\S+)/', $result['stdout'], $m)) {
-                self::$resticVersion = $m[1];
-            } else {
-                self::$resticVersion = 'unknown';
-            }
-        }
-        return self::$resticVersion;
+        $version = self::cache()->request()->remember('restic_version', null, function (): string {
+            return self::cache()->user()->remember('restic_version', null, function (): string {
+                $result = self::runner()->run(['restic', 'version']);
+                if ($result['exitCode'] === 0 && preg_match('/restic (\S+)/', $result['stdout'], $m)) {
+                    return $m[1];
+                }
+                return 'unknown';
+            });
+        });
+
+        return is_string($version) ? $version : 'unknown';
     }
 
     public static function configStorage(): ConfigStorage
@@ -216,9 +237,41 @@ class App
     public static function keyService(): KeyService
     {
         if (self::$keyService === null) {
-            self::$keyService = new KeyService(self::runner());
+            self::$keyService = new KeyService(self::runner(), self::cache()->request());
         }
         return self::$keyService;
+    }
+
+    public static function tsp(): TspClient
+    {
+        if (self::$tsp === null) {
+            self::$tsp = new TspClient(self::runner());
+        }
+        return self::$tsp;
+    }
+
+    public static function tasks(): TspTaskManager
+    {
+        if (self::$tasks === null) {
+            self::$tasks = new TspTaskManager(self::tsp());
+        }
+        return self::$tasks;
+    }
+
+    public static function tspRunner(): TspCommandRunner
+    {
+        if (self::$tspRunner === null) {
+            self::$tspRunner = new TspCommandRunner(self::tasks(), self::tsp(), self::runner());
+        }
+        return self::$tspRunner;
+    }
+
+    public static function resticTasks(): ResticTaskService
+    {
+        if (self::$resticTasks === null) {
+            self::$resticTasks = new ResticTaskService(self::tasks());
+        }
+        return self::$resticTasks;
     }
 
     public static function security(): Security
@@ -235,6 +288,49 @@ class App
             self::$response = new Response();
         }
         return self::$response;
+    }
+
+    public static function cache(): CacheManager
+    {
+        if (self::$cache === null) {
+            self::$cache = new CacheManager();
+        }
+        return self::$cache;
+    }
+
+    /**
+     * Доменная обёртка кеша производных от restic данных (список/статистика).
+     */
+    public static function snapshotCache(): SnapshotCacheStorage
+    {
+        if (self::$snapshotCache === null) {
+            $settings = self::configStorage()->loadSettings();
+            self::$snapshotCache = new SnapshotCacheStorage(
+                self::cache(),
+                isset($settings['snapshot_cache_ttl']) ? (int) $settings['snapshot_cache_ttl'] : null,
+                isset($settings['snapshot_stats_cache_ttl']) ? (int) $settings['snapshot_stats_cache_ttl'] : null
+            );
+        }
+        return self::$snapshotCache;
+    }
+
+    public static function snapshotListState(): SnapshotListState
+    {
+        return new SnapshotListState(self::snapshotCache(), self::tasks());
+    }
+
+    /**
+     * Сбрасывает область текущего запроса.
+     *
+     * Используется тестами вместо ручного обнуления статики отдельных классов.
+     * Системную область не трогает: иначе кнопка «инвалидация кеша» вызывала бы
+     * лавину обращений к restic.
+     */
+    public static function resetCaches(): void
+    {
+        if (self::$cache !== null) {
+            self::$cache->request()->clear();
+        }
     }
 
     private static function registerRoutes(): void
@@ -341,6 +437,11 @@ class App
             $controller->stats();
         });
 
+        $router->map('GET', '/snapshots/stats/result', function () {
+            $controller = new \App\Controllers\SnapshotController();
+            $controller->statsResult();
+        });
+
         $router->map('GET', '/browse', function () {
             $controller = new \App\Controllers\BrowseController();
             $controller->tree();
@@ -440,5 +541,85 @@ class App
             $controller = new \App\Controllers\KeyController();
             $controller->passwd();
         });
-    }
+
+        $router->map('GET', '/tasks', function () {
+            $controller = new \App\Controllers\TaskController();
+            $controller->list();
+        });
+
+        $router->map('GET', '/tasks/view', function () {
+            $controller = new \App\Controllers\TaskController();
+            $controller->view();
+        });
+
+        $router->map('GET', '/tasks/stream', function () {
+            $controller = new \App\Controllers\TaskController();
+            $controller->stream();
+        });
+
+        $router->map('GET', '/tasks/status', function () {
+            $controller = new \App\Controllers\TaskController();
+            $controller->status();
+        });
+
+        $router->map('GET', '/tasks/active', function () {
+            $controller = new \App\Controllers\TaskController();
+            $controller->active();
+        });
+
+        $router->map('POST', '/tasks/cancel', function () {
+            $controller = new \App\Controllers\TaskController();
+            $controller->cancel();
+        });
+
+        $router->map('POST', '/tasks/promote', function () {
+            $controller = new \App\Controllers\TaskController();
+            $controller->promote();
+        });
+
+        $router->map('POST', '/snapshots/refresh', function () {
+            $controller = new \App\Controllers\SnapshotController();
+            $controller->refresh();
+        });
+
+        $router->map('GET', '/users', function () {
+            $controller = new \App\Controllers\UserController();
+            $controller->list();
+        });
+
+        $router->map('GET', '/users/add', function () {
+            $controller = new \App\Controllers\UserController();
+            $controller->addForm();
+        });
+
+        $router->map('POST', '/users/add', function () {
+            $controller = new \App\Controllers\UserController();
+            $controller->add();
+        });
+
+        $router->map('GET', '/users/edit', function () {
+            $controller = new \App\Controllers\UserController();
+            $controller->editForm();
+        });
+
+        $router->map('POST', '/users/edit', function () {
+            $controller = new \App\Controllers\UserController();
+            $controller->edit();
+        });
+
+        $router->map('POST', '/users/delete', function () {
+            $controller = new \App\Controllers\UserController();
+            $controller->delete();
+        });
+
+        $router->map('GET', '/account/password', function () {
+            $controller = new \App\Controllers\AccountController();
+            $controller->passwordForm();
+        });
+
+        $router->map('POST', '/account/password', function () {
+            $controller = new \App\Controllers\AccountController();
+            $controller->changePassword();
+        });
+        }
 }

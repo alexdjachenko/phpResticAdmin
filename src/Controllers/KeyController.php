@@ -55,232 +55,227 @@ class KeyController
             return;
         }
 
-        $keys = App::keyService()->listKeys($repo);
-        $csrfToken = App::security()->csrfToken();
+        $keyService = App::keyService();
+        $keys = $keyService->listKeys($repo);
+
+        // Бейдж «реквизиты источника» считается по листингу с паролем реквизитов
+        // и не зависит от «Проверить пароль» (AJAX-подсветка — отдельно).
+        $hasPassword = !empty($repo['password']);
+        $workingKeyId = $keyService->workingKeyId($repo);
+        $credentialsMismatch = $hasPassword && $workingKeyId === null;
 
         echo App::response()->render('keys/list.php', [
             'repo' => $repo,
             'keys' => $keys,
-            'csrfToken' => $csrfToken,
+            'workingKeyId' => $workingKeyId,
+            'hasPassword' => $hasPassword,
+            'credentialsMismatch' => $credentialsMismatch,
+            'canWrite' => $auth->canUseWrite($category),
+            'canEdit' => $auth->canEdit($category),
+            'csrfToken' => App::security()->csrfToken(),
             'isLoggedIn' => $auth->isLoggedIn(),
             'username' => $user,
         ]);
     }
 
     /**
-     * POST /keys/verify
+     * POST /keys/verify — идентификация ключа по введённому паролю (AJAX).
      */
     public function verify(): void
     {
-        $auth = App::auth();
-        $user = $auth->user();
-
-        if ($user === null) {
-            App::response()->redirect('/login');
+        $ctx = $this->resolveRepoForAction('canUseRead');
+        if ($ctx === null) {
             return;
         }
+        [$repo] = $ctx;
 
         $request = new Request();
-        $security = App::security();
-
-        $token = $request->post('_csrf_token', '');
-        if (!$security->validateCsrf($token)) {
-            App::response()->error(403, __('flash.csrf_error'));
+        $password = (string) $request->post('password', '');
+        if ($password === '') {
+            $this->json(['ok' => false, 'error' => __('keys.verify_fail')]);
             return;
         }
 
-        $repoId = $request->post('repo_id', '');
-        $password = $request->post('password', '');
+        $keyService = App::keyService();
+        $identified = $keyService->identifyKey($repo, $password);
 
-        if ($repoId === '' || $password === '') {
-            App::session()->flash('error', __('keys.verify_fail'));
-            App::response()->redirect('/keys?repo=' . urlencode($repoId));
+        if ($identified === null) {
+            $this->json(['ok' => false, 'error' => __('keys.verify_fail')]);
             return;
         }
 
-        $repositories = App::repoStorage()->loadAll($user);
-        $repo = null;
-        foreach ($repositories as $r) {
-            if (($r['id'] ?? '') === $repoId) {
-                $repo = $r;
-                break;
-            }
-        }
-
-        if ($repo === null) {
-            App::response()->error(404, __('flash.not_found'));
-            return;
-        }
-
-        $category = $repo['category'] ?? 'public';
-        if (!$auth->canUseRead($category)) {
-            App::response()->error(403, __('error.forbidden'));
-            return;
-        }
-
-        $result = App::keyService()->verifyKey($repo, $password);
-
-        if ($result['ok']) {
-            App::session()->flash('success', __('keys.verify_ok'));
-        } else {
-            App::session()->flash('error', __('keys.verify_fail') . ': ' . $result['error']);
-        }
-
-        App::response()->redirect('/keys?repo=' . urlencode($repoId));
+        $role = ($keyService->workingKeyId($repo) === $identified['id']) ? 'source' : 'extra';
+        $this->json([
+            'ok' => true,
+            'key_id' => $identified['id'],
+            'short_id' => substr($identified['id'], 0, 8),
+            'role' => $role,
+            'message' => __('keys.verify_ok'),
+        ]);
     }
 
     /**
-     * POST /keys/add
+     * POST /keys/add — добавить пароль (AJAX).
      */
     public function add(): void
     {
-        $auth = App::auth();
-        $user = $auth->user();
-
-        if ($user === null) {
-            App::response()->redirect('/login');
+        $ctx = $this->resolveRepoForAction('canUseWrite');
+        if ($ctx === null) {
             return;
         }
+        [$repo] = $ctx;
 
         $request = new Request();
-        $security = App::security();
-
-        $token = $request->post('_csrf_token', '');
-        if (!$security->validateCsrf($token)) {
-            App::response()->error(403, __('flash.csrf_error'));
-            return;
-        }
-
-        $repoId = $request->post('repo_id', '');
-        $newPassword = $request->post('new_password', '');
-
-        if ($repoId === '' || $newPassword === '') {
-            App::session()->flash('error', __('keys.add_error'));
-            App::response()->redirect('/keys?repo=' . urlencode($repoId));
-            return;
-        }
-
-        $repositories = App::repoStorage()->loadAll($user);
-        $repo = null;
-        foreach ($repositories as $r) {
-            if (($r['id'] ?? '') === $repoId) {
-                $repo = $r;
-                break;
-            }
-        }
-
-        if ($repo === null) {
-            App::response()->error(404, __('flash.not_found'));
-            return;
-        }
-
-        $category = $repo['category'] ?? 'public';
-        if (!$auth->canUseWrite($category)) {
-            App::response()->error(403, __('error.forbidden'));
+        $newPassword = (string) $request->post('new_password', '');
+        if ($newPassword === '') {
+            $this->json(['ok' => false, 'error_code' => 'failed', 'error' => __('keys.add_error')]);
             return;
         }
 
         $result = App::keyService()->addKey($repo, $newPassword);
-
-        if ($result['ok']) {
-            App::session()->flash('success', __('keys.added'));
-        } else {
-            App::session()->flash('error', __('keys.add_error') . ': ' . $result['error']);
-        }
-
-        App::response()->redirect('/keys?repo=' . urlencode($repoId));
+        $this->json($this->keyResult($result));
     }
 
     /**
-     * POST /keys/remove
+     * POST /keys/remove — удаление ключа по id или по паролю (AJAX).
      */
     public function remove(): void
     {
-        $auth = App::auth();
-        $user = $auth->user();
-
-        if ($user === null) {
-            App::response()->redirect('/login');
+        $ctx = $this->resolveRepoForAction('canUseWrite');
+        if ($ctx === null) {
             return;
         }
+        [$repo] = $ctx;
 
         $request = new Request();
-        $security = App::security();
+        $keyId = (string) $request->post('key_id', '');
+        $password = (string) $request->post('password', '');
 
-        $token = $request->post('_csrf_token', '');
-        if (!$security->validateCsrf($token)) {
-            App::response()->error(403, __('flash.csrf_error'));
-            return;
-        }
-
-        $repoId = $request->post('repo_id', '');
-        $keyId = $request->post('key_id', '');
-
-        if ($repoId === '' || $keyId === '') {
-            App::response()->redirect('/keys?repo=' . urlencode($repoId));
-            return;
-        }
-
-        $repositories = App::repoStorage()->loadAll($user);
-        $repo = null;
-        foreach ($repositories as $r) {
-            if (($r['id'] ?? '') === $repoId) {
-                $repo = $r;
-                break;
-            }
-        }
-
-        if ($repo === null) {
-            App::response()->error(404, __('flash.not_found'));
-            return;
-        }
-
-        $category = $repo['category'] ?? 'public';
-        if (!$auth->canUseWrite($category)) {
-            App::response()->error(403, __('error.forbidden'));
-            return;
-        }
-
-        $result = App::keyService()->removeKey($repo, $keyId);
-
-        if ($result['ok']) {
-            App::session()->flash('success', __('keys.removed'));
+        if ($keyId !== '') {
+            $result = App::keyService()->removeKey($repo, $keyId);
+        } elseif ($password !== '') {
+            $result = App::keyService()->removeKeyByPassword($repo, $password);
         } else {
-            App::session()->flash('error', __('keys.add_error') . ': ' . $result['error']);
+            $this->json(['ok' => false, 'error_code' => 'not_found', 'error' => '']);
+            return;
         }
 
-        App::response()->redirect('/keys?repo=' . urlencode($repoId));
+        $this->json($this->keyResult($result));
     }
 
     /**
-     * POST /keys/passwd
+     * POST /keys/passwd — смена пароля ключа (AJAX).
+     *
+     * Порядок: сначала changePassword(), сразу за ним — сохранение реквизитов
+     * (если меняется рабочий ключ), и только потом ответ. Если запись реквизитов
+     * не удалась, показываем новый пароль и пишем в лог уровня 0: без реквизитов
+     * доступ из UI к репозиторию сломан.
      */
     public function passwd(): void
+    {
+        $ctx = $this->resolveRepoForAction('canUseWrite');
+        if ($ctx === null) {
+            return;
+        }
+        [$repo, $category, $repoId, $user] = $ctx;
+
+        $request = new Request();
+        $oldPassword = (string) $request->post('old_password', '');
+        $newPassword = (string) $request->post('new_password', '');
+        $updateCredentials = $request->post('update_credentials', '0') === '1';
+
+        if ($oldPassword === '' || $newPassword === '') {
+            $this->json(['ok' => false, 'error_code' => 'failed', 'error' => __('keys.add_error')]);
+            return;
+        }
+
+        $keyService = App::keyService();
+        $identified = $keyService->identifyKey($repo, $oldPassword);
+        $workingKeyId = $keyService->workingKeyId($repo);
+        $isWorkingKey = $identified !== null && $workingKeyId !== null && $identified['id'] === $workingKeyId;
+
+        // Галочка «обновить реквизиты» срабатывает только для рабочего ключа.
+        if ($updateCredentials && $isWorkingKey && !App::auth()->canEdit($category)) {
+            $this->json(['ok' => false, 'error_code' => 'no_edit_right', 'error' => __('keys.no_edit_right')]);
+            return;
+        }
+
+        $result = $keyService->changePassword($repo, $oldPassword, $newPassword);
+
+        if (!$result['ok']) {
+            $this->json($this->keyResult($result));
+            return;
+        }
+
+        $response = $this->keyResult($result);
+        $response['credentials_updated'] = false;
+        $response['is_working_key'] = $isWorkingKey;
+
+        if ($updateCredentials && $isWorkingKey) {
+            $saved = false;
+            try {
+                App::repoStorage()->update($category, $repoId, ['password' => $newPassword], $user);
+                $saved = true;
+            } catch (\Throwable $e) {
+                App::log('Failed to save repository credentials after key passwd: ' . $e->getMessage(), 0);
+            }
+
+            $response['credentials_updated'] = $saved;
+            if (!$saved) {
+                // Критическая ошибка: старый ключ уже удалён, новый не сохранён.
+                $response['new_password'] = $newPassword;
+                App::log('Repository credentials were NOT saved after key passwd; manual recovery required', 0);
+            }
+        }
+
+        $this->json($response);
+    }
+
+    /**
+     * Общий ответ по результату операции с ключом.
+     *
+     * @param array{ok: bool, key_id?: ?string, error_code?: ?string, error?: string} $result
+     * @return array<string, mixed>
+     */
+    private function keyResult(array $result): array
+    {
+        $errorCode = $result['error_code'] ?? null;
+        $detail = (string) ($result['error'] ?? '');
+
+        return [
+            'ok' => $result['ok'],
+            'key_id' => $result['key_id'] ?? null,
+            'short_id' => !empty($result['key_id']) ? substr((string) $result['key_id'], 0, 8) : null,
+            'error_code' => $errorCode,
+            'error' => $errorCode !== null ? __('keys.err_' . $errorCode) . ($detail !== '' ? ': ' . $detail : '') : '',
+        ];
+    }
+
+    /**
+     * Разрешает репозиторий и право для POST-операции с ключом.
+     *
+     * @return array{0: array<string, mixed>, 1: string, 2: string, 3: string}|null
+     */
+    private function resolveRepoForAction(string $permission): ?array
     {
         $auth = App::auth();
         $user = $auth->user();
 
         if ($user === null) {
-            App::response()->redirect('/login');
-            return;
+            $this->json(['ok' => false, 'error' => 'Authentication required'], 403);
+            return null;
         }
 
         $request = new Request();
-        $security = App::security();
-
-        $token = $request->post('_csrf_token', '');
-        if (!$security->validateCsrf($token)) {
-            App::response()->error(403, __('flash.csrf_error'));
-            return;
+        if (!App::security()->validateCsrf((string) $request->post('_csrf_token', ''))) {
+            $this->json(['ok' => false, 'error' => __('flash.csrf_error')], 403);
+            return null;
         }
 
-        $repoId = $request->post('repo_id', '');
-        $newPassword = $request->post('new_password', '');
-
-        if ($repoId === '' || $newPassword === '') {
-            App::session()->flash('error', __('keys.add_error'));
-            App::response()->redirect('/keys?repo=' . urlencode($repoId));
-            return;
+        $repoId = (string) $request->post('repo_id', '');
+        if ($repoId === '') {
+            $this->json(['ok' => false, 'error' => __('flash.not_found')], 404);
+            return null;
         }
 
         $repositories = App::repoStorage()->loadAll($user);
@@ -293,25 +288,27 @@ class KeyController
         }
 
         if ($repo === null) {
-            App::response()->error(404, __('flash.not_found'));
-            return;
+            $this->json(['ok' => false, 'error' => __('flash.not_found')], 404);
+            return null;
         }
 
         $category = $repo['category'] ?? 'public';
-        if (!$auth->canUseWrite($category)) {
-            App::response()->error(403, __('error.forbidden'));
-            return;
+        $allowed = $permission === 'canUseWrite' ? $auth->canUseWrite($category) : $auth->canUseRead($category);
+        if (!$allowed) {
+            $this->json(['ok' => false, 'error' => __('error.forbidden')], 403);
+            return null;
         }
 
-        $result = App::keyService()->changePassword($repo, $newPassword);
+        return [$repo, $category, $repoId, $user];
+    }
 
-        if ($result['ok']) {
-            App::session()->flash('success', __('keys.passwd_changed'));
-        } else {
-            App::session()->flash('error', __('keys.add_error') . ': ' . $result['error']);
-        }
-
-        App::response()->redirect('/keys?repo=' . urlencode($repoId));
+    /**
+     * @param array<string, mixed> $data
+     */
+    private function json(array $data, int $code = 200): void
+    {
+        $data['_csrf_token'] = App::security()->csrfToken();
+        App::response()->json($data, $code);
     }
 
     private function resolveRepoId(Request $request): ?string

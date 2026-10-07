@@ -92,6 +92,12 @@ class RepositoryController
             return;
         }
 
+        $category = $repository['category'] ?? 'public';
+        if (!$auth->canUseRead($category)) {
+            App::response()->json(['ok' => false, 'error' => __('error.forbidden'), '_csrf_token' => App::security()->csrfToken()], 403);
+            return;
+        }
+
         $result = App::repoService()->testConnection($repository);
         $result['_csrf_token'] = App::security()->csrfToken();
         App::response()->json($result);
@@ -190,7 +196,10 @@ class RepositoryController
         }
         $canMove = !empty($availableCategories);
 
-        $latestSnapshots = App::snapshotService()->listLatestSnapshots($repo, 5);
+        // «Последние 5» режем в PHP из кешированного списка: `restic snapshots
+        // --latest 5` означал бы «5 на каждую пару host+path», а не «5 всего».
+        $allSnapshots = App::snapshotCache()->list($repo);
+        $latestSnapshots = $allSnapshots !== null ? self::lastSnapshots($allSnapshots, 5) : [];
 
         $csrfToken = App::security()->csrfToken();
 
@@ -204,7 +213,8 @@ class RepositoryController
             'canMove' => $canMove,
             'availableCategories' => $availableCategories,
             'latestSnapshots' => $latestSnapshots,
-            'hasMoreSnapshots' => count($latestSnapshots) >= 5,
+            'hasMoreSnapshots' => $allSnapshots !== null && count($allSnapshots) > 5,
+            'needLoad' => $allSnapshots === null,
             'csrfToken' => $csrfToken,
             'isLoggedIn' => $auth->isLoggedIn(),
             'username' => $user,
@@ -454,17 +464,22 @@ class RepositoryController
             return;
         }
 
-        $result = App::repoService()->backupSync($repo, $backupPaths);
+        $started = App::resticTasks()->startBackup($repo, $backupPaths);
 
-        echo App::response()->render('repositories/backup.php', [
-            'repo' => $repo,
-            'output' => $result['output'],
-            'error' => $result['error'],
-            'ok' => $result['ok'],
-            'isLoggedIn' => $auth->isLoggedIn(),
-            'username' => $user,
-        ]);
-    }
+        if ($request->isAjax()) {
+            App::response()->json([
+                'ok' => true,
+                'label' => $started['label'],
+                'title' => __('tasks.op_backup'),
+                'stream_url' => '/tasks/stream?label=' . urlencode($started['label']),
+                '_csrf_token' => App::security()->csrfToken(),
+            ]);
+            return;
+        }
+
+        App::session()->flash('success', __('flash.task_started', ['{title}' => __('tasks.op_backup')]));
+        App::response()->redirect('/repositories/detail?repo=' . urlencode($repoId), 303);
+        }
 
     /**
      * POST /repositories/select — выбор текущего репозитория (без CSRF).
@@ -676,6 +691,9 @@ class RepositoryController
 
         App::repoStorage()->delete($category, $repoId, $user);
 
+        // Снимаем кеш списка снепшотов репозитория (каталог данных уходит вместе с ним).
+        App::snapshotCache()->invalidateList($found);
+
         // Сбросить current_repo если удалённый id совпадает
         if (App::session()->get('current_repo') === $repoId) {
             App::session()->remove('current_repo');
@@ -764,5 +782,20 @@ class RepositoryController
             'rest' => 'rest_url',
             default => 'local_path',
         };
+    }
+
+    /**
+     * Последние N снепшотов по времени (desc) из полного списка.
+     *
+     * @param array<int, array<string, mixed>> $snapshots
+     * @return array<int, array<string, mixed>>
+     */
+    private static function lastSnapshots(array $snapshots, int $n): array
+    {
+        usort($snapshots, static function (array $a, array $b): int {
+            return strcmp((string) ($b['time'] ?? ''), (string) ($a['time'] ?? ''));
+        });
+
+        return array_slice($snapshots, 0, $n);
     }
 }

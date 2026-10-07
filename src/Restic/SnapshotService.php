@@ -43,37 +43,6 @@ class SnapshotService
     }
 
     /**
-     * Возвращает N последних снепшотов (restic snapshots --json --latest N).
-     *
-     * Используется на дашборде и странице репозитория, чтобы не тянуть
-     * полный список с больших удалённых репозиториев.
-     *
-     * @param array<string, mixed> $repository
-     * @return array<int, array<string, mixed>>
-     */
-    public function listLatestSnapshots(array $repository, int $limit = 5): array
-    {
-        $command = ResticCommandBuilder::buildCommand(
-            ['snapshots', '--json', '--latest', (string) $limit],
-            $repository
-        );
-        $env = ResticCommandBuilder::buildEnv($repository);
-        $result = $this->runner->run($command, $env, null, 120);
-
-        if ($result['exitCode'] !== 0) {
-            return [];
-        }
-
-        $decoded = json_decode($result['stdout'], true);
-
-        if (!is_array($decoded)) {
-            return [];
-        }
-
-        return $decoded;
-    }
-
-    /**
      * Возвращает полную статистику одного снепшота (restic stats --json).
      * Тяжёлая операция, вызывается только по запросу пользователя.
      *
@@ -92,13 +61,65 @@ class SnapshotService
             return null;
         }
 
-        $decoded = json_decode($result['stdout'], true);
+        return self::parseStatsOutput($result['stdout']);
+    }
+
+    /**
+     * Разбирает JSON-вывод `restic stats --json`.
+     *
+     * Терпимо к обеим формам: `{...}` и `[{...}]`. При битом JSON или
+     * отсутствии ожидаемых ключей возвращает null.
+     *
+     * @return array<string, mixed>|null
+     */
+    public static function parseStatsOutput(string $json): ?array
+    {
+        $decoded = json_decode(trim($json), true);
 
         if (!is_array($decoded)) {
             return null;
         }
 
-        return $decoded[0] ?? $decoded;
+        if ($decoded === []) {
+            return null;
+        }
+
+        // [{...}] → первый элемент; {...} → как есть.
+        $stats = isset($decoded[0]) && is_array($decoded[0]) ? $decoded[0] : $decoded;
+
+        if (!isset($stats['total_size']) && !isset($stats['total_bytes_processed'])) {
+            return null;
+        }
+
+        return $stats;
+    }
+
+    /**
+     * Возвращает один снепшот по ID (restic snapshots --json <id>).
+     *
+     * В отличие от getSnapshot() не загружает полный список снепшотов,
+     * что критично для больших удалённых репозиториев.
+     *
+     * @param array<string, mixed> $repository
+     * @return array<string, mixed>|null
+     */
+    public function getSnapshotById(array $repository, string $snapId): ?array
+    {
+        $command = ResticCommandBuilder::buildCommand(['snapshots', '--json', $snapId], $repository);
+        $env = ResticCommandBuilder::buildEnv($repository);
+        $result = $this->runner->run($command, $env, null, 120);
+
+        if ($result['exitCode'] !== 0) {
+            return null;
+        }
+
+        $decoded = json_decode($result['stdout'], true);
+
+        if (!is_array($decoded) || $decoded === []) {
+            return null;
+        }
+
+        return $decoded[0] ?? null;
     }
 
     /**
@@ -107,15 +128,7 @@ class SnapshotService
      */
     public function getSnapshot(array $repository, string $snapId): ?array
     {
-        $snapshots = $this->listSnapshots($repository);
-
-        foreach ($snapshots as $snap) {
-            if (($snap['short_id'] ?? '') === $snapId || ($snap['id'] ?? '') === $snapId) {
-                return $snap;
-            }
-        }
-
-        return null;
+        return $this->getSnapshotById($repository, $snapId);
     }
 
     /**

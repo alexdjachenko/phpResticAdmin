@@ -18,7 +18,7 @@ class CommandRunner
      */
     public function run(array $command, array $env = [], ?string $stdin = null, int $timeout = 30): array
     {
-        $env = $this->ensureEnv($env);
+        $env = self::prepareEnv($env);
 
         $descriptorSpec = [
             0 => ['pipe', 'r'],
@@ -26,13 +26,7 @@ class CommandRunner
             2 => ['pipe', 'w'],
         ];
 
-        $mergedEnv = array_merge($_ENV, $_SERVER, $env);
-        $filteredEnv = [];
-        foreach ($mergedEnv as $key => $value) {
-            if (is_string($value) || is_int($value) || is_float($value)) {
-                $filteredEnv[$key] = (string) $value;
-            }
-        }
+        $filteredEnv = self::processEnv($env);
 
         $process = proc_open($command, $descriptorSpec, $pipes, null, $filteredEnv);
 
@@ -122,7 +116,7 @@ class CommandRunner
      */
     public function runStream(array $command, array $env = []): void
     {
-        $env = $this->ensureEnv($env);
+        $env = self::prepareEnv($env);
 
         set_time_limit(0);
 
@@ -136,13 +130,7 @@ class CommandRunner
             2 => ['pipe', 'w'],
         ];
 
-        $mergedEnv = array_merge($_ENV, $_SERVER, $env);
-        $filteredEnv = [];
-        foreach ($mergedEnv as $key => $value) {
-            if (is_string($value) || is_int($value) || is_float($value)) {
-                $filteredEnv[$key] = (string) $value;
-            }
-        }
+        $filteredEnv = self::processEnv($env);
 
         $process = proc_open($command, $descriptorSpec, $pipes, null, $filteredEnv);
 
@@ -180,7 +168,7 @@ class CommandRunner
      */
     public function runStreamWithHeaders(array $command, array $env, string $contentType, string $filename): void
     {
-        $env = $this->ensureEnv($env);
+        $env = self::prepareEnv($env);
 
         set_time_limit(0);
 
@@ -195,13 +183,7 @@ class CommandRunner
             2 => ['pipe', 'w'],
         ];
 
-        $mergedEnv = array_merge($_ENV, $_SERVER, $env);
-        $filteredEnv = [];
-        foreach ($mergedEnv as $key => $value) {
-            if (is_string($value) || is_int($value) || is_float($value)) {
-                $filteredEnv[$key] = (string) $value;
-            }
-        }
+        $filteredEnv = self::processEnv($env);
 
         $process = proc_open($command, $descriptorSpec, $pipes, null, $filteredEnv);
 
@@ -242,24 +224,65 @@ class CommandRunner
      * @param array<string, string> $env
      * @return array<string, string>
      */
-    private function ensureEnv(array $env): array
+    public static function prepareEnv(array $env): array
     {
-        if (!isset($env['HOME'])) {
-            $env['HOME'] = '/tmp';
-        }
+        $base = \App\Core\App::cache()->request()->remember('env.base', null, static function (): array {
+            $base = ['HOME' => '/tmp'];
 
-        if (!isset($env['RESTIC_CACHE_DIR'])) {
             $settings = \App\Core\App::configStorage()->loadSettings();
-            $tmpDir = rtrim($settings['tmp_dir'] ?? '/tmp', '/');
+            $tmpDir = rtrim((string) ($settings['tmp_dir'] ?? '/tmp'), '/');
             $cacheDir = $tmpDir . '/restic-cache';
 
             if (is_dir($cacheDir) && is_writable($cacheDir)) {
-                $env['RESTIC_CACHE_DIR'] = $cacheDir;
+                $base['RESTIC_CACHE_DIR'] = $cacheDir;
             } elseif (@mkdir($cacheDir, 0777, true) || is_dir($cacheDir)) {
-                $env['RESTIC_CACHE_DIR'] = $cacheDir;
+                $base['RESTIC_CACHE_DIR'] = $cacheDir;
             }
+
+            return $base;
+        });
+
+        if (!is_array($base)) {
+            $base = [];
         }
 
-        return $env;
+        return array_merge($base, $env);
+    }
+
+    /**
+     * Базовое окружение процесса ($_ENV + $_SERVER) с мемоизацией на запрос,
+     * поверх которого накладывается окружение задачи.
+     *
+     * @param array<string, string> $env
+     * @return array<string, string>
+     */
+    private static function processEnv(array $env): array
+    {
+        $base = \App\Core\App::cache()->request()->remember('env.process', null, static function (): array {
+            $merged = array_merge($_ENV, $_SERVER);
+            $filtered = [];
+            foreach ($merged as $key => $value) {
+                if (is_string($value) || is_int($value) || is_float($value)) {
+                    $filtered[$key] = (string) $value;
+                }
+            }
+            return $filtered;
+        });
+
+        if (!is_array($base)) {
+            $base = [];
+        }
+
+        return array_merge($base, $env);
+    }
+
+    /**
+     * Сбрасывает мемоизацию базового окружения (для тестов).
+     */
+    public static function resetEnvCache(): void
+    {
+        $cache = \App\Core\App::cache()->request();
+        $cache->remove('env.base');
+        $cache->remove('env.process');
     }
 }

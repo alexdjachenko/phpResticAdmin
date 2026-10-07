@@ -14,16 +14,16 @@ use PHPUnit\Framework\TestCase;
 /**
  * Юнит-тест Session (обёртка над PHP-сессиями).
  *
- * Цель: проверить базовые операции: set/get, remove, flash-сообщения
- *       (включая самоуничтожение после чтения), destroy.
+ * Цель: проверить базовые операции (set/get, remove, flash, destroy) и
+ *       освобождение сессии через close() с возможностью переоткрытия.
  *
  * Сценарий:
- *   1. set/get: запись и чтение значения по ключу.
- *   2. get с отсутствующим ключом: возврат default/null.
- *   3. remove: удаление ключа.
- *   4. flash: запись, чтение (самоуничтожение), повторное чтение (null).
- *   5. flash для отсутствующего ключа: null.
- *   6. destroy: полная очистка всех данных.
+ *   1. set/get и default для отсутствующего ключа.
+ *   2. remove удаляет ключ.
+ *   3. flash: запись, самоуничтожение после чтения, отсутствующий ключ.
+ *   4. destroy очищает все данные.
+ *   5. close(): сессия перестаёт быть активной, запись после close не
+ *      сохраняется, повторный start() открывает сессию снова.
  *
  * Критерий успеха: все assert проходят.
  */
@@ -31,7 +31,6 @@ class SessionTest extends TestCase
 {
     protected function setUp(): void
     {
-        // Инициализируем сессию вручную (без веб-сервера)
         if (session_status() === PHP_SESSION_NONE) {
             @session_start();
         }
@@ -42,7 +41,7 @@ class SessionTest extends TestCase
     {
         $_SESSION = [];
         if (session_status() === PHP_SESSION_ACTIVE) {
-            session_destroy();
+            @session_destroy();
         }
     }
 
@@ -95,9 +94,7 @@ class SessionTest extends TestCase
 
         $session->flash('info', 'Message');
 
-        // Первое чтение — сообщение доступно
         $session->flash('info');
-        // Второе чтение — сообщение уже удалено
         $this->assertNull($session->flash('info'));
     }
 
@@ -122,5 +119,28 @@ class SessionTest extends TestCase
 
         $this->assertNull($session->get('key1'));
         $this->assertNull($session->get('key2'));
+    }
+
+    /**
+     * close() освобождает сессию: запись после close не сохраняется,
+     * а повторный start() снова открывает сессию.
+     */
+    public function testCloseStopsPersistingAndCanReopen(): void
+    {
+        $session = new Session();
+        $session->start();
+        $session->set('before', 'kept');
+
+        $session->close();
+        $this->assertNotSame(PHP_SESSION_ACTIVE, session_status(), 'session must be closed for writing');
+
+        // Запись после close() не должна сохраняться.
+        $session->set('after', 'lost');
+
+        $session->start();
+        $this->assertSame(PHP_SESSION_ACTIVE, session_status(), 'start() must reopen the session');
+
+        $this->assertSame('kept', $session->get('before'));
+        $this->assertNull($session->get('after'), 'value written after close() must not persist');
     }
 }

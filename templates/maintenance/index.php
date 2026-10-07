@@ -17,7 +17,7 @@
 <div class="maintenance-section">
     <h3><?= htmlspecialchars(__('maint.check'), ENT_QUOTES, 'UTF-8') ?></h3>
     <p><?= htmlspecialchars(__('maint.check_desc'), ENT_QUOTES, 'UTF-8') ?></p>
-    <form method="post" action="/maintenance/check">
+    <form method="post" action="/maintenance/check" data-ajax-task>
         <input type="hidden" name="_csrf_token" value="<?= htmlspecialchars($csrfToken ?? '', ENT_QUOTES, 'UTF-8') ?>">
         <input type="hidden" name="repo_id" value="<?= htmlspecialchars($repo['id'] ?? '', ENT_QUOTES, 'UTF-8') ?>">
         <button type="submit" class="btn-primary"><?= htmlspecialchars(__('maint.run'), ENT_QUOTES, 'UTF-8') ?></button>
@@ -27,7 +27,7 @@
 <div class="maintenance-section">
     <h3><?= htmlspecialchars(__('maint.stats'), ENT_QUOTES, 'UTF-8') ?></h3>
     <p><?= htmlspecialchars(__('maint.stats_desc'), ENT_QUOTES, 'UTF-8') ?></p>
-    <form method="post" action="/maintenance/stats">
+    <form method="post" action="/maintenance/stats" data-ajax-task>
         <input type="hidden" name="_csrf_token" value="<?= htmlspecialchars($csrfToken ?? '', ENT_QUOTES, 'UTF-8') ?>">
         <input type="hidden" name="repo_id" value="<?= htmlspecialchars($repo['id'] ?? '', ENT_QUOTES, 'UTF-8') ?>">
         <button type="submit" class="btn-primary"><?= htmlspecialchars(__('maint.run'), ENT_QUOTES, 'UTF-8') ?></button>
@@ -39,7 +39,7 @@
     <h3><?= htmlspecialchars(__('maint.init'), ENT_QUOTES, 'UTF-8') ?></h3>
     <p><?= htmlspecialchars(__('maint.init_desc'), ENT_QUOTES, 'UTF-8') ?></p>
     <p class="maintenance-warn"><?= htmlspecialchars(__('maint.init_warn'), ENT_QUOTES, 'UTF-8') ?></p>
-    <form method="post" action="/maintenance/init">
+    <form method="post" action="/maintenance/init" data-ajax-task>
         <input type="hidden" name="_csrf_token" value="<?= htmlspecialchars($csrfToken ?? '', ENT_QUOTES, 'UTF-8') ?>">
         <input type="hidden" name="repo_id" value="<?= htmlspecialchars($repo['id'] ?? '', ENT_QUOTES, 'UTF-8') ?>">
         <button type="submit" class="btn-primary"><?= htmlspecialchars(__('maint.init_button'), ENT_QUOTES, 'UTF-8') ?></button>
@@ -50,7 +50,7 @@
 <div class="maintenance-section">
     <h3><?= htmlspecialchars(__('maint.prune'), ENT_QUOTES, 'UTF-8') ?></h3>
     <p><?= htmlspecialchars(__('maint.prune_desc'), ENT_QUOTES, 'UTF-8') ?></p>
-    <form method="post" action="/maintenance/prune">
+    <form method="post" action="/maintenance/prune" data-ajax-task>
         <input type="hidden" name="_csrf_token" value="<?= htmlspecialchars($csrfToken ?? '', ENT_QUOTES, 'UTF-8') ?>">
         <input type="hidden" name="repo_id" value="<?= htmlspecialchars($repo['id'] ?? '', ENT_QUOTES, 'UTF-8') ?>">
         <button type="submit" class="btn-primary"><?= htmlspecialchars(__('maint.run'), ENT_QUOTES, 'UTF-8') ?></button>
@@ -60,7 +60,7 @@
 <div class="maintenance-section">
     <h3><?= htmlspecialchars(__('maint.rebuild_index'), ENT_QUOTES, 'UTF-8') ?></h3>
     <p><?= htmlspecialchars(__('maint.rebuild_desc'), ENT_QUOTES, 'UTF-8') ?></p>
-    <form method="post" action="/maintenance/rebuild-index">
+    <form method="post" action="/maintenance/rebuild-index" data-ajax-task>
         <input type="hidden" name="_csrf_token" value="<?= htmlspecialchars($csrfToken ?? '', ENT_QUOTES, 'UTF-8') ?>">
         <input type="hidden" name="repo_id" value="<?= htmlspecialchars($repo['id'] ?? '', ENT_QUOTES, 'UTF-8') ?>">
         <button type="submit" class="btn-primary"><?= htmlspecialchars(__('maint.run'), ENT_QUOTES, 'UTF-8') ?></button>
@@ -71,7 +71,7 @@
     <h3><?= htmlspecialchars(__('maint.unlock'), ENT_QUOTES, 'UTF-8') ?></h3>
     <p><?= htmlspecialchars(__('maint.unlock_desc'), ENT_QUOTES, 'UTF-8') ?></p>
     <p class="maintenance-warn"><?= htmlspecialchars(__('maint.unlock_warn'), ENT_QUOTES, 'UTF-8') ?></p>
-    <form method="post" action="/maintenance/unlock">
+    <form method="post" action="/maintenance/unlock" data-ajax-task>
         <input type="hidden" name="_csrf_token" value="<?= htmlspecialchars($csrfToken ?? '', ENT_QUOTES, 'UTF-8') ?>">
         <input type="hidden" name="repo_id" value="<?= htmlspecialchars($repo['id'] ?? '', ENT_QUOTES, 'UTF-8') ?>">
         <button type="submit" class="btn-primary"><?= htmlspecialchars(__('maint.run'), ENT_QUOTES, 'UTF-8') ?></button>
@@ -81,7 +81,7 @@
 <div class="maintenance-section">
     <h3><?= htmlspecialchars(__('maint.forget'), ENT_QUOTES, 'UTF-8') ?></h3>
     <p><?= htmlspecialchars(__('maint.forget_desc'), ENT_QUOTES, 'UTF-8') ?></p>
-    <form method="post" action="/maintenance/forget">
+    <form method="post" action="/maintenance/forget" data-ajax-task>
         <input type="hidden" name="_csrf_token" value="<?= htmlspecialchars($csrfToken ?? '', ENT_QUOTES, 'UTF-8') ?>">
         <input type="hidden" name="repo_id" value="<?= htmlspecialchars($repo['id'] ?? '', ENT_QUOTES, 'UTF-8') ?>">
         <div class="retention-fields">

@@ -9,3 +9,4 @@ phpresticadmin.theia-workspace
 /tmp/
 /data/logs/
 /data/data/repositories*.yaml
+/data/data/users.yaml

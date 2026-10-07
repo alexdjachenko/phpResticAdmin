@@ -42,4 +42,24 @@ class Request
     {
         return $_POST;
     }
+
+    public function header(string $name): ?string
+    {
+        $key = 'HTTP_' . strtoupper(str_replace('-', '_', $name));
+        $value = $_SERVER[$key] ?? null;
+        return is_string($value) ? $value : null;
+    }
+
+    /**
+     * Запрос из AJAX/JS (fetch). Используется для выбора JSON вместо редиректа.
+     */
+    public function isAjax(): bool
+    {
+        if (strtolower((string) $this->header('X-Requested-With')) === 'xmlhttprequest') {
+            return true;
+        }
+
+        $accept = (string) $this->header('Accept');
+        return str_contains($accept, 'application/json');
+    }
 }
