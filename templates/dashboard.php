@@ -31,11 +31,11 @@
                 <tr>
                     <td><?= (int) ($task['id'] ?? 0) ?></td>
                     <td><?= htmlspecialchars(__('tasks.state_' . ($task['state'] ?? 'unknown')), ENT_QUOTES, 'UTF-8') ?></td>
-                    <td><code><?= htmlspecialchars($task['label'] ?? '', ENT_QUOTES, 'UTF-8') ?></code></td>
+                    <td><?= htmlspecialchars($task['title'] ?? ($task['label'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
                     <td><?= htmlspecialchars(\App\Helpers\Format::truncate($task['command'] ?? '', 60), ENT_QUOTES, 'UTF-8') ?></td>
                     <td>
                         <?php if (!empty($task['label'])): ?>
-                            <a href="/tasks/stream?label=<?= htmlspecialchars(urlencode($task['label']), ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars(__('dash.task_open'), ENT_QUOTES, 'UTF-8') ?></a>
+                            <a href="/tasks/view?label=<?= htmlspecialchars(urlencode($task['label']), ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars(__('dash.task_open'), ENT_QUOTES, 'UTF-8') ?></a>
                         <?php endif ?>
                     </td>
                 </tr>
@@ -61,11 +61,11 @@
                 <tr>
                     <td><?= (int) ($task['id'] ?? 0) ?></td>
                     <td><?= htmlspecialchars(__('tasks.state_' . ($task['state'] ?? 'unknown')), ENT_QUOTES, 'UTF-8') ?></td>
-                    <td><code><?= htmlspecialchars($task['label'] ?? '', ENT_QUOTES, 'UTF-8') ?></code></td>
+                    <td><?= htmlspecialchars($task['title'] ?? ($task['label'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
                     <td><?= htmlspecialchars(\App\Helpers\Format::truncate($task['command'] ?? '', 60), ENT_QUOTES, 'UTF-8') ?></td>
                     <td>
                         <?php if (!empty($task['label'])): ?>
-                            <a href="/tasks/stream?label=<?= htmlspecialchars(urlencode($task['label']), ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars(__('dash.task_open'), ENT_QUOTES, 'UTF-8') ?></a>
+                            <a href="/tasks/view?label=<?= htmlspecialchars(urlencode($task['label']), ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars(__('dash.task_open'), ENT_QUOTES, 'UTF-8') ?></a>
                         <?php endif ?>
                     </td>
                 </tr>

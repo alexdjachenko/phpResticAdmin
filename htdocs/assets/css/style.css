@@ -958,3 +958,118 @@ button:hover,
 .breadcrumb a:hover {
     text-decoration: underline;
 }
+
+.task-tray {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 0 8px;
+}
+
+.task-chip {
+    border: none;
+    border-radius: 12px;
+    padding: 3px 10px;
+    font-size: 12px;
+    cursor: pointer;
+    background: #34495e;
+    color: #fff;
+    max-width: 320px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.task-chip-running { background: #2980b9; }
+.task-chip-queued { background: #7f8c8d; }
+
+.task-modal[hidden] { display: none; }
+
+.task-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.task-modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+}
+
+.task-modal-window {
+    position: relative;
+    background: #fff;
+    border-radius: 6px;
+    width: min(900px, 92vw);
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+    padding: 16px;
+    gap: 10px;
+}
+
+.task-modal-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.task-modal-head strong {
+    flex: 1;
+    font-size: 16px;
+}
+
+.task-modal-close {
+    border: none;
+    background: transparent;
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+    color: #666;
+}
+
+.task-state {
+    font-size: 12px;
+    color: #7f8c8d;
+    white-space: nowrap;
+}
+
+.task-output {
+    flex: 1;
+    min-height: 200px;
+    max-height: 55vh;
+    overflow: auto;
+    background: #1e1e1e;
+    color: #dcdcdc;
+    padding: 10px;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 12px;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.task-modal-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.task-modal-actions button {
+    padding: 6px 14px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    background: #3498db;
+    color: #fff;
+}
+
+.task-modal-actions button:disabled { opacity: 0.6; cursor: default; }
+#task-modal-cancel { background: #e74c3c; }
+.task-modal-full { margin-left: auto; color: #3498db; text-decoration: none; }
+.muted { color: #7f8c8d; }

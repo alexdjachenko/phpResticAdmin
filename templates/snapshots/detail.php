@@ -97,8 +97,14 @@ $summary = $snap['summary'] ?? [];
         .then(function(data) {
             if (data._csrf_token) btn.dataset.csrf = data._csrf_token;
 
-            if (data.ok && data.stream_url) {
-                window.location.href = data.stream_url;
+            if (data.ok && data.label) {
+                btn.textContent = <?= json_encode(__('snap.stats_load')) ?>;
+                btn.disabled = false;
+                if (window.TaskUI && window.TaskUI.open) {
+                    window.TaskUI.open(data.label, data.title || data.label);
+                } else if (data.stream_url) {
+                    window.location.href = data.stream_url;
+                }
                 return;
             }
 
@@ -168,8 +174,12 @@ $summary = $snap['summary'] ?? [];
             }
             copyConfirm.disabled = false;
 
-            if (data.ok && data.stream_url) {
-                window.location.href = data.stream_url;
+            if (data.ok && data.label) {
+                if (window.TaskUI && window.TaskUI.open) {
+                    window.TaskUI.open(data.label, data.title || data.label);
+                } else if (data.stream_url) {
+                    window.location.href = data.stream_url;
+                }
                 return;
             }
 

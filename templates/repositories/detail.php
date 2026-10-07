@@ -64,7 +64,7 @@ $locationValue = $repo[$locationField] ?? $repo['path'] ?? '';
         <?php endif ?>
 
         <?php if ($canBackup): ?>
-            <form method="post" action="/repositories/backup?repo=<?= htmlspecialchars(urlencode($repo['id'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" style="display:inline">
+            <form method="post" action="/repositories/backup?repo=<?= htmlspecialchars(urlencode($repo['id'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" style="display:inline" data-ajax-task>
                 <input type="hidden" name="_csrf_token" value="<?= htmlspecialchars($csrfToken ?? '', ENT_QUOTES, 'UTF-8') ?>">
                 <button type="submit" class="btn-backup"><?= htmlspecialchars(__('repo.backup'), ENT_QUOTES, 'UTF-8') ?></button>
             </form>

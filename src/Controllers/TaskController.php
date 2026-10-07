@@ -239,10 +239,10 @@ class TaskController
      * Обогащает задачи человеческим заголовком, владельцем и именем репозитория.
      *
      * @param array<int, array<string, mixed>> $jobs
-     * @return array<int, array{id: int, state: string, label: string, valid: bool, title: string, owner: ?string, op: ?string, repoId: ?string, repoName: ?string, command: string}>
+     * @return array<int, array{id: int, state: string, position: ?int, label: string, valid: bool, title: string, owner: ?string, op: ?string, repoId: ?string, repoName: ?string, command: string}>
      */
-    private function annotate(array $jobs, string $user): array
-    {
+     private function annotate(array $jobs, string $user): array
+     {
         $repoNames = [];
         foreach (App::repoStorage()->loadAll($user) as $r) {
             $repoNames[$r['id'] ?? ''] = $r['name'] ?? '';
@@ -257,10 +257,12 @@ class TaskController
             $described = $label !== '' ? $tasks->describe($label) : null;
 
             $repoId = $described['repoId'] ?? null;
+            $state = (string) ($job['state'] ?? 'unknown');
 
             $rows[] = [
                 'id' => (int) $job['id'],
-                'state' => (string) ($job['state'] ?? 'unknown'),
+                'state' => $state,
+                'position' => $state === 'queued' && $label !== '' ? $tasks->queuePosition($label) : null,
                 'label' => $label,
                 'valid' => $described !== null,
                 'title' => $described['title'] ?? ($label !== '' ? $label : '—'),
@@ -273,5 +275,5 @@ class TaskController
         }
 
         return $rows;
-    }
+     }
 }

@@ -462,7 +462,19 @@ class RepositoryController
 
         $started = App::resticTasks()->startBackup($repo, $backupPaths);
 
-        App::response()->redirect('/tasks/stream?label=' . urlencode($started['label']));
+        if ($request->isAjax()) {
+            App::response()->json([
+                'ok' => true,
+                'label' => $started['label'],
+                'title' => __('tasks.op_backup'),
+                'stream_url' => '/tasks/stream?label=' . urlencode($started['label']),
+                '_csrf_token' => App::security()->csrfToken(),
+            ]);
+            return;
+        }
+
+        App::session()->flash('success', __('flash.task_started', ['{title}' => __('tasks.op_backup')]));
+        App::response()->redirect('/repositories/detail?repo=' . urlencode($repoId), 303);
         }
 
     /**

@@ -62,6 +62,12 @@ class DashboardController
         }
 
         $tasks = App::tasks()->listForUser($user, $auth->canManageProcesses());
+        foreach ($tasks as &$task) {
+            $label = (string) ($task['label'] ?? '');
+            $described = $label !== '' ? App::tasks()->describe($label) : null;
+            $task['title'] = $described['title'] ?? ($label !== '' ? $label : '—');
+        }
+        unset($task);
 
         $activeTasks = [];
         $recentTasks = [];

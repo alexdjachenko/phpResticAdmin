@@ -300,6 +300,7 @@ class SnapshotController
         App::response()->json([
             'ok' => true,
             'label' => $started['label'],
+            'title' => __('tasks.op_snapstats'),
             'stream_url' => '/tasks/stream?label=' . urlencode($started['label']),
             '_csrf_token' => App::security()->csrfToken(),
         ]);
@@ -432,6 +433,7 @@ class SnapshotController
         App::response()->json([
             'ok' => true,
             'label' => $started['label'],
+            'title' => __('tasks.op_copysnap'),
             'stream_url' => '/tasks/stream?label=' . urlencode($started['label']),
             '_csrf_token' => App::security()->csrfToken(),
         ]);

@@ -10,6 +10,7 @@ namespace App\Controllers;
 
 use App\Core\App;
 use App\Core\Request;
+use App\Process\TaskLabel;
 
 class MaintenanceController
 {
@@ -175,7 +176,7 @@ class MaintenanceController
 
         $started = App::resticTasks()->startMaintenance('stats', $repo);
 
-        App::response()->redirect('/tasks/stream?label=' . urlencode($started['label']));
+        $this->respondTaskStarted($started['label'], $this->operationTitle('stats'), false);
         }
 
     /**
@@ -265,7 +266,7 @@ class MaintenanceController
 
         $started = App::resticTasks()->startInit($repo);
 
-        App::response()->redirect('/tasks/stream?label=' . urlencode($started['label']));
+        $this->respondTaskStarted($started['label'], __('tasks.op_init'), false);
         }
 
     /**
@@ -328,12 +329,7 @@ class MaintenanceController
 
         $started = App::resticTasks()->startMaintenance('forget', $repo, $policy);
 
-        $url = '/tasks/stream?label=' . urlencode($started['label']);
-        if ($policy['dry_run']) {
-            $url .= '&dry_run=1';
-        }
-
-        App::response()->redirect($url);
+        $this->respondTaskStarted($started['label'], $this->operationTitle('forget'), (bool) $policy['dry_run']);
         }
 
     private function runMaintenance(string $operation): void
@@ -383,8 +379,45 @@ class MaintenanceController
 
         $started = App::resticTasks()->startMaintenance($operation, $repo);
 
-        App::response()->redirect('/tasks/stream?label=' . urlencode($started['label']));
-    }
+        $this->respondTaskStarted($started['label'], $this->operationTitle($operation), false);
+        }
+
+        /**
+        * Единый ответ после старта фоновой задачи.
+        *
+        * AJAX (fetch) — JSON с меткой/заголовком; обычная отправка формы —
+        * редирект на исходную страницу с flash (без текстового терминала).
+        */
+        private function respondTaskStarted(string $label, string $title, bool $dryRun, string $fallback = '/maintenance'): void
+        {
+        $request = new Request();
+
+        if ($request->isAjax()) {
+            $url = '/tasks/stream?label=' . urlencode($label);
+            if ($dryRun) {
+                $url .= '&dry_run=1';
+            }
+
+            App::response()->json([
+                'ok' => true,
+                'label' => $label,
+                'title' => $title,
+                'dry_run' => $dryRun,
+                'stream_url' => $url,
+                '_csrf_token' => App::security()->csrfToken(),
+            ]);
+            return;
+        }
+
+        App::session()->flash('success', __('flash.task_started', ['{title}' => $title]));
+        $referer = $_SERVER['HTTP_REFERER'] ?? $fallback;
+        App::response()->redirect($referer, 303);
+        }
+
+        private function operationTitle(string $operation): string
+        {
+        return __('tasks.op_' . TaskLabel::opForOperation($operation));
+        }
 
     private function resolveRepoId(Request $request): ?string
     {
