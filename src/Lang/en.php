@@ -81,7 +81,7 @@ return [
     'repo.detail_back'   => 'Back to list',
     'repo.password_placeholder' => 'Leave empty to keep current password',
     'repo.path_outside_roots' => 'Repository path must be inside: {roots}',
-    'repo.backup_path_outside_roots' => 'Backup path must be inside: {roots}',
+    'repo.backup_path_outside_roots' => 'Backup path must be inside the allowed roots and must not overlap the application data: {roots}',
     'repo.invalid_backup_path' => 'Invalid backup path.',
     'repo.invalid_remote_path' => 'Invalid path for {type}: expected {scheme}...',
     'repo.name_path_required' => 'Name and path are required.',

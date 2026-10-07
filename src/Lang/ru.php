@@ -81,7 +81,7 @@ return [
     'repo.detail_back'   => 'Назад к списку',
     'repo.password_placeholder' => 'Оставьте пустым, чтобы сохранить текущий пароль',
     'repo.path_outside_roots' => 'Путь репозитория должен находиться внутри: {roots}',
-    'repo.backup_path_outside_roots' => 'Путь для резервного копирования должен находиться внутри: {roots}',
+    'repo.backup_path_outside_roots' => 'Путь для резервного копирования должен находиться внутри разрешённых корней и не пересекаться с данными приложения: {roots}',
     'repo.invalid_backup_path' => 'Некорректный путь для резервного копирования.',
     'repo.invalid_remote_path' => 'Некорректный путь для {type}: ожидается {scheme}…',
     'repo.name_path_required' => 'Имя и путь обязательны.',

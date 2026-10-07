@@ -165,7 +165,46 @@ class RepositoryPathTest extends TestCase
         $this->assertTrue(RepositoryPath::isWithinRoots('/anything', []));
     }
 
+    /** Обход корня через `..` отвергается (иначе путь уезжает наружу). */
+    public function testIsWithinRootsRejectsDotDotTraversal(): void
+    {
+        $this->assertFalse(RepositoryPath::isWithinRoots('/sources/../../etc', ['/sources']));
+        $this->assertTrue(RepositoryPath::isWithinRoots('/sources/../sources/x', ['/sources']));
+    }
+
+    // === canonicalize() ===
+
+    /** Сворачивает `.` и `..`, сохраняя абсолютность. */
+    public function testCanonicalize(): void
+    {
+        $this->assertSame('/var', RepositoryPath::canonicalize('/sources/../../var'));
+        $this->assertSame('/sources/x', RepositoryPath::canonicalize('/sources/./x'));
+        $this->assertSame('/sources', RepositoryPath::canonicalize('/sources/..'));
+        $this->assertSame('', RepositoryPath::canonicalize(''));
+    }
+
     // === firstDisallowedBackupPath() / localRepoAllowed() ===
+
+    /** Путь с обходом `..` отвергается как выходящий за корень. */
+    public function testFirstDisallowedBackupPathRejectsTraversal(): void
+    {
+        $this->assertSame('/sources/../etc', RepositoryPath::firstDisallowedBackupPath(['/sources/../etc'], ['/sources']));
+    }
+
+    /** Путь, содержащий каталог данных приложения, отвергается. */
+    public function testFirstApplicationDataConflict(): void
+    {
+        $dataRoot = RepositoryPath::applicationDataRoot();
+        $appRoot = dirname($dataRoot);
+
+        // Внутри data и сам каталог data.
+        $this->assertSame($dataRoot . '/cfg', RepositoryPath::firstApplicationDataConflict([$dataRoot . '/cfg']));
+        $this->assertSame($dataRoot, RepositoryPath::firstApplicationDataConflict([$dataRoot]));
+        // Содержит data (например /var/www, включая сам /var/www/data).
+        $this->assertSame($appRoot, RepositoryPath::firstApplicationDataConflict([$appRoot]));
+        // Посторонний путь — конфликта нет.
+        $this->assertNull(RepositoryPath::firstApplicationDataConflict(['/sources/x']));
+    }
 
     /** Все пути внутри корней → null. */
     public function testFirstDisallowedBackupPathReturnsNullWhenAllAllowed(): void

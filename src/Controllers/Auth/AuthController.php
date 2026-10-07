@@ -6,12 +6,14 @@
  * Licensed under the Apache License, Version 2.0.
  */
 
-namespace App\Controllers;
+declare(strict_types=1);
 
+namespace App\Controllers\Auth;
+
+use App\Controllers\BaseController;
 use App\Core\App;
-use App\Core\Request;
 
-class AuthController
+class AuthController extends BaseController
 {
     public function loginForm(): void
     {
@@ -25,7 +27,7 @@ class AuthController
         $flash = App::session()->flash('error');
         $csrfToken = App::security()->csrfToken();
 
-        echo App::response()->render('login.php', [
+        $this->render('login.php', [
             'error' => $flash,
             'csrfToken' => $csrfToken,
         ]);
@@ -35,25 +37,22 @@ class AuthController
     {
         App::log('POST /login — START', 1);
 
-        $request = new Request();
+        $request = $this->request();
         $auth = App::auth();
-        $security = App::security();
 
         App::log('POST data: ' . json_encode($request->allPost()), 1);
 
-        $token = $request->post('_csrf_token', '');
+        $token = (string) $request->post('_csrf_token', '');
         App::log('CSRF token from form: ' . ($token !== '' ? 'present' : 'EMPTY'), 1);
 
-        if (!$security->validateCsrf($token)) {
+        if (!$this->requireCsrf(false, '/login')) {
             App::log('CSRF validation FAILED', 1);
-            App::session()->flash('error', __('flash.csrf_error'));
-            App::response()->redirect('/login');
             return;
         }
         App::log('CSRF OK', 1);
 
-        $username = $request->post('username', '');
-        $password = $request->post('password', '');
+        $username = (string) $request->post('username', '');
+        $password = (string) $request->post('password', '');
 
         App::log('username=' . ($username !== '' ? $username : 'EMPTY') . ' password=' . ($password !== '' ? '***' : 'EMPTY'), 1);
 
