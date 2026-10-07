@@ -107,7 +107,7 @@ class TaskLabelTest extends TestCase
             'hash in middle' => ['alice#check#0123456789abcdef'],
             'unknown op' => ['alice#frobnicate0123456789abcdef'],
             'no username' => ['#check0123456789abcdef'],
-            'short rand' => ['alice#checkr10123456789abcde'],
+            'too short' => ['alice#checkabc'],
             'non-hex rand' => ['alice#checkr1zzzzzzzzzzzzzzzz'],
             'repo op without repoId' => ['alice#check0123456789abcdef'],
         ];

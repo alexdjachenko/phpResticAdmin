@@ -2,63 +2,74 @@ name: Debug / Experiment
 
 on:
   push:
-    branches: [ main, '*' ]   # на push в любую ветку (можно уточнить)
+    branches: [ main, '*' ]
   pull_request:
-    branches: [ main ]        # на PR в main
-  release:
-    types: [ published ]      # на публикацию релиза
-  workflow_dispatch:          # ручной запуск
-    inputs:
-      custom_message:
-        description: 'Дополнительное сообщение'
-        required: false
-        default: 'Hello from manual run'
+    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   debug:
     runs-on: ubuntu-latest
     steps:
-      - name: Вывод информации о событии
+      - name: Контекст события
         run: |
-          echo "========================================"
-          echo "🔹 Имя события: ${{ github.event_name }}"
-          echo "🔹 Ветка/реф: ${{ github.ref }}"
-          echo "🔹 SHA: ${{ github.sha }}"
-          echo "🔹 Актор: ${{ github.actor }}"
-          echo "🔹 Репозиторий: ${{ github.repository }}"
-          echo "========================================"
+          echo "event=${{ github.event_name }} ref=${{ github.ref }} sha=${{ github.sha }}"
 
-      - name: Контекст github
+      - name: Установка restic и task-spooler
         run: |
-          echo "📦 Контекст github:"
-          echo '${{ toJson(github) }}'
+          sudo apt-get update
+          sudo apt-get install -y task-spooler
+          RESTIC_VERSION=0.19.1
+          curl -L https://github.com/restic/restic/releases/download/v${RESTIC_VERSION}/restic_${RESTIC_VERSION}_linux_amd64.bz2 \
+            | bzip2 -d > /usr/local/bin/restic
+          chmod +x /usr/local/bin/restic
+          restic version
+          tsp -V || true
 
-      - name: Вывод переменных окружения (env)
+      # Проверки из Step 0.6: key passwd/ID, поле current, tsp -u, формат tsp -l
+      - name: Restic — key passwd / key list current
         run: |
-          echo "🌍 Переменные окружения:"
-          env
+          set -x
+          export RESTIC_PASSWORD='primary-secret'
+          export HOME=/tmp
+          rm -rf /tmp/repo && restic init --repo /tmp/repo
 
-      - name: Вывод информации о релизе (если событие release)
-        if: github.event_name == 'release'
+          echo "=== key add (новый пароль extra-secret) ==="
+          printf 'extra-secret\nextra-secret\n' | restic --repo /tmp/repo key add || true
+
+          echo "=== key list --json (с паролем primary) ==="
+          restic --repo /tmp/repo key list --json || true
+
+          echo "=== key list --json (с паролем extra) — проверяем поле current ==="
+          RESTIC_PASSWORD='extra-secret' restic --repo /tmp/repo key list --json || true
+
+          echo "=== key passwd <ID> — принимает ли ID ==="
+          KEY_ID=$(RESTIC_PASSWORD='extra-secret' restic --repo /tmp/repo key list --json | tr ',' '\n' | grep -m1 '"id"' | cut -d'"' -f4)
+          echo "extra key id=[$KEY_ID]"
+          printf 'extra2\nextra2\n' | restic --repo /tmp/repo key passwd "$KEY_ID" || true
+
+      - name: tsp — форматы и доставка окружения в очередь
         run: |
-          echo "🏷️ Тег релиза: ${{ github.event.release.tag_name }}"
-          echo "📌 Пре-релиз: ${{ github.event.release.prerelease }}"
-          echo "📄 Название релиза: ${{ github.event.release.name }}"
+          set -x
+          export TMPDIR=/tmp/tspexp
+          mkdir -p "$TMPDIR"
+          export TS_SOCKET=/tmp/tspexp/socket
+          export TS_SLOTS=1
 
-      - name: Вывод информации о PR (если событие pull_request)
-        if: github.event_name == 'pull_request'
-        run: |
-          echo "🔢 Номер PR: ${{ github.event.pull_request.number }}"
-          echo "📌 Заголовок: ${{ github.event.pull_request.title }}"
-          echo "🌿 Ветка источника: ${{ github.event.pull_request.head.ref }}"
-          echo "🎯 Ветка назначения: ${{ github.event.pull_request.base.ref }}"
+          echo "=== tsp -u (promote) существует? ==="
+          tsp -h 2>&1 | grep -i -- '-u' || true
 
-      - name: Вывод сообщения для ручного запуска
-        if: github.event_name == 'workflow_dispatch'
-        run: |
-          echo "✋ Ручной запуск!"
-          echo "Сообщение: ${{ inputs.custom_message }}"
+          echo "=== tsp -l: формат строки с меткой ==="
+          tsp -L 'alice#checkrepo1abcdef0123456789ab' sh -c 'echo FIRST'
+          tsp -l || true
 
+          echo "=== доставка env в задачу, стоящую в очереди (slots=1) ==="
+          tsp -L 'alice#runaaaaaaaaaaaaaaaaaaaaaaaaaaaa' sh -c 'sleep 3'
+          tsp -L 'alice#runbbbbbbbbbbbbbbbbbbbbbbbbbbb' sh -c 'echo "PWD=[${RESTIC_PASSWORD:+SET}] CACHE=[$RESTIC_CACHE_DIR] HOME=[$HOME]"'
+          sleep 5
+          echo "--- output второй задачи ---"
+          tsp -c 2 || true
+          tsp -l || true
 
-
-
+      - name: Вывод окружения
+        run: env
