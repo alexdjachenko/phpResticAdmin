@@ -9,6 +9,7 @@
 namespace App\Core;
 
 use App\Auth\Authenticator;
+use App\Cache\CacheManager;
 use App\Process\TspClient;
 use App\Process\TspCommandRunner;
 use App\Process\TspTaskManager;
@@ -39,6 +40,7 @@ class App
     private static ?ResticTaskService $resticTasks = null;
     private static ?Security $security = null;
     private static ?Response $response = null;
+    private static ?CacheManager $cache = null;
 
     private static int $debugLevel = 0;
     private static ?string $resticVersion = null;
@@ -261,7 +263,7 @@ class App
     public static function tspRunner(): TspCommandRunner
     {
         if (self::$tspRunner === null) {
-            self::$tspRunner = new TspCommandRunner(self::tsp(), self::runner());
+            self::$tspRunner = new TspCommandRunner(self::tasks(), self::tsp(), self::runner());
         }
         return self::$tspRunner;
     }
@@ -288,6 +290,28 @@ class App
             self::$response = new Response();
         }
         return self::$response;
+    }
+
+    public static function cache(): CacheManager
+    {
+        if (self::$cache === null) {
+            self::$cache = new CacheManager();
+        }
+        return self::$cache;
+    }
+
+    /**
+     * Сбрасывает область текущего запроса.
+     *
+     * Используется тестами вместо ручного обнуления статики отдельных классов.
+     * Системную область не трогает: иначе кнопка «инвалидация кеша» вызывала бы
+     * лавину обращений к restic.
+     */
+    public static function resetCaches(): void
+    {
+        if (self::$cache !== null) {
+            self::$cache->request()->clear();
+        }
     }
 
     private static function registerRoutes(): void

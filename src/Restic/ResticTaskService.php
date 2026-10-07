@@ -8,6 +8,7 @@
 
 namespace App\Restic;
 
+use App\Process\TaskLabel;
 use App\Process\TspTaskManager;
 
 /**
@@ -35,7 +36,7 @@ class ResticTaskService
     {
         $command = ResticCommandBuilder::buildCommand(['backup', ...$backupPaths], $repo);
         $env = ResticCommandBuilder::buildEnv($repo);
-        return $this->tasks->start($this->username(), $command, $env);
+        return $this->tasks->start($this->username(), 'backup', (string) ($repo['id'] ?? ''), $command, $env);
     }
 
     /**
@@ -48,7 +49,8 @@ class ResticTaskService
         $args = $this->maintenanceArgs($operation, $policy);
         $command = ResticCommandBuilder::buildCommand($args, $repo);
         $env = ResticCommandBuilder::buildEnv($repo);
-        return $this->tasks->start($this->username(), $command, $env);
+        $op = TaskLabel::opForOperation($operation);
+        return $this->tasks->start($this->username(), $op, (string) ($repo['id'] ?? ''), $command, $env);
     }
 
     /**
@@ -59,7 +61,7 @@ class ResticTaskService
     {
         $command = ResticCommandBuilder::buildCommand(['init'], $repo);
         $env = ResticCommandBuilder::buildEnv($repo);
-        return $this->tasks->start($this->username(), $command, $env);
+        return $this->tasks->start($this->username(), 'init', (string) ($repo['id'] ?? ''), $command, $env);
     }
 
     /**
@@ -71,7 +73,7 @@ class ResticTaskService
     {
         $command = $this->buildCopyCommand($source, $dest, $snapId);
         $env = $this->buildCopyEnv($source, $dest);
-        return $this->tasks->start($this->username(), $command, $env);
+        return $this->tasks->start($this->username(), 'copysnap', (string) ($source['id'] ?? ''), $command, $env);
     }
 
     /**
@@ -84,7 +86,7 @@ class ResticTaskService
         $command[] = $snapId;
         $env = ResticCommandBuilder::buildEnv($repo);
         // --json: отдельный stderr, чтобы предупреждения restic не ломали JSON
-        return $this->tasks->start($this->username(), $command, $env, true);
+        return $this->tasks->start($this->username(), 'snapstats', (string) ($repo['id'] ?? ''), $command, $env, true);
     }
 
     /**
@@ -96,7 +98,7 @@ class ResticTaskService
         $command = ResticCommandBuilder::buildCommand(['snapshots', '--json'], $repo);
         $env = ResticCommandBuilder::buildEnv($repo);
         // --json: отдельный stderr, чтобы предупреждения restic не ломали JSON
-        return $this->tasks->start($this->username(), $command, $env, true);
+        return $this->tasks->start($this->username(), 'snapshots', (string) ($repo['id'] ?? ''), $command, $env, true);
     }
 
     /**

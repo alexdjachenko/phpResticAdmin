@@ -8,15 +8,17 @@
 
 namespace App\Process;
 
+use App\Core\App;
+
 /**
  * Менеджер фоновых задач поверх TspClient.
  *
- * Метка задачи = `<username>#<hex>` (например, `alice#3f2a9c1b`). Метка
- * используется как идентификатор без отдельной БД. Символ `#` в логинах
- * запрещён, чтобы префикс `<username>#` однозначно отделял владельца.
+ * Метка задачи строится и разбирается через TaskLabel (единственный источник
+ * правды о схеме). Менеджер не хранит состояние задач: tsp — единственный
+ * источник правды, а из метки извлекаются операция, репозиторий и владелец.
  *
- * Обычный пользователь видит только свои задачи (label начинается с
- * `<его_username>#`); пользователь с `can_manage_processes` видит все.
+ * Обычный пользователь видит только свои задачи; пользователь с
+ * `can_manage_processes` видит все.
  */
 class TspTaskManager
 {
@@ -30,16 +32,24 @@ class TspTaskManager
     /**
      * Ставит команду в очередь от имени пользователя.
      *
-     * $separateStderr = true включает `tsp -E`: stdout и stderr задачи пишутся
-     * в разные файлы. Нужно для JSON-задач, чтобы вывод stderr не ломал JSON.
+     * Метка строится через TaskLabel::build(): `<username>#<op><repoId><rand16>`.
+     *
+     * `$separateStderr = true` включает `tsp -E`: stdout и stderr задачи пишутся
+     * в разные файлы (нужно для JSON-задач).
      *
      * @param array<int, string> $command
      * @param array<string, string> $env
      * @return array{label: string, id: int}
      */
-    public function start(string $username, array $command, array $env = [], bool $separateStderr = false): array
-    {
-        $label = $username . '#' . bin2hex(random_bytes(8));
+    public function start(
+        string $username,
+        string $op,
+        ?string $repoId,
+        array $command,
+        array $env = [],
+        bool $separateStderr = false
+    ): array {
+        $label = TaskLabel::build($username, $op, $repoId);
         return $this->tsp->enqueue($label, $command, $env, $separateStderr);
     }
 
@@ -50,7 +60,7 @@ class TspTaskManager
      */
     public function listForUser(string $username, bool $privileged): array
     {
-        $jobs = $this->tsp->list();
+        $jobs = $this->all();
 
         if ($privileged) {
             return $jobs;
@@ -63,11 +73,92 @@ class TspTaskManager
     }
 
     /**
+     * Активные задачи по операции и репозиторию, по всем пользователям.
+     *
+     * Лок restic глобальный, поэтому чужая задача по тому же репозиторию
+     * блокирует нашу независимо от авторства — прятать её нельзя. Возвращаются
+     * задачи (любого пользователя) с совпадающими op и repoId.
+     *
+     * @return array<int, array{id: int, state: string, label: string, username: string, op: string, repoId: ?string}>
+     */
+    public function listActiveFor(string $op, ?string $repoId): array
+    {
+        $result = [];
+        $repoId = $repoId !== '' ? $repoId : null;
+
+        foreach ($this->all() as $job) {
+            $label = $job['label'] ?? '';
+            $parsed = $label !== '' ? TaskLabel::parse($label) : null;
+            if ($parsed === null || $parsed['op'] !== $op) {
+                continue;
+            }
+            if (($parsed['repoId'] ?? null) !== $repoId) {
+                continue;
+            }
+
+            $result[] = [
+                'id' => $job['id'],
+                'state' => $job['state'],
+                'label' => $label,
+                'username' => $parsed['username'],
+                'op' => $parsed['op'],
+                'repoId' => $parsed['repoId'],
+            ];
+        }
+
+        return $result;
+    }
+
+    /**
+     * Человеческое описание задачи по метке.
+     *
+     * @return array{title: string, op: string, repoId: ?string}|null
+     */
+    public function describe(string $label): ?array
+    {
+        $parsed = TaskLabel::parse($label);
+        if ($parsed === null) {
+            return null;
+        }
+
+        return [
+            'title' => __('tasks.op_' . $parsed['op']),
+            'op' => $parsed['op'],
+            'repoId' => $parsed['repoId'],
+        ];
+    }
+
+    /**
+     * Позиция задачи в очереди.
+     *
+     * N = число задач, стоящих в очереди перед ней (1 = следующая на запуск).
+     * null — если задача не найдена в очереди.
+     */
+    public function queuePosition(string $label): ?int
+    {
+        $position = 0;
+
+        foreach ($this->all() as $job) {
+            $jobLabel = $job['label'] ?? '';
+
+            if ($jobLabel === $label) {
+                return $position + 1;
+            }
+
+            if (($job['state'] ?? '') === 'queued') {
+                $position++;
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * @return array{id: int, state: string, command: string, label: ?string, output: ?string, errorlevel: ?int}|null
      */
     public function findByLabel(string $label): ?array
     {
-        foreach ($this->tsp->list() as $job) {
+        foreach ($this->all() as $job) {
             if (($job['label'] ?? '') === $label) {
                 return $job;
             }
@@ -76,9 +167,9 @@ class TspTaskManager
     }
 
     /**
-     * Статус задачи: state, exitCode (если известен) и хвост вывода.
+     * Статус задачи: state, exitCode (если известен), позиция и хвост вывода.
      *
-     * @return array{label: string, id: int, state: string, exitCode: ?int, output: string}|null
+     * @return array{label: string, id: int, state: string, exitCode: ?int, position: ?int, output: string}|null
      */
     public function status(string $username, string $label, bool $privileged): ?array
     {
@@ -104,6 +195,7 @@ class TspTaskManager
             'id' => $id,
             'state' => $state,
             'exitCode' => $exitCode,
+            'position' => $state === 'queued' ? $this->queuePosition($label) : null,
             'output' => $this->readTail($id),
         ];
     }
@@ -159,11 +251,48 @@ class TspTaskManager
     }
 
     /**
+     * Отменяет задачу (tsp -k).
+     */
+    public function cancel(string $username, string $label, bool $privileged): bool
+    {
+        if (!$this->assertAccess($username, $label, $privileged)) {
+            return false;
+        }
+
+        $job = $this->findByLabel($label);
+        if ($job === null) {
+            return false;
+        }
+
+        $this->tsp->kill($job['id']);
+        return true;
+    }
+
+    /**
+     * Поднимает задачу в начало очереди (tsp -u).
+     */
+    public function promote(string $username, string $label, bool $privileged): bool
+    {
+        if (!$this->assertAccess($username, $label, $privileged)) {
+            return false;
+        }
+
+        $job = $this->findByLabel($label);
+        if ($job === null) {
+            return false;
+        }
+
+        $this->tsp->promote($job['id']);
+        return true;
+    }
+
+    /**
      * Проверка доступа: своя задача — всегда; чужая — только привилегированный.
      */
     public function assertAccess(string $username, string $label, bool $privileged): bool
     {
-        if (!$this->isValidLabel($label)) {
+        $parsed = TaskLabel::parse($label);
+        if ($parsed === null) {
             return false;
         }
 
@@ -171,7 +300,7 @@ class TspTaskManager
             return true;
         }
 
-        return str_starts_with($label, $username . '#');
+        return $parsed['username'] === $username;
     }
 
     /**
@@ -241,11 +370,34 @@ class TspTaskManager
     }
 
     /**
-     * Валидация формата метки: `^[^#]+#[0-9a-f]+$`.
+     * Валидация формата метки (делегирует в TaskLabel).
      */
     public function isValidLabel(string $label): bool
     {
-        return preg_match('/^[^#]+#[0-9a-f]+$/', $label) === 1;
+        return TaskLabel::isValid($label);
+    }
+
+    /**
+     * Разбор метки (делегирует в TaskLabel).
+     *
+     * @return array{username: string, op: string, repoId: ?string, rand: string}|null
+     */
+    public function parseLabel(string $label): ?array
+    {
+        return TaskLabel::parse($label);
+    }
+
+    /**
+     * Список задач очереди с мемоизацией на текущий запрос.
+     *
+     * Проблема: `tsp -l` вызывался до трёх раз за рендер (findByLabel + isFinished
+     * + catResult). Список кешируется в области текущего запроса.
+     *
+     * @return array<int, array{id: int, state: string, command: string, label: ?string, output: ?string, errorlevel: ?int}>
+     */
+    private function all(): array
+    {
+        return App::cache()->request()->remember('tsp.list', null, fn () => $this->tsp->list());
     }
 
     /**

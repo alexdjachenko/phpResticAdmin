@@ -21,6 +21,7 @@ use PHPUnit\Framework\TestCase;
  * Сценарий:
  *   - Каждый тест использует уникальный TS_SOCKET (изолированная очередь).
  *   - Задачи-моки: /bin/echo, /bin/sleep, /bin/true, /bin/false, /bin/sh -c.
+ *   - Метки — нового формата (user#op[repoId]rand16), чтобы проверять извлечение.
  *
  * Критерий успеха: все assert проходят.
  *
@@ -28,6 +29,10 @@ use PHPUnit\Framework\TestCase;
  */
 class TspClientTest extends TestCase
 {
+    private const LABEL_CHECK = 'alice#checkr10123456789abcdef';
+    private const LABEL_SNAPSHOTS = 'bob#snapshotsr20123456789abcdef';
+    private const LABEL_COPYSNAP = 'carol#copysnapr30123456789abcdef';
+
     /** @var string */
     private string $baseDir;
     /** @var TspClient */
@@ -59,22 +64,20 @@ class TspClientTest extends TestCase
     /** enqueue возвращает числовой id и переданный label. */
     public function testEnqueueReturnsIdAndLabel(): void
     {
-        $result = $this->tsp->enqueue('alice#abc123', ['/bin/echo', 'hello']);
+        $result = $this->tsp->enqueue(self::LABEL_CHECK, ['/bin/echo', 'hello']);
 
         $this->assertGreaterThanOrEqual(0, $result['id'], 'enqueue must return a numeric job id');
-        $this->assertSame('alice#abc123', $result['label']);
+        $this->assertSame(self::LABEL_CHECK, $result['label']);
     }
 
     /** list() содержит только что поставленную задачу с её label. */
     public function testListContainsEnqueuedJob(): void
     {
-        $result = $this->tsp->enqueue('alice#3f2a9c1b', ['/bin/echo', 'hello']);
+        $result = $this->tsp->enqueue(self::LABEL_CHECK, ['/bin/echo', 'hello']);
         $this->tsp->wait($result['id']);
 
-        $jobs = $this->tsp->list();
-
         $found = null;
-        foreach ($jobs as $job) {
+        foreach ($this->tsp->list() as $job) {
             if ($job['id'] === $result['id']) {
                 $found = $job;
                 break;
@@ -82,13 +85,36 @@ class TspClientTest extends TestCase
         }
 
         $this->assertNotNull($found, 'enqueued job should appear in list()');
-        $this->assertSame('alice#3f2a9c1b', $found['label']);
+        $this->assertSame(self::LABEL_CHECK, $found['label']);
+    }
+
+    /**
+     * Метки с op на hex-букву (check, copysnap) и с префиксом (snapshots) не
+     * «обрезаются» при извлечении из `tsp -l`.
+     */
+    public function testLabelsAreNotTruncated(): void
+    {
+        foreach ([self::LABEL_CHECK, self::LABEL_SNAPSHOTS, self::LABEL_COPYSNAP] as $label) {
+            $result = $this->tsp->enqueue($label, ['/bin/echo', 'x']);
+            $this->tsp->wait($result['id']);
+        }
+
+        $labels = [];
+        foreach ($this->tsp->list() as $job) {
+            if ($job['label'] !== null) {
+                $labels[] = $job['label'];
+            }
+        }
+
+        $this->assertContains(self::LABEL_CHECK, $labels);
+        $this->assertContains(self::LABEL_SNAPSHOTS, $labels);
+        $this->assertContains(self::LABEL_COPYSNAP, $labels);
     }
 
     /** cat возвращает stdout задачи. */
     public function testCatReturnsOutput(): void
     {
-        $result = $this->tsp->enqueue('alice#cat1', ['/bin/echo', 'hello-from-tsp']);
+        $result = $this->tsp->enqueue(self::LABEL_CHECK, ['/bin/echo', 'hello-from-tsp']);
         $this->tsp->wait($result['id']);
 
         $this->assertStringContainsString('hello-from-tsp', $this->tsp->cat($result['id']));
@@ -97,7 +123,7 @@ class TspClientTest extends TestCase
     /** cat после завершения задачи читает полный вывод (без гонки). */
     public function testCatDelayedReadAfterCompletion(): void
     {
-        $result = $this->tsp->enqueue('alice#cat2', ['/bin/echo', 'delayed-output']);
+        $result = $this->tsp->enqueue(self::LABEL_CHECK, ['/bin/echo', 'delayed-output']);
         $this->tsp->wait($result['id']);
 
         $output = $this->tsp->cat($result['id']);
@@ -107,7 +133,7 @@ class TspClientTest extends TestCase
     /** outputFile возвращает существующий файл после завершения задачи. */
     public function testOutputFileExists(): void
     {
-        $result = $this->tsp->enqueue('alice#of1', ['/bin/echo', 'x']);
+        $result = $this->tsp->enqueue(self::LABEL_CHECK, ['/bin/echo', 'x']);
         $this->tsp->wait($result['id']);
 
         $file = $this->tsp->outputFile($result['id']);
@@ -118,8 +144,8 @@ class TspClientTest extends TestCase
     /** wait возвращает код возврата задачи (0 для true, 1 для false). */
     public function testWaitReturnsExitCode(): void
     {
-        $ok = $this->tsp->enqueue('alice#w1', ['/bin/true']);
-        $fail = $this->tsp->enqueue('alice#w2', ['/bin/false']);
+        $ok = $this->tsp->enqueue(self::LABEL_CHECK, ['/bin/true']);
+        $fail = $this->tsp->enqueue(self::LABEL_SNAPSHOTS, ['/bin/false']);
 
         $this->assertSame(0, $this->tsp->wait($ok['id']));
         $this->assertNotSame(0, $this->tsp->wait($fail['id']));
@@ -128,7 +154,7 @@ class TspClientTest extends TestCase
     /** state меняется с queued/running на finished. */
     public function testStateChangesFromRunningToFinished(): void
     {
-        $result = $this->tsp->enqueue('alice#st1', ['/bin/sleep', '1']);
+        $result = $this->tsp->enqueue(self::LABEL_CHECK, ['/bin/sleep', '1']);
 
         $initial = $this->tsp->state($result['id']);
         $this->assertContains($initial, ['queued', 'running'], 'initial state must be queued or running');
@@ -140,23 +166,20 @@ class TspClientTest extends TestCase
     /** info содержит label задачи. */
     public function testLabelAppearsInInfo(): void
     {
-        $result = $this->tsp->enqueue('alice#3f2a9c1b', ['/bin/echo', 'x']);
+        $result = $this->tsp->enqueue(self::LABEL_SNAPSHOTS, ['/bin/echo', 'x']);
         $this->tsp->wait($result['id']);
 
         $info = $this->tsp->info($result['id']);
-        $this->assertSame('alice#3f2a9c1b', $info['label']);
+        $this->assertSame(self::LABEL_SNAPSHOTS, $info['label']);
     }
 
     /**
      * Переменная окружения видна внутри одиночной фоновой задачи.
-     *
-     * Важно: очередь создаётся заново для этого теста (уникальный TS_SOCKET),
-     * поэтому tsp-сервер стартует с окружением вызова enqueue.
      */
     public function testEnvIsPassedToJob(): void
     {
         $result = $this->tsp->enqueue(
-            'alice#env1',
+            self::LABEL_CHECK,
             ['/bin/sh', '-c', 'echo $PHPRESTICADMIN_TEST_ENV'],
             ['PHPRESTICADMIN_TEST_ENV' => 'phpResticAdminTestValue']
         );
@@ -167,22 +190,23 @@ class TspClientTest extends TestCase
     }
 
     /**
-     * Две задачи с РАЗНЫМ окружением, каждая выводит своё значение.
+     * Две задачи с разным окружением, вторая стоит в очереди (slots = 1),
+     * и всё равно видит своё окружение.
      *
-     * Это решающий тест: если tsp-сервер захватывает окружение при старте,
-     * вторая задача увидит окружение первой, и тест упадёт. Если env
-     * доставляется в задачу независимо — обе задачи напечатают своё значение.
+     * Это решающий тест на доставку env в задачу, стоящую в очереди: если
+     * tsp-сервер захватывает окружение при старте, вторая задача увидит
+     * окружение первой, и тест упадёт.
      */
     public function testTwoTasksWithDifferentEnvs(): void
     {
         $taskA = $this->tsp->enqueue(
-            'alice#envA',
+            self::LABEL_CHECK,
             ['/bin/sh', '-c', 'echo $PHPRESTICADMIN_ENV_TEST'],
             ['PHPRESTICADMIN_ENV_TEST' => 'valueA']
         );
 
         $taskB = $this->tsp->enqueue(
-            'alice#envB',
+            self::LABEL_SNAPSHOTS,
             ['/bin/sh', '-c', 'echo $PHPRESTICADMIN_ENV_TEST'],
             ['PHPRESTICADMIN_ENV_TEST' => 'valueB']
         );

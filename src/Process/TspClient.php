@@ -103,10 +103,7 @@ class TspClient
             }
 
             $rest = $m[3];
-            $label = null;
-            if (preg_match('/([A-Za-z0-9._-]+#[0-9a-f]+)/', $rest, $lm)) {
-                $label = $lm[1];
-            }
+            $label = TaskLabel::extractFromTspLine($rest);
 
             $jobs[] = [
                 'id' => (int) $m[1],
@@ -192,10 +189,7 @@ class TspClient
         $result = $this->run(['-i', (string) $id]);
         $text = $result['exitCode'] === 0 ? $result['stdout'] : '';
 
-        $label = null;
-        if (preg_match('/([A-Za-z0-9._-]+#[0-9a-f]+)/', $text, $m)) {
-            $label = $m[1];
-        }
+        $label = TaskLabel::extractFromTspLine($text);
 
         if ($label === null) {
             foreach ($this->list() as $job) {
@@ -228,6 +222,14 @@ class TspClient
     public function kill(int $id): void
     {
         $this->run(['-k', (string) $id]);
+    }
+
+    /**
+     * Поднимает задачу в начало очереди (tsp -u).
+     */
+    public function promote(int $id): void
+    {
+        $this->run(['-u', (string) $id]);
     }
 
     /**

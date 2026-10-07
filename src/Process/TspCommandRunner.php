@@ -13,21 +13,25 @@ use App\Restic\CommandRunner;
 /**
  * Адаптер, реализующий контракт CommandRunner::run() поверх tsp.
  *
- * Используется для постепенной миграции и будущих REST-эндпоинтов, где нужен
- * синхронный «запусти и верни результат». Команда ставится в очередь, затем
- * ожидается её завершение с дедлайном `timeout`, после чего возвращается
- * полный вывод.
+ * Синхронный «запусти и верни результат» поверх очереди. Сознательно без
+ * потребителя в web-UI: используется REST-эндпоинтами (следующий этап).
+ * Не удалять как мёртвый код — это шов под REST (см. AGENTS.md).
+ *
+ * Задача ставится через TspTaskManager::start() с op = run, поэтому метка
+ * несёт владельца (`<username>#run<rand16>`) и задача видна владельцу.
  *
  * Важно: tsp отцепляет stdin от задачи, поэтому вызовы со stdin делегируются
  * прямому CommandRunner (например, restic key add/passwd).
  */
 class TspCommandRunner
 {
+    private TspTaskManager $tasks;
     private TspClient $tsp;
     private CommandRunner $directRunner;
 
-    public function __construct(TspClient $tsp, CommandRunner $directRunner)
+    public function __construct(TspTaskManager $tasks, TspClient $tsp, CommandRunner $directRunner)
     {
+        $this->tasks = $tasks;
         $this->tsp = $tsp;
         $this->directRunner = $directRunner;
     }
@@ -37,14 +41,17 @@ class TspCommandRunner
      * @param array<string, string> $env
      * @return array{exitCode: int, stdout: string, stderr: string}
      */
-    public function run(array $command, array $env = [], ?string $stdin = null, int $timeout = 30): array
+    public function run(array $command, array $env = [], ?string $stdin = null, int $timeout = 30, ?string $username = null): array
     {
         if ($stdin !== null) {
             return $this->directRunner->run($command, $env, $stdin, $timeout);
         }
 
-        $enqueued = $this->tsp->enqueue('runner#' . bin2hex(random_bytes(8)), $command, $env);
-        $id = $enqueued['id'];
+        // Владелец — только явный username (у REST нет сессии); иначе anonymous.
+        $owner = $username ?? 'anonymous';
+
+        $started = $this->tasks->start($owner, 'run', null, $command, $env);
+        $id = $started['id'];
 
         if ($id < 0) {
             return [
@@ -59,12 +66,12 @@ class TspCommandRunner
         while (true) {
             $state = $this->tsp->state($id);
 
-            if ($state === 'finished' || $state === 'skipped' || $state === 'unknown') {
+            if (in_array($state, ['finished', 'skipped', 'unknown'], true)) {
                 break;
             }
 
             if (microtime(true) >= $deadline) {
-                $this->tsp->kill($id);
+                $this->tasks->cancel($owner, $started['label'], true);
                 return [
                     'exitCode' => -1,
                     'stdout' => '',
