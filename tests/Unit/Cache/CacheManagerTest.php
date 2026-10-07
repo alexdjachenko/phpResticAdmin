@@ -12,6 +12,7 @@ use App\Cache\CacheManager;
 use App\Cache\CacheScope;
 use App\Cache\RequestCache;
 use App\Cache\SessionCache;
+use App\Core\App;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -89,5 +90,17 @@ class CacheManagerTest extends TestCase
 
         $user->set('k', 'v');
         $this->assertNull($user->get('k'));
+    }
+
+    /** App::resetCaches() очищает область текущего запроса. */
+    public function testAppResetCachesClearsRequestArea(): void
+    {
+        App::resetCaches();
+
+        App::cache()->request()->set('k', 'v');
+        $this->assertSame('v', App::cache()->request()->get('k'));
+
+        App::resetCaches();
+        $this->assertNull(App::cache()->request()->get('k'));
     }
 }

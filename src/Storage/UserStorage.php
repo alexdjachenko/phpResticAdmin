@@ -103,5 +103,9 @@ class UserStorage
         }
 
         file_put_contents($path, Yaml::dump($users, 4, 2));
+
+        // Сбрасываем мемоизацию users.yaml, иначе повторное чтение в этом же
+        // запросе вернуло бы устаревший список.
+        $this->configStorage->forgetYamlUsers();
     }
 }

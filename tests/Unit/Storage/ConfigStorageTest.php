@@ -8,6 +8,7 @@
 
 namespace App\Tests\Unit\Storage;
 
+use App\Cache\RequestCache;
 use App\Storage\ConfigStorage;
 use PHPUnit\Framework\TestCase;
 
@@ -274,6 +275,42 @@ class ConfigStorageTest extends TestCase
         $storage = new ConfigStorage($this->configDir);
 
         $this->assertSame($this->tmpDir . '/data/users.yaml', $storage->usersYamlPath());
+    }
+
+    /** settings.php требуется (require) не более одного раза за запрос. */
+    public function testLoadSettingsIsMemoizedPerRequest(): void
+    {
+        file_put_contents(
+            $this->configDir . '/settings.php',
+            '<?php $GLOBALS["cfg_require_count"] = ($GLOBALS["cfg_require_count"] ?? 0) + 1; return ["timezone" => "UTC"];'
+        );
+        $GLOBALS['cfg_require_count'] = 0;
+
+        $storage = new ConfigStorage($this->configDir, new RequestCache());
+
+        $storage->loadSettings();
+        $storage->loadSettings();
+        $storage->loadSettings();
+
+        $this->assertSame(1, $GLOBALS['cfg_require_count'], 'settings.php must be required only once per request');
+    }
+
+    /** users.php требуется не более одного раза за запрос (через loadPhpUsers и loadUsers). */
+    public function testLoadUsersIsMemoizedPerRequest(): void
+    {
+        file_put_contents(
+            $this->configDir . '/users.php',
+            '<?php $GLOBALS["cfg_users_count"] = ($GLOBALS["cfg_users_count"] ?? 0) + 1; return ["admin" => ["password" => "hash"]];'
+        );
+        $GLOBALS['cfg_users_count'] = 0;
+
+        $storage = new ConfigStorage($this->configDir, new RequestCache());
+
+        $storage->loadUsers();
+        $storage->loadUsers();
+        $storage->loadPhpUsers();
+
+        $this->assertSame(1, $GLOBALS['cfg_users_count'], 'users.php must be required only once per request');
     }
 
     private function removeDir(string $dir): void

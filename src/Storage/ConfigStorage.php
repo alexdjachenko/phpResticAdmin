@@ -8,35 +8,40 @@
 
 namespace App\Storage;
 
+use App\Cache\CacheInterface;
 use App\Core\App;
 use Symfony\Component\Yaml\Yaml;
 
 class ConfigStorage
 {
     private string $configDir;
+    private ?CacheInterface $requestCache;
 
-    public function __construct(?string $configDir = null)
+    public function __construct(?string $configDir = null, ?CacheInterface $requestCache = null)
     {
         $this->configDir = $configDir ?? dirname(__DIR__, 2) . '/data/cfg';
+        $this->requestCache = $requestCache;
     }
 
     /**
-     * Загружает пользователей из users.php (приоритет) и users.yaml (дополнение).
+     * Пользователи из users.php (приоритет) и users.yaml (дополнение).
      * При совпадении логина побеждает users.php.
      *
      * @return array<string, array<string, mixed>>
      */
     public function loadUsers(): array
     {
-        $users = $this->loadPhpUsers();
+        return $this->memo('users', function (): array {
+            $users = $this->loadPhpUsers();
 
-        foreach ($this->loadYamlUsers() as $username => $data) {
-            if (!isset($users[$username])) {
-                $users[$username] = $data;
+            foreach ($this->loadYamlUsers() as $username => $data) {
+                if (!isset($users[$username])) {
+                    $users[$username] = $data;
+                }
             }
-        }
 
-        return $users;
+            return $users;
+        });
     }
 
     /**
@@ -46,7 +51,7 @@ class ConfigStorage
      */
     public function loadPhpUsers(): array
     {
-        return $this->loadPhpFile('users.php');
+        return $this->memo('php-users', fn (): array => $this->loadPhpFile('users.php'));
     }
 
     /**
@@ -54,7 +59,7 @@ class ConfigStorage
      */
     public function loadSettings(): array
     {
-        return $this->loadPhpFile('settings.php');
+        return $this->memo('settings', fn (): array => $this->loadPhpFile('settings.php'));
     }
 
     /**
@@ -86,6 +91,30 @@ class ConfigStorage
      * @return array<string, array<string, mixed>>
      */
     public function loadYamlUsers(): array
+    {
+        return $this->memo('yaml-users', fn (): array => $this->readYamlUsers());
+    }
+
+    /**
+     * Сбрасывает мемоизацию users.yaml. Вызывается после записи файла, иначе
+     * последующие чтения в том же запросе вернули бы устаревшее значение.
+     */
+    public function forgetYamlUsers(): void
+    {
+        $cache = $this->requestCache();
+        if ($cache === null) {
+            return;
+        }
+
+        $prefix = 'cfg.' . md5($this->configDir) . '.';
+        $cache->remove($prefix . 'yaml-users');
+        $cache->remove($prefix . 'users');
+    }
+
+    /**
+     * @return array<string, array<string, mixed>>
+     */
+    private function readYamlUsers(): array
     {
         $path = $this->usersYamlPath();
 
@@ -123,9 +152,7 @@ class ConfigStorage
             return [];
         }
 
-        if (function_exists('opcache_invalidate')) {
-            opcache_invalidate($path, true);
-        }
+        $this->invalidateOpcode($path);
 
         $data = require $path;
 
@@ -136,5 +163,44 @@ class ConfigStorage
         }
 
         return $data;
+    }
+
+    /**
+     * Инвалидирует opcache для файла. Вызывается из loadPhpFile(), который за
+     * счёт мемоизации выполняется не чаще одного раза на файл за запрос.
+     */
+    protected function invalidateOpcode(string $path): void
+    {
+        if (function_exists('opcache_invalidate')) {
+            opcache_invalidate($path, true);
+        }
+    }
+
+    /**
+     * Мемоизация на текущий запрос.
+     *
+     * Ключ включает путь конфигов, чтобы разные экземпляры (например, в тестах
+     * с временными каталогами) не делили одну запись.
+     */
+    private function memo(string $name, callable $producer): array
+    {
+        $cache = $this->requestCache();
+        if ($cache === null) {
+            return $producer();
+        }
+
+        $key = 'cfg.' . md5($this->configDir) . '.' . $name;
+        $value = $cache->remember($key, null, $producer);
+
+        return is_array($value) ? $value : [];
+    }
+
+    private function requestCache(): ?CacheInterface
+    {
+        if ($this->requestCache === null) {
+            $this->requestCache = App::cache()->request();
+        }
+
+        return $this->requestCache;
     }
 }
