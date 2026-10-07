@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.8.0](https://github.com/alexdjachenko/phpResticAdmin/compare/v0.7.4...v0.8.0) (2026-10-07)
+
+
+### Features
+
+* background tasks via tsp, snapshot caching, and user management ([f001e69](https://github.com/alexdjachenko/phpResticAdmin/commit/f001e696212f0af671bdebde9c511be63d5f57e6))
+* background tasks via tsp, snapshot caching, and user management ([436cfc8](https://github.com/alexdjachenko/phpResticAdmin/commit/436cfc8141ee758abf82cfef18c69e1ef7b2de1e))
+* **session:** add close() to release the session lock; move restic_version onto cache areas ([092672f](https://github.com/alexdjachenko/phpResticAdmin/commit/092672f2e77c4ef2cc0ad6afa973437c9f1f3452))
+* **snapshots,keys:** inline cached snapshot stats and safe password-based key management ([4dbc8c4](https://github.com/alexdjachenko/phpResticAdmin/commit/4dbc8c4f409e2186bd139a9a274141b261c40671))
+* **tasks:** task pages and active-tasks API with human-readable titles ([9748021](https://github.com/alexdjachenko/phpResticAdmin/commit/9748021f70c7c4c8383de662fec6618b4dcf8e1a))
+* **tasks:** task tray, shared modal and AJAX task start ([e88c454](https://github.com/alexdjachenko/phpResticAdmin/commit/e88c45466f03ee794dbf0d28bd09d339a5bca3da))
+
+
+### Bug Fixes
+
+* checking if we alreade merging release pr or only creating befor setting docker image tag ([b705ea5](https://github.com/alexdjachenko/phpResticAdmin/commit/b705ea502535763c5c23e24469f95447cbc3ea99))
+* **keys:** memoize only the repo-credentials key listing; isolate cache in e2e test ([0504ea7](https://github.com/alexdjachenko/phpResticAdmin/commit/0504ea7514a7e143d12517d48d72edcd3971c39a))
+* setting release tag after merge please-release pr ([6d207d5](https://github.com/alexdjachenko/phpResticAdmin/commit/6d207d5ef67fbcff9d020d946c144669ee04d180))
+* **tasks:** correct task label test data; drop obsolete cache test stubs; add experiment diagnostics ([7c61f49](https://github.com/alexdjachenko/phpResticAdmin/commit/7c61f495defe43a512fc22de7f0df77257de484a))
+* tsp label parsing, separate stderr for JSON tasks, and check permission ([9d43c23](https://github.com/alexdjachenko/phpResticAdmin/commit/9d43c232549808b2efdbd5631cac5e2a711de6bc))
+
+
+### Performance Improvements
+
+* **cache:** move snapshot list off the session cache, add cache-first list automaton ([0d6c8d8](https://github.com/alexdjachenko/phpResticAdmin/commit/0d6c8d86f97e58d6c4991c585adfe3ab1ad930d7))
+* **core:** memoize config and process env per request, guard opcache invalidation ([644197c](https://github.com/alexdjachenko/phpResticAdmin/commit/644197c3a863c5cfaca288aa019044d1eb3cc103))
+
 ## [0.7.4](https://github.com/alexdjachenko/phpResticAdmin/compare/v0.7.3...v0.7.4) (2026-08-15)
 
 
