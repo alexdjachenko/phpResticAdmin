@@ -27,7 +27,7 @@ class ActionController extends BaseController
         }
 
         if (!App::auth()->canInit()) {
-            App::response()->error(403, __('error.forbidden'));
+            $this->abort(403, false);
             return;
         }
 
@@ -37,7 +37,7 @@ class ActionController extends BaseController
 
         $repoId = (string) $this->request()->post('repo_id', '');
         if ($repoId === '') {
-            App::response()->error(400, 'Missing repository ID');
+            $this->abort(400, false, 'Missing repository ID');
             return;
         }
 
@@ -48,7 +48,7 @@ class ActionController extends BaseController
 
         $started = App::resticTasks()->startInit($repo);
 
-        $this->respondTaskStarted($started['label'], __('tasks.op_init'), false, '/maintenance');
+        $this->respondTaskStarted($started, __('tasks.op_init'), false, '/maintenance');
     }
 
     /**
@@ -99,7 +99,7 @@ class ActionController extends BaseController
 
         $repoId = (string) $this->request()->post('repo_id', '');
         if ($repoId === '') {
-            App::response()->error(400, 'Missing repository ID');
+            $this->abort(400, false, 'Missing repository ID');
             return;
         }
 
@@ -110,7 +110,7 @@ class ActionController extends BaseController
 
         $started = App::resticTasks()->startMaintenance('stats', $repo);
 
-        $this->respondTaskStarted($started['label'], $this->operationTitle('stats'), false, '/maintenance');
+        $this->respondTaskStarted($started, $this->operationTitle('stats'), false, '/maintenance');
     }
 
     /**
@@ -131,7 +131,7 @@ class ActionController extends BaseController
 
         $repoId = (string) $request->post('repo_id', '');
         if ($repoId === '') {
-            App::response()->error(400, 'Missing repository ID');
+            $this->abort(400, false, 'Missing repository ID');
             return;
         }
 
@@ -152,7 +152,7 @@ class ActionController extends BaseController
 
         $started = App::resticTasks()->startMaintenance('forget', $repo, $policy);
 
-        $this->respondTaskStarted($started['label'], $this->operationTitle('forget'), (bool) $policy['dry_run'], '/maintenance');
+        $this->respondTaskStarted($started, $this->operationTitle('forget'), (bool) $policy['dry_run'], '/maintenance');
     }
 
     /**
@@ -171,7 +171,7 @@ class ActionController extends BaseController
 
         $repoId = (string) $this->request()->post('repo_id', '');
         if ($repoId === '') {
-            App::response()->error(400, 'Missing repository ID');
+            $this->abort(400, false, 'Missing repository ID');
             return;
         }
 
@@ -182,7 +182,7 @@ class ActionController extends BaseController
 
         $started = App::resticTasks()->startMaintenance($operation, $repo);
 
-        $this->respondTaskStarted($started['label'], $this->operationTitle($operation), false, '/maintenance');
+        $this->respondTaskStarted($started, $this->operationTitle($operation), false, '/maintenance');
     }
 
     private function operationTitle(string $operation): string

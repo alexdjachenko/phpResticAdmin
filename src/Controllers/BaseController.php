@@ -19,6 +19,11 @@ use App\Core\Request;
  * Собирает повторяющийся блок «auth → CSRF → поиск репозитория → право →
  * JSON-ошибка», чтобы контроллеры занимались только диспетчеризацией.
  * Поведение (статусы, редиректы, права) сохраняется.
+ *
+ * Важно: при AJAX-запросе (fetch) любой отказ (нет прав, истёк CSRF) обязан
+ * вернуть JSON, а не редирект/HTML. Иначе fetch не сможет разобрать ответ и
+ * покажет общую ошибку вместо настоящей причины. Поэтому хелперы сами
+ * определяют AJAX и в этом случае отвечают JSON.
  */
 abstract class BaseController
 {
@@ -35,7 +40,7 @@ abstract class BaseController
     /**
      * Требует аутентификации.
      *
-     * @param bool $json true — JSON 403, false — редирект на /login
+     * @param bool $json true — всегда JSON 403, false — JSON только для AJAX
      * @return string|null имя пользователя или null (ответ уже отправлен)
      */
     protected function requireUser(bool $json = false): ?string
@@ -43,7 +48,7 @@ abstract class BaseController
         $user = App::auth()->user();
 
         if ($user === null) {
-            if ($json) {
+            if ($json || $this->isAjax()) {
                 $this->jsonError('Authentication required', 403);
             } else {
                 App::response()->redirect('/login');
@@ -77,7 +82,7 @@ abstract class BaseController
      * Разрешает репозиторий и проверяет право на категорию.
      *
      * @param string $permission use|read|write|edit
-     * @param bool $json true — JSON при отказе, false — страница/редирект
+     * @param bool $json true — JSON при отказе, false — только для AJAX
      * @return array<string, mixed>|null
      */
     protected function requireRepo(string $user, string $repoId, string $permission, bool $json = false): ?array
@@ -100,7 +105,7 @@ abstract class BaseController
     /**
      * Проверяет CSRF-токен.
      *
-     * @param bool $json true — JSON-ответ при ошибке, false — flash + редирект
+     * @param bool $json true — JSON-ответ при ошибке, false — только для AJAX
      * @param string $fallback куда вернуться, если нет Referer
      */
     protected function requireCsrf(bool $json = false, string $fallback = '/'): bool
@@ -109,7 +114,9 @@ abstract class BaseController
             return true;
         }
 
-        if ($json) {
+        App::log('CSRF validation failed: ' . $this->request()->method() . ' ' . $this->request()->uri() . ($this->isAjax() ? ' (ajax)' : ''), 1);
+
+        if ($json || $this->isAjax()) {
             $this->jsonError(__('flash.csrf_error'), 403);
         }
 
@@ -156,11 +163,25 @@ abstract class BaseController
     /**
      * Ответ после старта фоновой задачи.
      *
+     * Принимает результат `start*()` сервиса (`{label, id}`): если tsp не смог
+     * поставить задачу (id < 0 или пустая метка), отвечаем ошибкой, а НЕ меткой —
+     * иначе фронтенд откроет модалку с несуществующей задачей.
+     *
      * AJAX (fetch) — JSON с меткой/заголовком; обычная отправка формы —
      * редирект назад с flash (без текстового терминала).
+     *
+     * @param array{label?: string, id?: int} $started
      */
-    protected function respondTaskStarted(string $label, string $title, bool $dryRun = false, string $fallback = '/'): void
+    protected function respondTaskStarted(array $started, string $title, bool $dryRun = false, string $fallback = '/'): void
     {
+        $label = (string) ($started['label'] ?? '');
+        $id = (int) ($started['id'] ?? -1);
+
+        if ($label === '' || $id < 0) {
+            $this->respondTaskFailed($title, $fallback);
+            return;
+        }
+
         if ($this->isAjax()) {
             $url = '/tasks/stream?label=' . urlencode($label);
             if ($dryRun) {
@@ -181,6 +202,37 @@ abstract class BaseController
     }
 
     /**
+     * Задача не поставлена (tsp недоступен/очередь отвергла): ошибка вместо метки.
+     */
+    protected function respondTaskFailed(string $title, string $fallback = '/'): void
+    {
+        App::log('Failed to start background task: ' . $title, 0);
+
+        if ($this->isAjax()) {
+            $this->jsonError(__('tasks.start_failed'), 500);
+            return;
+        }
+
+        App::session()->flash('error', __('tasks.start_failed'));
+        App::response()->redirect($_SERVER['HTTP_REFERER'] ?? $fallback, 303);
+    }
+
+    /**
+     * Ошибка валидации до старта задачи: JSON для AJAX, flash+редирект иначе.
+     * Нужен там, где раньше был безусловный flash+redirect (AJAX-клиент ожидает JSON).
+     */
+    protected function redirectOrJson(string $error, string $fallback = '/'): void
+    {
+        if ($this->isAjax()) {
+            $this->jsonError($error, 400);
+            return;
+        }
+
+        App::session()->flash('error', $error);
+        App::response()->redirect($fallback);
+    }
+
+    /**
      * id репозитория для страницы: ?repo → current_repo → null.
      */
     protected function resolveRepoId(Request $request): ?string
@@ -196,13 +248,13 @@ abstract class BaseController
     }
 
     /**
-     * Отправляет 403/404: JSON ($json) или HTML-страницу.
+     * Отправляет 403/404: JSON ($json или AJAX) либо HTML-страницу.
      */
     protected function abort(int $code, bool $json, ?string $message = null): void
     {
         $message ??= $code === 403 ? __('error.forbidden') : __('flash.not_found');
 
-        if ($json) {
+        if ($json || $this->isAjax()) {
             $this->jsonError($message, $code);
             return;
         }

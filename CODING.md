@@ -42,6 +42,9 @@
 - **Контроллеры**: только диспетчеризация — получают Request, вызывают сервисы, возвращают Response. Никакой бизнес-логики
 - **Структура контроллеров**: лежат по доменным подкаталогам `src/Controllers/<Домен>/` и наследуют `App\Controllers\BaseController`. Повторяющийся блок «auth → CSRF → поиск репозитория → право → JSON/редирект» берётся из хелперов (`requireUser()`, `findRepo()`, `requireRepo()`, `requireCsrf()`, `jsonOk()`, `jsonError()`, `render()`, `isAjax()`, `respondTaskStarted()`) — в самом контроллере этот блок не копируется
 - **Роуты — только таблица `App\Core\Routes::all()`**: элементы `[method, path, Controller::class, action]`; `App::registerRoutes()` разворачивает таблицу циклом. Новый эндпоинт добавляется в таблицу и в таблицу роутов AGENTS.md (проверяет `RoutesTest`)
+- **AJAX-контракт**: эндпоинты, которые фронтенд вызывает через `fetch`, обязаны отвечать `application/json` и на успех, и на отказ (истёк CSRF, нет прав, объект не найден, задача не поставлена). Для этого используем хелперы `BaseController` (`requireCsrf()`, `requireRepo()`, `abort()`, `respondTaskStarted()`, `redirectOrJson()`), а не «сырые» `App::response()->error()/redirect()` — иначе `fetch` получит HTML и покажет общую ошибку вместо причины
+- **`respondTaskStarted()` принимает `{label, id}`** (результат сервиса) и сам отвечает ошибкой, если задача не поставлена (`id < 0`). Нельзя возвращать метку, не проверив, что задача создана
+- **CSRF в JS**: токен одноразовый; после любого JSON-ответа обновлять токен на ДВУХ носителях — `data-csrf` и `input[name="_csrf_token"]` (эталон — `window.TaskUI.updateCsrf`). Обновление только `data-csrf` ломает следующий POST формы
 - **Storage**: работа с данными (YAML, сессии, конфиги). Не знают про HTTP
 - **Core**: инфраструктура (роутер, сессия, CSRF, Request/Response). Не зависит от бизнес-логики
 - **App.php — сервис-локатор**: все зависимости получаются через `App::something()`

@@ -187,6 +187,10 @@ $pollInterval = (int) (\App\Core\App::configStorage()->loadSettings()['task_poll
                     document.querySelectorAll('[data-csrf]').forEach(function(el) {
                         el.dataset.csrf = data._csrf_token;
                     });
+                    // Токен одноразовый: обновляем и скрытые поля форм.
+                    document.querySelectorAll('input[name="_csrf_token"]').forEach(function(el) {
+                        el.value = data._csrf_token;
+                    });
                 }
                 return data;
             });

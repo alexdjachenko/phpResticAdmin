@@ -166,22 +166,20 @@ class ActionController extends BaseController
 
         $backupPaths = $repo['backup_paths'] ?? [];
         if (empty($backupPaths)) {
-            App::session()->flash('error', __('repo.no_backup_paths'));
-            App::response()->redirect('/repositories/detail?repo=' . urlencode($repoId));
+            $this->redirectOrJson(__('repo.no_backup_paths'), '/repositories/detail?repo=' . urlencode($repoId));
             return;
         }
 
         $settings = App::configStorage()->loadSettings();
         $disallowedBackup = RepositoryPath::firstDisallowedBackupPath($backupPaths, $settings['backup_paths_roots'] ?? []);
         if ($disallowedBackup !== null) {
-            App::session()->flash('error', __('repo.backup_path_outside_roots', ['{roots}' => implode(', ', $settings['backup_paths_roots'] ?? [])]));
-            App::response()->redirect('/repositories/detail?repo=' . urlencode($repoId));
+            $this->redirectOrJson(__('repo.backup_path_outside_roots', ['{roots}' => implode(', ', $settings['backup_paths_roots'] ?? [])]), '/repositories/detail?repo=' . urlencode($repoId));
             return;
         }
 
         $started = App::resticTasks()->startBackup($repo, $backupPaths);
 
-        $this->respondTaskStarted($started['label'], __('tasks.op_backup'), false, '/repositories/detail?repo=' . urlencode($repoId));
+        $this->respondTaskStarted($started, __('tasks.op_backup'), false, '/repositories/detail?repo=' . urlencode($repoId));
     }
 
     /**
