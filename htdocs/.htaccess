@@ -1,4 +1,9 @@
 RewriteEngine On
+
+# favicon.ico: отдаём SVG-иконку, чтобы клиенты, запрашивающие .ico
+# напрямую, не получали 404 (файла .ico нет).
+RewriteRule ^favicon\.ico$ /assets/favicon.svg [L]
+
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^ index.php [L]
