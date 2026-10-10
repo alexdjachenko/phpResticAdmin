@@ -47,7 +47,8 @@ final class Mask
 
     /**
      * Возвращает копию массива, в которой значения секретных полей заменены
-     * на «***». Вложенные массивы обрабатываются рекурсивно.
+     * на «***». Секретное имя маскирует значение ЦЕЛИКОМ (даже если это массив,
+     * например api_tokens); остальные вложенные массивы обрабатываются рекурсивно.
      *
      * @param array<array-key, mixed> $data
      * @return array<array-key, mixed>
@@ -57,14 +58,14 @@ final class Mask
         $masked = [];
 
         foreach ($data as $key => $value) {
-            if (is_array($value)) {
-                $masked[$key] = self::data($value);
+            // Секретное имя: маскируем значение целиком, даже если это список
+            // (api_tokens) — иначе элементы утекли бы в лог.
+            if (is_string($key) && self::isSensitive($key)) {
+                $masked[$key] = self::REDACTED;
                 continue;
             }
 
-            $masked[$key] = is_string($key) && self::isSensitive($key)
-                ? self::REDACTED
-                : $value;
+            $masked[$key] = is_array($value) ? self::data($value) : $value;
         }
 
         return $masked;
