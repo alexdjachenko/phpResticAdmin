@@ -338,6 +338,7 @@ Fallback-правила для пользователей без секции `r
 - `Security::validateCsrf()` сравнивает с токеном сессии через `hash_equals` и **НЕ гасит токен** — токен session-bound (synchronizer token pattern), живёт всю сессию
 - **Почему не одноразовый**: AJAX-интерфейс держит токен в нескольких носителях (`data-csrf` на кнопках/дропдаунах и `input[name="_csrf_token"]` в формах) и автополлит `/tasks/active`; пользователь работает в нескольких вкладках на одной сессии. Одноразовый токен при успешном POST в одном месте мгновенно делал остальные носители/вкладки невалидными → массовые 403 «Invalid security token». Session-bound токен эту рассинхронизацию убирает и остаётся достаточной защитой
 - Ротация токена — только на смену привилегий: `Security::rotate()` из `Authenticator::login()`/`logout()`
+- **Cookie сессии** (`Session::start()`): `SameSite=Lax` + `HttpOnly` (Secure — при HTTPS) + `session.use_strict_mode=1`. `SameSite=Lax` — основная браузерная защита от CSRF (cross-site POST не несёт cookie) и работает независимо от CSRF-токена (defense in depth).
 - Все формы содержат скрытое поле `_csrf_token`; все JSON-ответы возвращают `_csrf_token` (то же значение) для единообразия фронтенда
 - Все JSON-ответы ДОЛЖНЫ возвращать поле `_csrf_token`. Фронтенд синхронизирует носители (`data-csrf` + `input[name="_csrf_token"]`) — для session-bound токена это no-op, но правило оставляем ради совместимости и будущей ротации
 - Исключение: `/repositories/select` — без CSRF, только меняет сессию, модификации данных нет

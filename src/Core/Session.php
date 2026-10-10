@@ -17,6 +17,9 @@ class Session
         // Переоткрываем по фактическому статусу, а не по флагу: после close()
         // сессия должна открываться снова.
         if (session_status() === PHP_SESSION_NONE) {
+            self::configureCookieParams();
+            // Строгий режим: сервер не принимает чужой session id (защита от фиксации).
+            @ini_set('session.use_strict_mode', '1');
             session_start();
         }
 
@@ -87,5 +90,37 @@ class Session
         unset($_SESSION[$flashKey]);
 
         return $value;
+    }
+
+    /**
+     * Настраивает cookie сессии (defense in depth).
+     *
+     * SameSite=Lax — браузер не отправляет cookie при cross-site POST, что
+     * само по себе снимает классический CSRF (независимо от CSRF-токена).
+     * HttpOnly — cookie недоступна из JS. Secure — только по HTTPS.
+     * Вызывается ДО session_start().
+     */
+    private static function configureCookieParams(): void
+    {
+        session_set_cookie_params([
+            'lifetime' => 0,
+            'path' => '/',
+            'secure' => self::isHttps(),
+            'httponly' => true,
+            'samesite' => 'Lax',
+        ]);
+    }
+
+    private static function isHttps(): bool
+    {
+        if (($_SERVER['HTTPS'] ?? '') === 'on') {
+            return true;
+        }
+
+        if (($_SERVER['SERVER_PORT'] ?? '') === '443') {
+            return true;
+        }
+
+        return strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https';
     }
 }
