@@ -197,7 +197,7 @@ return [
     'keys.update_credentials' => 'Update source credentials (applies only when the source key itself is changed)',
     'keys.ok'            => 'Done.',
     'keys.credentials_updated' => 'Source credentials updated.',
-    'keys.credentials_not_touched' => 'Password changed for an extra key; source credentials are updated only when the source key itself is changed.'
+    'keys.credentials_not_touched' => 'Password changed for an extra key; source credentials are updated only when the source key itself is changed.',
     'keys.save_new_password' => 'Save this password - repository credentials were not written, UI access is broken: {password}',
     'keys.no_edit_right' => 'You have no edit right on the repository category; the working key cannot be changed safely.',
     'keys.err_duplicate' => 'This password already matches a key',
