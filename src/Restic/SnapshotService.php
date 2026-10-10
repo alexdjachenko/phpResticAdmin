@@ -8,8 +8,6 @@
 
 namespace App\Restic;
 
-use App\Helpers\RepositoryPath;
-
 class SnapshotService
 {
     private CommandRunner $runner;
@@ -147,59 +145,6 @@ class SnapshotService
     public function removeTag(array $repository, string $snapId, string $tag): array
     {
         return $this->tagOperation($repository, $snapId, $tag, '--remove');
-    }
-
-    /**
-     * Копирует снепшот из source-репозитория в destination-репозиторий.
-     *
-     * @param array<string, mixed> $sourceRepo
-     * @param array<string, mixed> $destRepo
-     * @return array{ok: bool, output: string, error: string}
-     */
-    public function copy(array $sourceRepo, array $destRepo, string $snapshotId): array
-    {
-        if ($snapshotId === '') {
-            return ['ok' => false, 'output' => '', 'error' => 'No snapshot ID provided'];
-        }
-
-        $cmd = ['restic'];
-
-        if (empty($destRepo['password'])) {
-            $cmd[] = '--insecure-no-password';
-        }
-
-        $cmd[] = '--repo';
-        $cmd[] = RepositoryPath::toResticLocation($destRepo);
-        $cmd[] = 'copy';
-
-        if (empty($sourceRepo['password'])) {
-            $cmd[] = '--from-insecure-no-password';
-        }
-
-        $cmd[] = '--from-repo';
-        $cmd[] = RepositoryPath::toResticLocation($sourceRepo);
-        $cmd[] = $snapshotId;
-
-        $env = ResticCommandBuilder::buildEnv($sourceRepo);
-        foreach (ResticCommandBuilder::buildEnv($destRepo) as $key => $value) {
-            $env[$key] = $value;
-        }
-
-        if (empty($destRepo['password'])) {
-            unset($env['RESTIC_PASSWORD']);
-        }
-
-        if (!empty($sourceRepo['password'])) {
-            $env['RESTIC_FROM_PASSWORD'] = (string) $sourceRepo['password'];
-        }
-
-        $result = $this->runner->run($cmd, $env, null, 0);
-
-        return [
-            'ok' => $result['exitCode'] === 0,
-            'output' => $result['stdout'],
-            'error' => $result['stderr'],
-        ];
     }
 
     /**

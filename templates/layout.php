@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= htmlspecialchars(__('app.title'), ENT_QUOTES, 'UTF-8') ?></title>
     <link rel="stylesheet" href="/assets/css/style.css">
+    <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
 </head>
 <body data-csrf="<?= htmlspecialchars($csrfToken ?? '', ENT_QUOTES, 'UTF-8') ?>">
 <?php $taskPollInterval = (int) (\App\Core\App::configStorage()->loadSettings()['task_poll_interval'] ?? 3000); ?>
@@ -320,7 +321,10 @@
                 var url = form.getAttribute('action') || window.location.pathname;
                 fetch(url, {
                     method: 'POST',
-                    headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
+                    // Content-Type обязателен: тело — urlencoded-СТРОКА. Без него
+                    // браузер помечает тело как text/plain, PHP не заполняет $_POST,
+                    // и CSRF-токен приходит пустым ('Invalid security token').
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
                     body: new URLSearchParams(new FormData(form)).toString()
                 })
                 .then(function (r) { return r.json(); })

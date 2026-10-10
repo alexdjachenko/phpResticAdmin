@@ -6,8 +6,11 @@
  * Licensed under the Apache License, Version 2.0.
  */
 
-namespace App\Controllers;
+declare(strict_types=1);
 
+namespace App\Controllers\User;
+
+use App\Controllers\BaseController;
 use App\Core\App;
 use App\Core\Request;
 use App\Storage\UserStorage;
@@ -15,7 +18,7 @@ use App\Storage\UserStorage;
 /**
  * Управление YAML-пользователями (только для can_manage_users).
  */
-class UserController
+class UserController extends BaseController
 {
     private UserStorage $users;
 
@@ -29,27 +32,19 @@ class UserController
      */
     public function list(): void
     {
-        $auth = App::auth();
-        $user = $auth->user();
-
+        $user = $this->requireManageUsers();
         if ($user === null) {
-            App::response()->redirect('/login');
-            return;
-        }
-
-        if (!$auth->canManageUsers()) {
-            App::response()->error(403, __('error.forbidden'));
             return;
         }
 
         $all = $this->users->listAll();
 
-        echo App::response()->render('users/list.php', [
+        $this->render('users/list.php', [
             'phpUsers' => $all['php'],
             'yamlUsers' => $all['yaml'],
             'currentUser' => $user,
             'csrfToken' => App::security()->csrfToken(),
-            'isLoggedIn' => $auth->isLoggedIn(),
+            'isLoggedIn' => App::auth()->isLoggedIn(),
             'username' => $user,
         ]);
     }
@@ -59,24 +54,16 @@ class UserController
      */
     public function addForm(): void
     {
-        $auth = App::auth();
-        $user = $auth->user();
-
+        $user = $this->requireManageUsers();
         if ($user === null) {
-            App::response()->redirect('/login');
             return;
         }
 
-        if (!$auth->canManageUsers()) {
-            App::response()->error(403, __('error.forbidden'));
-            return;
-        }
-
-        echo App::response()->render('users/form.php', [
+        $this->render('users/form.php', [
             'mode' => 'add',
             'editingUser' => null,
             'csrfToken' => App::security()->csrfToken(),
-            'isLoggedIn' => $auth->isLoggedIn(),
+            'isLoggedIn' => App::auth()->isLoggedIn(),
             'username' => $user,
         ]);
     }
@@ -86,28 +73,16 @@ class UserController
      */
     public function add(): void
     {
-        $auth = App::auth();
-        $user = $auth->user();
-
+        $user = $this->requireManageUsers();
         if ($user === null) {
-            App::response()->redirect('/login');
             return;
         }
 
-        if (!$auth->canManageUsers()) {
-            App::response()->error(403, __('error.forbidden'));
+        if (!$this->requireCsrf(false, '/users')) {
             return;
         }
 
-        $request = new Request();
-        $security = App::security();
-
-        if (!$security->validateCsrf($request->post('_csrf_token', ''))) {
-            App::session()->flash('error', __('flash.csrf_error'));
-            App::response()->redirect('/users');
-            return;
-        }
-
+        $request = $this->request();
         $username = trim((string) $request->post('username', ''));
 
         try {
@@ -127,21 +102,12 @@ class UserController
      */
     public function editForm(): void
     {
-        $auth = App::auth();
-        $user = $auth->user();
-
+        $user = $this->requireManageUsers();
         if ($user === null) {
-            App::response()->redirect('/login');
             return;
         }
 
-        if (!$auth->canManageUsers()) {
-            App::response()->error(403, __('error.forbidden'));
-            return;
-        }
-
-        $request = new Request();
-        $username = (string) $request->get('username', '');
+        $username = (string) $this->request()->get('username', '');
 
         $yamlUsers = $this->users->listAll()['yaml'];
         if (!isset($yamlUsers[$username])) {
@@ -149,11 +115,11 @@ class UserController
             return;
         }
 
-        echo App::response()->render('users/form.php', [
+        $this->render('users/form.php', [
             'mode' => 'edit',
             'editingUser' => ['username' => $username, 'data' => $yamlUsers[$username]],
             'csrfToken' => App::security()->csrfToken(),
-            'isLoggedIn' => $auth->isLoggedIn(),
+            'isLoggedIn' => App::auth()->isLoggedIn(),
             'username' => $user,
         ]);
     }
@@ -163,28 +129,16 @@ class UserController
      */
     public function edit(): void
     {
-        $auth = App::auth();
-        $user = $auth->user();
-
+        $user = $this->requireManageUsers();
         if ($user === null) {
-            App::response()->redirect('/login');
             return;
         }
 
-        if (!$auth->canManageUsers()) {
-            App::response()->error(403, __('error.forbidden'));
+        if (!$this->requireCsrf(false, '/users')) {
             return;
         }
 
-        $request = new Request();
-        $security = App::security();
-
-        if (!$security->validateCsrf($request->post('_csrf_token', ''))) {
-            App::session()->flash('error', __('flash.csrf_error'));
-            App::response()->redirect('/users');
-            return;
-        }
-
+        $request = $this->request();
         $username = (string) $request->post('username', '');
 
         try {
@@ -204,29 +158,16 @@ class UserController
      */
     public function delete(): void
     {
-        $auth = App::auth();
-        $user = $auth->user();
-
+        $user = $this->requireManageUsers();
         if ($user === null) {
-            App::response()->redirect('/login');
             return;
         }
 
-        if (!$auth->canManageUsers()) {
-            App::response()->error(403, __('error.forbidden'));
+        if (!$this->requireCsrf(false, '/users')) {
             return;
         }
 
-        $request = new Request();
-        $security = App::security();
-
-        if (!$security->validateCsrf($request->post('_csrf_token', ''))) {
-            App::session()->flash('error', __('flash.csrf_error'));
-            App::response()->redirect('/users');
-            return;
-        }
-
-        $username = (string) $request->post('username', '');
+        $username = (string) $this->request()->post('username', '');
 
         if ($username === $user) {
             App::session()->flash('error', __('users.cannot_delete_self'));
@@ -244,6 +185,26 @@ class UserController
 
         App::session()->flash('success', __('users.deleted'));
         App::response()->redirect('/users');
+    }
+
+    /**
+     * Требует пользователя с правом can_manage_users.
+     *
+     * @return string|null
+     */
+    private function requireManageUsers(): ?string
+    {
+        $user = $this->requireUser();
+        if ($user === null) {
+            return null;
+        }
+
+        if (!App::auth()->canManageUsers()) {
+            App::response()->error(403, __('error.forbidden'));
+            return null;
+        }
+
+        return $user;
     }
 
     /**

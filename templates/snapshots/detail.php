@@ -2,10 +2,12 @@
 $summary = $snap['summary'] ?? [];
 $statsComputedAt = $statsEntry['computed_at'] ?? null;
 $stats = $statsEntry['stats'] ?? null;
+$repoName = (string) ($repo['name'] ?? '');
 $pollInterval = (int) (\App\Core\App::configStorage()->loadSettings()['task_poll_interval'] ?? 3000);
 ?>
 <p>
     <a href="/snapshots?repo=<?= htmlspecialchars(urlencode($repo['id'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars(__('snap.title'), ENT_QUOTES, 'UTF-8') ?></a>
+    <?php if ($repoName !== ''): ?><span class="muted">— <?= htmlspecialchars($repoName, ENT_QUOTES, 'UTF-8') ?></span><?php endif ?>
     &gt;
     <code><?= htmlspecialchars($snap['short_id'] ?? '', ENT_QUOTES, 'UTF-8') ?></code>
 </p>
@@ -13,6 +15,7 @@ $pollInterval = (int) (\App\Core\App::configStorage()->loadSettings()['task_poll
 <h2><?= htmlspecialchars(__('snap.detail_title'), ENT_QUOTES, 'UTF-8') ?></h2>
 
 <table class="repo-info">
+    <tr><th><?= htmlspecialchars(__('snap.source'), ENT_QUOTES, 'UTF-8') ?></th><td><?= htmlspecialchars($repoName !== '' ? $repoName : ($repo['id'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td></tr>
     <tr><th>ID</th><td><code><?= htmlspecialchars($snap['short_id'] ?? '', ENT_QUOTES, 'UTF-8') ?></code></td></tr>
     <tr><th><?= htmlspecialchars(__('snap.date'), ENT_QUOTES, 'UTF-8') ?></th><td><?= htmlspecialchars(\App\Helpers\Format::date($snap['time'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td></tr>
     <tr><th><?= htmlspecialchars(__('snap.host'), ENT_QUOTES, 'UTF-8') ?></th><td><?= htmlspecialchars($snap['hostname'] ?? '', ENT_QUOTES, 'UTF-8') ?></td></tr>
@@ -138,12 +141,15 @@ $pollInterval = (int) (\App\Core\App::configStorage()->loadSettings()['task_poll
         formData.append('_csrf_token', csrf());
         fetch('/snapshots/stats', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
             body: formData.toString()
         })
         .then(function (r) { return r.json(); })
         .then(function (data) {
-            if (data._csrf_token) { btn.dataset.csrf = data._csrf_token; }
+            if (data._csrf_token) {
+                btn.dataset.csrf = data._csrf_token;
+                if (window.TaskUI && window.TaskUI.updateCsrf) { window.TaskUI.updateCsrf(data._csrf_token); }
+            }
             if (!data.ok || !data.label) {
                 btn.disabled = false;
                 dataDiv.insertAdjacentHTML('beforeend', '<p class="flash flash-error">' + (data.error || '') + '</p>');
@@ -217,13 +223,14 @@ $pollInterval = (int) (\App\Core\App::configStorage()->loadSettings()['task_poll
 
         fetch('/snapshots/copy', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
             body: formData.toString()
         })
         .then(function(r) { return r.json(); })
         .then(function(data) {
             if (data._csrf_token) {
                 copyBtn.dataset.csrf = data._csrf_token;
+                if (window.TaskUI && window.TaskUI.updateCsrf) { window.TaskUI.updateCsrf(data._csrf_token); }
             }
             copyConfirm.disabled = false;
 

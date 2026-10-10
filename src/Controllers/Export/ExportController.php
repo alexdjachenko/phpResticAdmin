@@ -6,54 +6,38 @@
  * Licensed under the Apache License, Version 2.0.
  */
 
-namespace App\Controllers;
+declare(strict_types=1);
 
+namespace App\Controllers\Export;
+
+use App\Controllers\BaseController;
 use App\Core\App;
-use App\Core\Request;
 use App\Restic\ResticCommandBuilder;
 
-class ExportController
+class ExportController extends BaseController
 {
     /**
      * GET /download — скачивание отдельного файла из снепшота.
      */
     public function file(): void
     {
-        $auth = App::auth();
-        $user = $auth->user();
-
+        $user = $this->requireUser();
         if ($user === null) {
-            App::response()->redirect('/login');
             return;
         }
 
-        $request = new Request();
-        $repoId = $request->get('repo', '');
-        $snapId = $request->get('snapshot', '');
-        $path = $request->get('path', '');
+        $request = $this->request();
+        $repoId = (string) $request->get('repo', '');
+        $snapId = (string) $request->get('snapshot', '');
+        $path = (string) $request->get('path', '');
 
         if ($repoId === '' || $snapId === '' || $path === '') {
             App::response()->error(400, 'Missing parameters');
             return;
         }
 
-        $repositories = App::repoStorage()->loadAll($user);
-        $repo = null;
-        foreach ($repositories as $r) {
-            if (($r['id'] ?? '') === $repoId) {
-                $repo = $r;
-                break;
-            }
-        }
-
+        $repo = $this->requireRepo($user, $repoId, 'read');
         if ($repo === null) {
-            App::response()->error(404, __('flash.not_found'));
-            return;
-        }
-
-        $category = $repo['category'] ?? 'public';
-        if (!$auth->canUseRead($category)) {
-            App::response()->error(403, __('error.forbidden'));
             return;
         }
 
@@ -71,40 +55,22 @@ class ExportController
      */
     public function snapshot(): void
     {
-        $auth = App::auth();
-        $user = $auth->user();
-
+        $user = $this->requireUser();
         if ($user === null) {
-            App::response()->redirect('/login');
             return;
         }
 
-        $request = new Request();
-        $repoId = $request->get('repo', '');
-        $snapId = $request->get('snapshot', '');
+        $request = $this->request();
+        $repoId = (string) $request->get('repo', '');
+        $snapId = (string) $request->get('snapshot', '');
 
         if ($repoId === '' || $snapId === '') {
             App::response()->error(400, 'Missing parameters');
             return;
         }
 
-        $repositories = App::repoStorage()->loadAll($user);
-        $repo = null;
-        foreach ($repositories as $r) {
-            if (($r['id'] ?? '') === $repoId) {
-                $repo = $r;
-                break;
-            }
-        }
-
+        $repo = $this->requireRepo($user, $repoId, 'read');
         if ($repo === null) {
-            App::response()->error(404, __('flash.not_found'));
-            return;
-        }
-
-        $category = $repo['category'] ?? 'public';
-        if (!$auth->canUseRead($category)) {
-            App::response()->error(403, __('error.forbidden'));
             return;
         }
 

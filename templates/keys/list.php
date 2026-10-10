@@ -100,7 +100,7 @@
     <?php if (!empty($canEdit)): ?>
     <div class="form-group">
         <label>
-            <input type="checkbox" id="keys-passwd-update">
+            <input type="checkbox" id="keys-passwd-update" checked>
             <?= htmlspecialchars(__('keys.update_credentials'), ENT_QUOTES, 'UTF-8') ?>
         </label>
     </div>

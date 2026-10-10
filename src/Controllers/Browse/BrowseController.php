@@ -6,54 +6,38 @@
  * Licensed under the Apache License, Version 2.0.
  */
 
-namespace App\Controllers;
+declare(strict_types=1);
 
+namespace App\Controllers\Browse;
+
+use App\Controllers\BaseController;
 use App\Core\App;
-use App\Core\Request;
 use App\Restic\ResticCommandBuilder;
 
-class BrowseController
+class BrowseController extends BaseController
 {
     /**
      * GET /browse — дерево файлов снепшота.
      */
     public function tree(): void
     {
-        $auth = App::auth();
-        $user = $auth->user();
-
+        $user = $this->requireUser();
         if ($user === null) {
-            App::response()->redirect('/login');
             return;
         }
 
-        $request = new Request();
-        $repoId = $request->get('repo', '');
-        $snapId = $request->get('snapshot', '');
-        $path = $request->get('path', '/');
+        $request = $this->request();
+        $repoId = (string) $request->get('repo', '');
+        $snapId = (string) $request->get('snapshot', '');
+        $path = (string) $request->get('path', '/');
 
         if ($repoId === '' || $snapId === '') {
             App::response()->redirect('/snapshots');
             return;
         }
 
-        $repositories = App::repoStorage()->loadAll($user);
-        $repo = null;
-        foreach ($repositories as $r) {
-            if (($r['id'] ?? '') === $repoId) {
-                $repo = $r;
-                break;
-            }
-        }
-
+        $repo = $this->requireRepo($user, $repoId, 'read');
         if ($repo === null) {
-            App::response()->error(404, __('flash.not_found'));
-            return;
-        }
-
-        $category = $repo['category'] ?? 'public';
-        if (!$auth->canUseRead($category)) {
-            App::response()->error(403, __('error.forbidden'));
             return;
         }
 
@@ -116,14 +100,14 @@ class BrowseController
 
         $breadcrumbs = $this->buildBreadcrumbs($repo, $snapId, $path);
 
-        echo App::response()->render('browse/tree.php', [
+        $this->render('browse/tree.php', [
             'repo' => $repo,
             'snapId' => $snapId,
             'currentPath' => $path,
             'dirs' => $dirs,
             'files' => $files,
             'breadcrumbs' => $breadcrumbs,
-            'isLoggedIn' => $auth->isLoggedIn(),
+            'isLoggedIn' => App::auth()->isLoggedIn(),
             'username' => $user,
         ]);
     }

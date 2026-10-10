@@ -6,10 +6,12 @@
  * Licensed under the Apache License, Version 2.0.
  */
 
-namespace App\Controllers;
+declare(strict_types=1);
 
+namespace App\Controllers\Task;
+
+use App\Controllers\BaseController;
 use App\Core\App;
-use App\Core\Request;
 use App\Helpers\Format;
 
 /**
@@ -19,27 +21,24 @@ use App\Helpers\Format;
  * извлекаются операция, репозиторий и владелец, чтобы показать человеческое
  * имя задачи. Никакого второго хранилища задач нет.
  */
-class TaskController
+class TaskController extends BaseController
 {
     /**
      * GET /tasks — список задач, видимых пользователю.
      */
     public function list(): void
     {
-        $auth = App::auth();
-        $user = $auth->user();
-
+        $user = $this->requireUser();
         if ($user === null) {
-            App::response()->redirect('/login');
             return;
         }
 
-        $privileged = $auth->canManageProcesses();
+        $privileged = App::auth()->canManageProcesses();
         $tasks = $this->annotate(App::tasks()->listForUser($user, $privileged), $user);
 
-        echo App::response()->render('tasks/list.php', [
+        $this->render('tasks/list.php', [
             'tasks' => $tasks,
-            'isLoggedIn' => $auth->isLoggedIn(),
+            'isLoggedIn' => App::auth()->isLoggedIn(),
             'username' => $user,
         ]);
     }
@@ -49,17 +48,13 @@ class TaskController
      */
     public function view(): void
     {
-        $auth = App::auth();
-        $user = $auth->user();
-
+        $user = $this->requireUser();
         if ($user === null) {
-            App::response()->redirect('/login');
             return;
         }
 
-        $request = new Request();
-        $label = (string) $request->get('label', '');
-        $privileged = $auth->canManageProcesses();
+        $label = (string) $this->request()->get('label', '');
+        $privileged = App::auth()->canManageProcesses();
 
         if ($label === '' || !App::tasks()->assertAccess($user, $label, $privileged)) {
             App::response()->error(404, 'Task not found');
@@ -69,11 +64,11 @@ class TaskController
         $described = App::tasks()->describe($label);
         $job = App::tasks()->findByLabel($label);
 
-        echo App::response()->render('tasks/view.php', [
+        $this->render('tasks/view.php', [
             'label' => $label,
             'title' => $described['title'] ?? $label,
             'state' => $job['state'] ?? 'unknown',
-            'isLoggedIn' => $auth->isLoggedIn(),
+            'isLoggedIn' => App::auth()->isLoggedIn(),
             'username' => $user,
         ]);
     }
@@ -83,16 +78,12 @@ class TaskController
      */
     public function stream(): void
     {
-        $auth = App::auth();
-        $user = $auth->user();
-
+        $user = $this->requireUser();
         if ($user === null) {
-            App::response()->redirect('/login');
             return;
         }
 
-        $request = new Request();
-        $label = (string) $request->get('label', '');
+        $label = (string) $this->request()->get('label', '');
 
         if ($label === '' || !App::tasks()->isValidLabel($label)) {
             App::response()->error(400, 'Invalid task label');
@@ -100,7 +91,7 @@ class TaskController
         }
 
         $prefix = null;
-        if ($request->get('dry_run', '0') === '1') {
+        if ($this->request()->get('dry_run', '0') === '1') {
             $prefix = __('maint.dry_run_note');
         }
 
@@ -109,7 +100,7 @@ class TaskController
         // уже не сохранится.
         App::session()->close();
 
-        App::tasks()->streamOutput($user, $label, $auth->canManageProcesses(), $prefix);
+        App::tasks()->streamOutput($user, $label, App::auth()->canManageProcesses(), $prefix);
     }
 
     /**
@@ -117,33 +108,27 @@ class TaskController
      */
     public function status(): void
     {
-        $auth = App::auth();
-        $user = $auth->user();
-
+        $user = $this->requireUser(true);
         if ($user === null) {
-            App::response()->json(['ok' => false, 'error' => 'Authentication required', '_csrf_token' => App::security()->csrfToken()], 403);
             return;
         }
 
-        $request = new Request();
-        $label = (string) $request->get('label', '');
+        $label = (string) $this->request()->get('label', '');
 
         if ($label === '' || !App::tasks()->isValidLabel($label)) {
-            App::response()->json(['ok' => false, 'error' => 'Invalid task label', '_csrf_token' => App::security()->csrfToken()], 400);
+            $this->jsonError('Invalid task label', 400);
             return;
         }
 
-        $status = App::tasks()->status($user, $label, $auth->canManageProcesses());
+        $status = App::tasks()->status($user, $label, App::auth()->canManageProcesses());
 
         if ($status === null) {
-            App::response()->json(['ok' => false, 'error' => __('error.forbidden'), '_csrf_token' => App::security()->csrfToken()], 403);
+            $this->jsonError(__('error.forbidden'), 403);
             return;
         }
 
         $status['ok'] = true;
-        $status['_csrf_token'] = App::security()->csrfToken();
-
-        App::response()->json($status);
+        $this->jsonOk($status);
     }
 
     /**
@@ -151,15 +136,12 @@ class TaskController
      */
     public function active(): void
     {
-        $auth = App::auth();
-        $user = $auth->user();
-
+        $user = $this->requireUser(true);
         if ($user === null) {
-            App::response()->json(['ok' => false, 'error' => 'Authentication required'], 403);
             return;
         }
 
-        $privileged = $auth->canManageProcesses();
+        $privileged = App::auth()->canManageProcesses();
         $tasks = $this->annotate(App::tasks()->listForUser($user, $privileged), $user);
 
         $active = 0;
@@ -171,12 +153,10 @@ class TaskController
 
         $settings = App::configStorage()->loadSettings();
 
-        App::response()->json([
-            'ok' => true,
+        $this->jsonOk([
             'tasks' => $tasks,
             'active' => $active,
             'poll_interval' => (int) ($settings['task_poll_interval'] ?? 3000),
-            '_csrf_token' => App::security()->csrfToken(),
         ]);
     }
 
@@ -201,37 +181,31 @@ class TaskController
      */
     private function changeState(string $action): void
     {
-        $auth = App::auth();
-        $user = $auth->user();
-
+        $user = $this->requireUser(true);
         if ($user === null) {
-            App::response()->json(['ok' => false, 'error' => 'Authentication required', '_csrf_token' => App::security()->csrfToken()], 403);
             return;
         }
 
-        $request = new Request();
-        if (!App::security()->validateCsrf((string) $request->post('_csrf_token', ''))) {
-            App::response()->json(['ok' => false, 'error' => __('flash.csrf_error'), '_csrf_token' => App::security()->csrfToken()], 403);
+        if (!$this->requireCsrf(true)) {
             return;
         }
 
-        $label = (string) $request->post('label', '');
+        $label = (string) $this->request()->post('label', '');
         if ($label === '' || !App::tasks()->isValidLabel($label)) {
-            App::response()->json(['ok' => false, 'error' => 'Invalid task label', '_csrf_token' => App::security()->csrfToken()], 400);
+            $this->jsonError('Invalid task label', 400);
             return;
         }
 
-        $privileged = $auth->canManageProcesses();
+        $privileged = App::auth()->canManageProcesses();
         $tasks = App::tasks();
 
         $ok = $action === 'cancel'
             ? $tasks->cancel($user, $label, $privileged)
             : $tasks->promote($user, $label, $privileged);
 
-        App::response()->json([
+        $this->jsonOk([
             'ok' => $ok,
             'error' => $ok ? null : __('error.forbidden'),
-            '_csrf_token' => App::security()->csrfToken(),
         ]);
     }
 
@@ -241,8 +215,8 @@ class TaskController
      * @param array<int, array<string, mixed>> $jobs
      * @return array<int, array{id: int, state: string, position: ?int, label: string, valid: bool, title: string, owner: ?string, op: ?string, repoId: ?string, repoName: ?string, command: string}>
      */
-     private function annotate(array $jobs, string $user): array
-     {
+    private function annotate(array $jobs, string $user): array
+    {
         $repoNames = [];
         foreach (App::repoStorage()->loadAll($user) as $r) {
             $repoNames[$r['id'] ?? ''] = $r['name'] ?? '';
@@ -275,5 +249,5 @@ class TaskController
         }
 
         return $rows;
-     }
+    }
 }

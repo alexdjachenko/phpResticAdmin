@@ -11,7 +11,7 @@ services:
     deploy:
       replicas: 1
 
-    volumes:
-    phpresticadmin_data:
-    phpresticadmin_sources:
-    phpresticadmin_backups:
+volumes:
+  phpresticadmin_data:
+  phpresticadmin_sources:
+  phpresticadmin_backups:

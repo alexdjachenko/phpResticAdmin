@@ -6,16 +6,18 @@
  * Licensed under the Apache License, Version 2.0.
  */
 
-namespace App\Controllers;
+declare(strict_types=1);
 
+namespace App\Controllers\Account;
+
+use App\Controllers\BaseController;
 use App\Core\App;
-use App\Core\Request;
 use App\Storage\UserStorage;
 
 /**
  * Self-service смена пароля (только для YAML-пользователей).
  */
-class AccountController
+class AccountController extends BaseController
 {
     private UserStorage $users;
 
@@ -29,22 +31,14 @@ class AccountController
      */
     public function passwordForm(): void
     {
-        $auth = App::auth();
-        $user = $auth->user();
-
+        $user = $this->requireYamlUser();
         if ($user === null) {
-            App::response()->redirect('/login');
             return;
         }
 
-        if (!$auth->isYamlUser()) {
-            App::response()->error(403, __('error.forbidden'));
-            return;
-        }
-
-        echo App::response()->render('account/password.php', [
+        $this->render('account/password.php', [
             'csrfToken' => App::security()->csrfToken(),
-            'isLoggedIn' => $auth->isLoggedIn(),
+            'isLoggedIn' => App::auth()->isLoggedIn(),
             'username' => $user,
         ]);
     }
@@ -54,28 +48,16 @@ class AccountController
      */
     public function changePassword(): void
     {
-        $auth = App::auth();
-        $user = $auth->user();
-
+        $user = $this->requireYamlUser();
         if ($user === null) {
-            App::response()->redirect('/login');
             return;
         }
 
-        if (!$auth->isYamlUser()) {
-            App::response()->error(403, __('error.forbidden'));
+        if (!$this->requireCsrf(false, '/account/password')) {
             return;
         }
 
-        $request = new Request();
-        $security = App::security();
-
-        if (!$security->validateCsrf($request->post('_csrf_token', ''))) {
-            App::session()->flash('error', __('flash.csrf_error'));
-            App::response()->redirect('/account/password');
-            return;
-        }
-
+        $request = $this->request();
         $currentPassword = (string) $request->post('current_password', '');
         $newPassword = (string) $request->post('new_password', '');
         $confirmPassword = (string) $request->post('confirm_password', '');
@@ -86,7 +68,7 @@ class AccountController
             return;
         }
 
-        $hash = $auth->resolvePasswordHash($user);
+        $hash = App::auth()->resolvePasswordHash($user);
         if ($hash === null || !password_verify($currentPassword, $hash)) {
             App::session()->flash('error', __('account.current_password_invalid'));
             App::response()->redirect('/account/password');
@@ -97,5 +79,25 @@ class AccountController
 
         App::session()->flash('success', __('account.password_changed'));
         App::response()->redirect('/account/password');
+    }
+
+    /**
+     * Требует YAML-пользователя.
+     *
+     * @return string|null
+     */
+    private function requireYamlUser(): ?string
+    {
+        $user = $this->requireUser();
+        if ($user === null) {
+            return null;
+        }
+
+        if (!App::auth()->isYamlUser()) {
+            App::response()->error(403, __('error.forbidden'));
+            return null;
+        }
+
+        return $user;
     }
 }

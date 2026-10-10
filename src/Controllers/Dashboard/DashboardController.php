@@ -6,23 +6,23 @@
  * Licensed under the Apache License, Version 2.0.
  */
 
-namespace App\Controllers;
+declare(strict_types=1);
 
+namespace App\Controllers\Dashboard;
+
+use App\Controllers\BaseController;
 use App\Core\App;
-use App\Core\Request;
 
-class DashboardController
+class DashboardController extends BaseController
 {
     public function index(): void
     {
-        $auth = App::auth();
-        $user = $auth->user();
-
+        $user = $this->requireUser();
         if ($user === null) {
-            App::response()->redirect('/login');
             return;
         }
 
+        $auth = App::auth();
         $repositories = App::repoStorage()->loadAll($user);
         $currentRepoId = App::session()->get('current_repo');
         $repo = null;
@@ -69,10 +69,10 @@ class DashboardController
                     });
                     $latestSnapshots = array_slice($allSnapshots, 0, 5);
                 }
-                }
-                }
+            }
+        }
 
-                $tasks = App::tasks()->listForUser($user, $auth->canManageProcesses());
+        $tasks = App::tasks()->listForUser($user, $auth->canManageProcesses());
         foreach ($tasks as &$task) {
             $label = (string) ($task['label'] ?? '');
             $described = $label !== '' ? App::tasks()->describe($label) : null;
@@ -92,7 +92,7 @@ class DashboardController
         }
         $recentTasks = array_slice(array_reverse($recentTasks), 0, 10);
 
-        echo App::response()->render('dashboard.php', [
+        $this->render('dashboard.php', [
             'repo' => $repo,
             'latestSnapshots' => $latestSnapshots,
             'needLoad' => $needLoad,
@@ -101,27 +101,20 @@ class DashboardController
             'activeTasks' => $activeTasks,
             'recentTasks' => $recentTasks,
         ]);
-        }
+    }
 
     public function invalidateCache(): void
     {
-        $auth = App::auth();
-        if (!$auth->isLoggedIn()) {
-            App::response()->json(['ok' => false, 'error' => 'Authentication required'], 403);
+        if ($this->requireUser(true) === null) {
             return;
         }
 
         if (!App::isDebug()) {
-            App::response()->json(['ok' => false, 'error' => 'Debug mode is disabled'], 403);
+            $this->jsonError('Debug mode is disabled', 403);
             return;
         }
 
-        $request = new Request();
-        $security = App::security();
-
-        $token = $request->post('_csrf_token', '');
-        if (!$security->validateCsrf($token)) {
-            App::response()->json(['ok' => false, 'error' => 'Invalid security token', '_csrf_token' => App::security()->csrfToken()], 403);
+        if (!$this->requireCsrf(true)) {
             return;
         }
 
@@ -132,11 +125,8 @@ class DashboardController
         // вызывала бы лавину обращений к restic.
         App::resetCaches();
 
-        $result['ok'] = true;
-        $result['_csrf_token'] = App::security()->csrfToken();
-
         App::log('Cache invalidated: ' . $result['count'] . ' scripts cleared', 0);
 
-        App::response()->json($result);
+        $this->jsonOk($result);
     }
 }
