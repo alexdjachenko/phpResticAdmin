@@ -103,6 +103,47 @@ class RepositoryPath
     }
 
     /**
+     * Лексическая нормализация пути: сворачивает `.` и `..` без обращения к ФС.
+     *
+     * Нужна, чтобы `/sources/../../etc` не считался «внутри /sources»: без
+     * свёртки проверка по строковому префиксу пропускала бы обход корня.
+     * Ведущий слэш сохраняется, `..` в начале относительного пути — тоже.
+     */
+    public static function canonicalize(string $path): string
+    {
+        $path = str_replace('\\', '/', trim($path));
+        if ($path === '') {
+            return '';
+        }
+
+        $isAbsolute = str_starts_with($path, '/');
+        $out = [];
+
+        foreach (explode('/', $path) as $segment) {
+            if ($segment === '' || $segment === '.') {
+                continue;
+            }
+            if ($segment === '..') {
+                if (!empty($out) && end($out) !== '..') {
+                    array_pop($out);
+                } elseif (!$isAbsolute) {
+                    $out[] = '..';
+                }
+                continue;
+            }
+            $out[] = $segment;
+        }
+
+        $result = implode('/', $out);
+
+        if ($isAbsolute) {
+            return '/' . $result;
+        }
+
+        return $result;
+    }
+
+    /**
      * Проверяет принадлежность пути разрешённым корням.
      * Точное совпадение с корнем или путь внутри корня. Корень "/" разрешает всё.
      * Пустой список корней = ограничение отключено.
@@ -115,9 +156,11 @@ class RepositoryPath
             return true;
         }
 
+        $path = self::canonicalize($path);
+
         foreach ($roots as $root) {
-            $root = rtrim((string) $root, '/');
-            if ($root === '') {
+            $root = self::canonicalize((string) $root);
+            if ($root === '' || $root === '/') {
                 return true;
             }
             if ($path === $root || str_starts_with($path, $root . '/')) {
@@ -129,7 +172,8 @@ class RepositoryPath
     }
 
     /**
-     * Возвращает первый путь вне разрешённых корней или null.
+     * Возвращает первый путь вне разрешённых корней или пересекающийся с
+     * собственным каталогом данных приложения (пароли, реквизиты), либо null.
      *
      * @param array<int, string> $paths
      * @param array<int, string> $roots
@@ -137,7 +181,47 @@ class RepositoryPath
     public static function firstDisallowedBackupPath(array $paths, array $roots): ?string
     {
         foreach ($paths as $path) {
-            if (!self::isWithinRoots((string) $path, $roots)) {
+            $path = (string) $path;
+
+            if (!self::isWithinRoots($path, $roots)) {
+                return $path;
+            }
+
+            if (self::firstApplicationDataConflict([$path]) !== null) {
+                return $path;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Каталог данных приложения (пароли, реквизиты репозиториев).
+     */
+    public static function applicationDataRoot(): string
+    {
+        return dirname(__DIR__, 2) . '/data';
+    }
+
+    /**
+     * Первый путь, пересекающийся с собственным каталогом данных приложения,
+     * или null. Ловит и «внутри data» (`/var/www/data/cfg`), и «содержит data»
+     * (`/var`, `/var/www`), в том числе через `..`.
+     *
+     * @param array<int, string> $paths
+     */
+    public static function firstApplicationDataConflict(array $paths): ?string
+    {
+        $dataRoot = self::canonicalize(self::applicationDataRoot());
+        if ($dataRoot === '' || $dataRoot === '/') {
+            return null;
+        }
+
+        foreach ($paths as $path) {
+            $candidate = self::canonicalize((string) $path);
+            if ($candidate === $dataRoot
+                || str_starts_with($candidate, $dataRoot . '/')
+                || str_starts_with($dataRoot, $candidate . '/')) {
                 return (string) $path;
             }
         }

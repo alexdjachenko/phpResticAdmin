@@ -24,6 +24,7 @@ use PHPUnit\Framework\TestCase;
  *   4. destroy очищает все данные.
  *   5. close(): сессия перестаёт быть активной, запись после close не
  *      сохраняется, повторный start() открывает сессию снова.
+ *   6. start() настраивает cookie сессии (SameSite=Lax, HttpOnly; Secure по HTTPS).
  *
  * Критерий успеха: все assert проходят.
  */
@@ -119,6 +120,52 @@ class SessionTest extends TestCase
 
         $this->assertNull($session->get('key1'));
         $this->assertNull($session->get('key2'));
+    }
+
+    /** start() выставляет SameSite=Lax и HttpOnly для cookie сессии. */
+    public function testStartSetsCookieAttributes(): void
+    {
+        // Гарантируем, что сессия не активна: иначе start() не применит параметры cookie.
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            @session_write_close();
+        }
+        $_SESSION = [];
+
+        $session = new Session();
+        $session->start();
+
+        $params = session_get_cookie_params();
+        $this->assertSame('Lax', $params['samesite'], 'session cookie must be SameSite=Lax');
+        $this->assertTrue($params['httponly'], 'session cookie must be HttpOnly');
+
+        $session->close();
+    }
+
+    /** Secure-флаг cookie зависит от того, идёт ли запрос по HTTPS. */
+    public function testSecureFlagFollowsHttps(): void
+    {
+        $backup = $_SERVER;
+
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            @session_write_close();
+        }
+
+        // HTTPS — cookie должна быть Secure.
+        $_SERVER['HTTPS'] = 'on';
+        $_SERVER['SERVER_PORT'] = '443';
+        unset($_SERVER['HTTP_X_FORWARDED_PROTO']);
+        (new Session())->start();
+        $this->assertTrue(session_get_cookie_params()['secure'], 'secure cookie expected under HTTPS');
+        (new Session())->close();
+
+        // Обычный HTTP — cookie не Secure (иначе браузер её не пришлёт).
+        unset($_SERVER['HTTPS'], $_SERVER['HTTP_X_FORWARDED_PROTO']);
+        $_SERVER['SERVER_PORT'] = '80';
+        (new Session())->start();
+        $this->assertFalse(session_get_cookie_params()['secure'], 'non-secure cookie expected over plain HTTP');
+        (new Session())->close();
+
+        $_SERVER = $backup;
     }
 
     /**

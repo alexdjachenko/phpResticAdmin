@@ -159,6 +159,11 @@ function sendPost(url, body, csrfEl) {
             document.querySelectorAll('[data-csrf]').forEach(function(el) {
                 el.dataset.csrf = data._csrf_token;
             });
+            // Токен одноразовый: форму backup/maintenance тоже обновляем, иначе
+            // её следующий POST уйдёт со старым (уже погашенным) токеном.
+            document.querySelectorAll('input[name="_csrf_token"]').forEach(function(el) {
+                el.value = data._csrf_token;
+            });
         }
         return data;
     });

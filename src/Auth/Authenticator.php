@@ -59,6 +59,10 @@ class Authenticator
         }
 
         $this->session->set('auth_user', $username);
+
+        // Смена привилегий — повод сменить CSRF-токен (ближайший рендер выпустит новый).
+        $this->session->remove('_csrf_token');
+
         return true;
     }
 
@@ -102,6 +106,9 @@ class Authenticator
     public function logout(): void
     {
         $this->session->remove('auth_user');
+
+        // Смена привилегий — повод сменить CSRF-токен.
+        $this->session->remove('_csrf_token');
     }
 
     public function user(): ?string

@@ -82,6 +82,7 @@ bin/
 src/
   Core/
     App.php              # Сервис-локатор + начальная загрузка + регистрация роутов
+    Routes.php           # Таблица роутов: all() → [method, path, Controller::class, action]
     Router.php           # Статический роутинг (метод + точный путь, без плейсхолдеров)
     Request.php          # Обёртка над $_SERVER, $_GET, $_POST
     Response.php         # redirect(), render(), json(), error()
@@ -122,18 +123,27 @@ src/
     TaskLabel.php          # единый источник правды о схеме метки: build/parse/isValid/OPS
     TspTaskManager.php     # менеджер задач: метки через TaskLabel, describe/listActiveFor/queuePosition/cancel/promote
     TspCommandRunner.php   # адаптер контракта CommandRunner::run() поверх tsp (REST-шов)
-    Controllers/
-    DashboardController.php  # GET / → дашборд, POST /cache/invalidate
-    AuthController.php       # GET/POST /login, GET /logout
-    RepositoryController.php # list, addForm/add, detail, editForm/edit, check, delete, move, backup, select
-    SnapshotController.php   # GET /snapshots, POST /snapshots/tag (AJAX-теги)
-    BrowseController.php     # GET /browse — дерево файлов + хлебные крошки
-    ExportController.php     # GET /download, GET /export — скачивание файлов и снепшотов
-    MaintenanceController.php # GET /maintenance, POST /maintenance/* — обслуживание
-    KeyController.php        # GET /keys, POST /keys/* — управление ключами
-    TaskController.php       # GET /tasks, /tasks/view, /tasks/stream, /tasks/status, /tasks/active, POST /tasks/cancel, /tasks/promote
-    UserController.php       # GET/POST /users/* — управление YAML-пользователями
-    AccountController.php    # GET/POST /account/password — self-service смена пароля
+    Controllers/                        # доменные подкаталоги + единый базовый контроллер
+      BaseController.php                # auth → CSRF → поиск репо → право → JSON (общие хелперы)
+      Auth/AuthController.php           # GET/POST /login, GET /logout
+      Dashboard/DashboardController.php # GET / → дашборд, POST /cache/invalidate
+      Language/LanguageController.php   # POST /language — переключение языка
+      Repository/ListController.php     # GET /repositories
+      Repository/DetailController.php   # GET /repositories/detail
+      Repository/FormController.php     # addForm/add, editForm/edit
+      Repository/ActionController.php   # check, delete, move, backup, select
+      Snapshot/ListController.php       # GET /snapshots (автомат list/progress/error/start)
+      Snapshot/DetailController.php     # GET /snapshots/detail
+      Snapshot/ActionController.php     # POST /snapshots/tag|copy|refresh
+      Snapshot/StatsController.php      # POST /snapshots/stats, GET /snapshots/stats/result
+      Browse/BrowseController.php       # GET /browse — дерево файлов + хлебные крошки
+      Export/ExportController.php       # GET /download, GET /export — скачивание
+      Maintenance/IndexController.php   # GET /maintenance, POST /maintenance/connection
+      Maintenance/ActionController.php  # POST /maintenance/* — фоновые операции
+      Key/KeyController.php             # GET /keys, POST /keys/* — управление ключами
+      Task/TaskController.php           # GET /tasks*, POST /tasks/cancel|promote
+      User/UserController.php           # GET/POST /users/* — управление YAML-пользователями
+      Account/AccountController.php     # GET/POST /account/password — self-service
     templates/
   layout.php             # Шапка, dropdown репозиториев, навигация, flash, <main>
   login.php              # Форма входа
@@ -173,13 +183,16 @@ data/
   Unit/
     Core/SessionTest.php
     Core/SecurityTest.php
+    Core/RoutesTest.php         # таблица роутов: без дублей, совпадает с AGENTS.md, method_exists
     Auth/AuthenticatorTest.php
     Storage/ConfigStorageTest.php
     Storage/RepositoryStorageTest.php
     Helpers/LangTest.php
     Helpers/FormatTest.php
+    Restic/ResticTaskServiceTest.php # op/команда фоновой задачи для всех операций
   Integration/
     CanaryTest.php       # Дымовой тест: HTTP GET / → содержит "phpResticAdmin"
+    TaskEndpointContractTest.php # AJAX-отказы task-эндпоинтов = JSON (не HTML/редирект)
     ResticConnectionTest.php  # Требует restic: init + testConnection
     SnapshotServiceTest.php   # list, get, addTag, removeTag
     BackupServiceTest.php     # backup creates snapshot, multiple paths
@@ -214,61 +227,62 @@ docker/
 
 | Метод | Путь                   | Controller::method                | Требуется авторизация      |
 |-------|------------------------|-----------------------------------|----------------------------|
-| GET   | `/`                    | DashboardController::index         | Нет |
-| GET   | `/login`               | AuthController::loginForm          | Нет |
-| POST  | `/login`               | AuthController::login              | Нет |
-| GET   | `/logout`              | AuthController::logout             | Нет |
-| GET   | `/repositories`        | RepositoryController::list         | user != null |
-| GET   | `/repositories/add`    | RepositoryController::addForm      | isLoggedIn + canEdit |
-| POST  | `/repositories/add`    | RepositoryController::add          | isLoggedIn + canEdit |
-| GET   | `/repositories/detail` | RepositoryController::detail       | user != null + canUseRead |
-| GET   | `/repositories/edit`   | RepositoryController::editForm     | isLoggedIn + canEdit |
-| POST  | `/repositories/edit`   | RepositoryController::edit         | isLoggedIn + canEdit |
-| POST  | `/repositories/check`  | RepositoryController::check        | isLoggedIn + canUseRead |
-| POST  | `/repositories/delete` | RepositoryController::delete       | isLoggedIn + canDelete |
-| POST  | `/repositories/move`   | RepositoryController::move         | isLoggedIn + canMove |
-| POST  | `/repositories/backup` | RepositoryController::backup       | isLoggedIn + canUseWrite |
-| POST  | `/repositories/select` | RepositoryController::select       | user != null |
-| GET   | `/snapshots`           | SnapshotController::list           | user != null + canUseRead |
-| GET   | `/snapshots/detail`    | SnapshotController::detail         | user != null + canUseRead |
-| POST  | `/snapshots/stats`     | SnapshotController::stats          | user != null + canUseRead |
-| POST  | `/snapshots/tag`       | SnapshotController::tag            | isLoggedIn + canUseWrite |
-| POST  | `/snapshots/copy`      | SnapshotController::copy           | isLoggedIn + canUseRead(src) + canUseWrite(dest) |
-| GET   | `/browse`              | BrowseController::tree             | user != null + canUseRead |
-| POST  | `/language`            | App (inline handler)               | Нет |
-| POST  | `/cache/invalidate`    | DashboardController::invalidateCache | isLoggedIn + debug |
-| GET   | `/download`            | ExportController::file             | user != null + canUseRead |
-| GET   | `/export`              | ExportController::snapshot         | user != null + canUseRead |
-| GET   | `/maintenance`         | MaintenanceController::index       | isLoggedIn + canUseWrite |
-| POST  | `/maintenance/check`   | MaintenanceController::check       | isLoggedIn + canUseWrite |
-| POST  | `/maintenance/prune`   | MaintenanceController::prune       | isLoggedIn + canUseWrite |
-| POST  | `/maintenance/rebuild-index` | MaintenanceController::rebuildIndex | isLoggedIn + canUseWrite |
-| POST  | `/maintenance/unlock`  | MaintenanceController::unlock      | isLoggedIn + canUseWrite |
-| POST  | `/maintenance/forget`  | MaintenanceController::forget      | isLoggedIn + canUseWrite |
-| POST  | `/maintenance/connection` | MaintenanceController::connection | isLoggedIn + canUseWrite |
-| POST  | `/maintenance/stats`   | MaintenanceController::stats       | isLoggedIn + canUseWrite |
-| GET   | `/keys`                | KeyController::list                | isLoggedIn + canUseRead |
-| POST  | `/keys/verify`         | KeyController::verify              | isLoggedIn + canUseRead |
-| POST  | `/keys/add`            | KeyController::add                 | isLoggedIn + canUseWrite |
-| POST  | `/keys/remove`         | KeyController::remove              | isLoggedIn + canUseWrite |
-| POST  | `/keys/passwd`         | KeyController::passwd              | isLoggedIn + canUseWrite |
-| GET   | `/tasks`               | TaskController::list               | user != null |
-| GET   | `/tasks/view`          | TaskController::view               | user != null (своя задача или canManageProcesses) |
-| GET   | `/tasks/stream`        | TaskController::stream             | user != null (своя задача или canManageProcesses) |
-| GET   | `/tasks/status`        | TaskController::status             | user != null (своя задача или canManageProcesses) |
-| GET   | `/tasks/active`        | TaskController::active             | user != null |
-| POST  | `/tasks/cancel`        | TaskController::cancel             | user != null (своя задача или canManageProcesses) |
-| POST  | `/tasks/promote`       | TaskController::promote            | user != null (своя задача или canManageProcesses) |
-| POST  | `/snapshots/refresh`   | SnapshotController::refresh        | user != null + canUseRead |
-| GET   | `/snapshots/stats/result` | SnapshotController::statsResult | user != null + canUseRead |
-| GET   | `/users`               | UserController::list               | canManageUsers |
-| GET   | `/users/add`           | UserController::addForm            | canManageUsers |
-| POST  | `/users/add`           | UserController::add                | canManageUsers |
-| GET   | `/users/edit`          | UserController::editForm           | canManageUsers |
-| POST  | `/users/edit`          | UserController::edit               | canManageUsers |
-| POST  | `/users/delete`        | UserController::delete             | canManageUsers |
-| GET   | `/account/password`    | AccountController::passwordForm    | isYamlUser |
-| POST  | `/account/password`    | AccountController::changePassword  | isYamlUser |
+| GET   | `/`                    | Dashboard\DashboardController::index | Нет |
+| GET   | `/login`               | Auth\AuthController::loginForm      | Нет |
+| POST  | `/login`               | Auth\AuthController::login          | Нет |
+| GET   | `/logout`              | Auth\AuthController::logout         | Нет |
+| GET   | `/repositories`        | Repository\ListController::list     | user != null |
+| GET   | `/repositories/add`    | Repository\FormController::addForm  | isLoggedIn + canEdit |
+| POST  | `/repositories/add`    | Repository\FormController::add      | isLoggedIn + canEdit |
+| GET   | `/repositories/detail` | Repository\DetailController::detail | user != null + canUseRead |
+| GET   | `/repositories/edit`   | Repository\FormController::editForm | isLoggedIn + canEdit |
+| POST  | `/repositories/edit`   | Repository\FormController::edit     | isLoggedIn + canEdit |
+| POST  | `/repositories/check`  | Repository\ActionController::check  | isLoggedIn + canUseRead |
+| POST  | `/repositories/delete` | Repository\ActionController::delete | isLoggedIn + canDelete |
+| POST  | `/repositories/move`   | Repository\ActionController::move   | isLoggedIn + canMove |
+| POST  | `/repositories/backup` | Repository\ActionController::backup | isLoggedIn + canUseWrite |
+| POST  | `/repositories/select` | Repository\ActionController::select | user != null |
+| GET   | `/snapshots`           | Snapshot\ListController::list       | user != null + canUseRead |
+| GET   | `/snapshots/detail`    | Snapshot\DetailController::detail   | user != null + canUseRead |
+| POST  | `/snapshots/stats`     | Snapshot\StatsController::stats     | user != null + canUseRead |
+| POST  | `/snapshots/tag`       | Snapshot\ActionController::tag      | isLoggedIn + canUseWrite |
+| POST  | `/snapshots/copy`      | Snapshot\ActionController::copy     | isLoggedIn + canUseRead(src) + canUseWrite(dest) |
+| GET   | `/browse`              | Browse\BrowseController::tree       | user != null + canUseRead |
+| POST  | `/language`            | Language\LanguageController::switch | Нет |
+| POST  | `/cache/invalidate`    | Dashboard\DashboardController::invalidateCache | isLoggedIn + debug |
+| GET   | `/download`            | Export\ExportController::file       | user != null + canUseRead |
+| GET   | `/export`              | Export\ExportController::snapshot   | user != null + canUseRead |
+| GET   | `/maintenance`         | Maintenance\IndexController::index  | isLoggedIn + canUseWrite |
+| POST  | `/maintenance/connection` | Maintenance\IndexController::connection | isLoggedIn + canUseWrite |
+| POST  | `/maintenance/init`    | Maintenance\ActionController::init  | isLoggedIn + canInit + canUseWrite |
+| POST  | `/maintenance/check`   | Maintenance\ActionController::check | isLoggedIn + canUseWrite |
+| POST  | `/maintenance/prune`   | Maintenance\ActionController::prune | isLoggedIn + canUseWrite |
+| POST  | `/maintenance/rebuild-index` | Maintenance\ActionController::rebuildIndex | isLoggedIn + canUseWrite |
+| POST  | `/maintenance/unlock`  | Maintenance\ActionController::unlock | isLoggedIn + canUseWrite |
+| POST  | `/maintenance/forget`  | Maintenance\ActionController::forget | isLoggedIn + canUseWrite |
+| POST  | `/maintenance/stats`   | Maintenance\ActionController::stats | isLoggedIn + canUseWrite |
+| GET   | `/keys`                | Key\KeyController::list             | isLoggedIn + canUseRead |
+| POST  | `/keys/verify`         | Key\KeyController::verify           | isLoggedIn + canUseRead |
+| POST  | `/keys/add`            | Key\KeyController::add              | isLoggedIn + canUseWrite |
+| POST  | `/keys/remove`         | Key\KeyController::remove           | isLoggedIn + canUseWrite |
+| POST  | `/keys/passwd`         | Key\KeyController::passwd           | isLoggedIn + canUseWrite |
+| GET   | `/tasks`               | Task\TaskController::list           | user != null |
+| GET   | `/tasks/view`          | Task\TaskController::view           | user != null (своя задача или canManageProcesses) |
+| GET   | `/tasks/stream`        | Task\TaskController::stream         | user != null (своя задача или canManageProcesses) |
+| GET   | `/tasks/status`        | Task\TaskController::status         | user != null (своя задача или canManageProcesses) |
+| GET   | `/tasks/active`        | Task\TaskController::active         | user != null |
+| POST  | `/tasks/cancel`        | Task\TaskController::cancel         | user != null (своя задача или canManageProcesses) |
+| POST  | `/tasks/promote`       | Task\TaskController::promote        | user != null (своя задача или canManageProcesses) |
+| POST  | `/snapshots/refresh`   | Snapshot\ActionController::refresh  | user != null + canUseRead |
+| GET   | `/snapshots/stats/result` | Snapshot\StatsController::statsResult | user != null + canUseRead |
+| GET   | `/users`               | User\UserController::list           | canManageUsers |
+| GET   | `/users/add`           | User\UserController::addForm        | canManageUsers |
+| POST  | `/users/add`           | User\UserController::add            | canManageUsers |
+| GET   | `/users/edit`          | User\UserController::editForm       | canManageUsers |
+| POST  | `/users/edit`          | User\UserController::edit           | canManageUsers |
+| POST  | `/users/delete`        | User\UserController::delete         | canManageUsers |
+| GET   | `/account/password`    | Account\AccountController::passwordForm | isYamlUser |
+| POST  | `/account/password`    | Account\AccountController::changePassword | isYamlUser |
 
 ### Логика аутентификации
 
@@ -320,11 +334,13 @@ Fallback-правила для пользователей без секции `r
 
 ### CSRF-защита
 
-- `Security::csrfToken()` генерирует случайный токен и сохраняет в сессии
-- `Security::validateCsrf()` сравнивает с токеном сессии через `hash_equals` и удаляет токен после первой проверки — токен ОДНОРАЗОВЫЙ
-- Все формы содержат скрытое поле `_csrf_token`
-- Все JSON-ответы ДОЛЖНЫ возвращать поле `_csrf_token` с новым токеном — фронтенд обновляет `data-csrf` на всех элементах
-- Если JSON-ответ не вернул новый токен, следующий POST получит «Invalid security token»
+- `Security::csrfToken()` генерирует случайный токен и сохраняет его в сессии
+- `Security::validateCsrf()` сравнивает с токеном сессии через `hash_equals` и **НЕ гасит токен** — токен session-bound (synchronizer token pattern), живёт всю сессию
+- **Почему не одноразовый**: AJAX-интерфейс держит токен в нескольких носителях (`data-csrf` на кнопках/дропдаунах и `input[name="_csrf_token"]` в формах) и автополлит `/tasks/active`; пользователь работает в нескольких вкладках на одной сессии. Одноразовый токен при успешном POST в одном месте мгновенно делал остальные носители/вкладки невалидными → массовые 403 «Invalid security token». Session-bound токен эту рассинхронизацию убирает и остаётся достаточной защитой
+- Ротация токена — только на смену привилегий: `Security::rotate()` из `Authenticator::login()`/`logout()`
+- **Cookie сессии** (`Session::start()`): `SameSite=Lax` + `HttpOnly` (Secure — при HTTPS) + `session.use_strict_mode=1`. `SameSite=Lax` — основная браузерная защита от CSRF (cross-site POST не несёт cookie) и работает независимо от CSRF-токена (defense in depth).
+- Все формы содержат скрытое поле `_csrf_token`; все JSON-ответы возвращают `_csrf_token` (то же значение) для единообразия фронтенда
+- Все JSON-ответы ДОЛЖНЫ возвращать поле `_csrf_token`. Фронтенд синхронизирует носители (`data-csrf` + `input[name="_csrf_token"]`) — для session-bound токена это no-op, но правило оставляем ради совместимости и будущей ротации
 - Исключение: `/repositories/select` — без CSRF, только меняет сессию, модификации данных нет
 
 ### Режим отладки и логирование
@@ -477,6 +493,16 @@ Fallback-правила для пользователей без секции `r
   «Готово — обновить данные». В шапке — индикатор `#task-tray`, опрашивает
   `/tasks/active` только при видимой вкладке. **Серверных `return_url` нет** —
   навигация на фронтенде.
+  - **Контракт отказа для AJAX**: если запрос с `X-Requested-With`/`Accept: application/json`
+  отклоняется (истёк CSRF, нет прав, репозиторий не найден) — ответ обязан быть JSON
+  `{ok:false, error}` (см. `BaseController::requireCsrf()/requireRepo()/abort()` — они сами
+  определяют AJAX), а НЕ редирект/HTML. Иначе `fetch` не разберёт тело и покажет
+  бесполезное «не удалось загрузить вывод задачи» вместо настоящей причины.
+  - **Провал постановки задачи** (tsp недоступен, `id < 0`) — тоже JSON-ошибка
+  (`BaseController::respondTaskStarted()` → `respondTaskFailed()`), а не метка:
+  открывать модалку для несуществующей задачи нельзя.
+  - **`respondTaskStarted()` принимает результат `{label, id}`** сервиса, а не строку
+  метки: так проверка «задача реально поставлена» не забывается на каждом роуте.
 - **Очередь показывается честно**: `queued` — «в очереди, позиция N»
   (`TspTaskManager::queuePosition()`) + кнопка «поднять в начало» (`tsp -u`).
 - **`Session::close()` — только последним действием запроса** (перед стримингом/
@@ -653,6 +679,7 @@ REST/CLI работают только с `system()` + `request()` (сессии
 
 ### Интерфейс
 
+- **CSRF session-bound + `data-ajax-task`.** Токен живёт всю сессию и не гасится при POST (раньше был одноразовый — это и давало массовые 403 при нескольких вкладках/носителях). Фронтенд всё равно синхронизирует носители (`window.TaskUI.updateCsrf`), но это no-op. AJAX-эндпоинты при отказе обязаны отвечать JSON, а не редиректом — иначе UI показывает «не удалось загрузить вывод задачи» вместо причины (см. контракт отказа в разделе про tsp).
 - **`current_repo` в сессии переживает между вкладками.** При открытии новой вкладки дашборд показывает данные последнего выбранного репо. Дашборд делает `redirect('/repositories')`, сбрасывая `current_repo`.
 - **Стриминг (`Content-Type: text/plain`) на отдельной вкладке даёт чёрную страницу без навигации.** Поэтому тяжёлые операции показывают вывод в модалке поверх текущей страницы (`fetch`/`ReadableStream`), а не редиректят в `/tasks/stream`; страница под модалкой не меняется.
 - **`restic dump /` создаёт tar-архив**, который нужно отдавать с `Content-Type: application/x-tar`
@@ -875,6 +902,8 @@ repositories:
 6. **Интеграционные тесты должны проходить через те же сервисы, что и веб-интерфейс.** Если веб-интерфейс вызывает `RepositoryService::init()`, интеграционный тест должен вызывать именно его, а не `CommandRunner` напрямую. Прямой вызов `CommandRunner` в обход сервиса маскирует ошибки в построении команд (например, неверный порядок глобальных флагов restic).
 
 7. **Часто используемые операции должны иметь выделенный метод ядра.** Построение сложной команды restic (глобальные флаги, переменные окружения, пароль/--insecure-no-password) не должно дублироваться в контроллерах и тестах — оно инкапсулируется в сервисном методе (например, `RepositoryService::init()`). При этом важен разумный баланс: не стоит создавать отдельный метод для каждой однострочной команды, если она вызывается один раз. Критерий: если логика построения команды используется более чем в одном месте ИЛИ содержит нетривиальные правила порядка флагов — выносить в метод ядра.
+
+8. **HTTP-контракт AJAX-эндпоинтов покрывать интеграционным тестом.** Эндпоинты, которые фронтенд вызывает через `fetch` (запуск фоновых задач `/maintenance/*`, `/repositories/backup`, `/snapshots/stats|copy`, `/tasks/*`), на AJAX обязаны отвечать JSON и при успехе, и при отказе. Контроллеры юнит-тестами не покрываются (статика `App`, `exit`), поэтому именно интеграционный тест ловит регресс «AJAX → HTML/редирект». Образец — `tests/Integration/TaskEndpointContractTest.php`.
 
 ### Чего следует избегать
 
