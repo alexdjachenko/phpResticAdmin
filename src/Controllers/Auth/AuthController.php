@@ -12,6 +12,7 @@ namespace App\Controllers\Auth;
 
 use App\Controllers\BaseController;
 use App\Core\App;
+use App\Helpers\Mask;
 
 class AuthController extends BaseController
 {
@@ -40,7 +41,7 @@ class AuthController extends BaseController
         $request = $this->request();
         $auth = App::auth();
 
-        App::log('POST data: ' . json_encode($request->allPost()), 1);
+        App::log('POST data: ' . json_encode(Mask::data($request->allPost())), 1);
 
         $token = (string) $request->post('_csrf_token', '');
         App::log('CSRF token from form: ' . ($token !== '' ? 'present' : 'EMPTY'), 1);

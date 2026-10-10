@@ -114,7 +114,7 @@ src/
   Restic/
     CommandRunner.php    # run() + runStream() + runStreamWithHeaders() — обёртка proc_open()
     RepositoryService.php # testConnection(), init(), backup(), backupSync()
-    SnapshotService.php   # listSnapshots(), getSnapshotById(), getStats(), parseStatsOutput(), addTag(), removeTag(), copy()
+    SnapshotService.php   # listSnapshots(), getSnapshotById(), getStats(), parseStatsOutput(), addTag(), removeTag()
     MaintenanceService.php # check(), prune(), rebuildIndex(), unlock(), forget(), stats()
     KeyService.php         # listKeys(), addKey(), removeKey(), changePassword()
     ResticTaskService.php  # запуск тяжёлых restic-операций в фоне через tsp

@@ -11,6 +11,7 @@ namespace App\Tests\Integration;
 use App\Restic\CommandRunner;
 use App\Restic\MaintenanceService;
 use App\Restic\RepositoryService;
+use App\Restic\ResticCommandBuilder;
 use App\Restic\SnapshotService;
 use PHPUnit\Framework\TestCase;
 
@@ -28,8 +29,8 @@ use PHPUnit\Framework\TestCase;
  *      - backup-3: добавлен file_c.txt (50 байт)
  *
  *   2. Статистика (stats) — через SnapshotService::getStats.
- *   3. Содержимое (ls) — через CommandRunner (нет отдельного сервиса).
- *   4. Экспорт (dump) — через CommandRunner.
+ *   3. Содержимое (ls) — через ResticCommandBuilder (тот же путь, что в BrowseController).
+ *   4. Экспорт (dump) — через ResticCommandBuilder (тот же путь, что в ExportController).
  *   5. Обслуживание (forget + check) — через MaintenanceService.
  *
  * Критерий успеха:
@@ -288,8 +289,8 @@ class SnapshotEndToEndTest extends TestCase
     {
         $snapId = $this->snapshots[2]['id'];
         $result = $this->runner->run(
-            ['restic', '--insecure-no-password', '--repo', $this->repoDir, 'dump', $snapId, $this->dataDir . '/dir1/file_a.txt'],
-            []
+            ResticCommandBuilder::buildCommand(['dump', $snapId, $this->dataDir . '/dir1/file_a.txt'], $this->repo),
+            ResticCommandBuilder::buildEnv($this->repo)
         );
 
         $this->assertSame(0, $result['exitCode'], 'dump file_a.txt should succeed: ' . $result['stderr']);
@@ -303,8 +304,8 @@ class SnapshotEndToEndTest extends TestCase
     {
         $snapId = $this->snapshots[1]['id'];
         $result = $this->runner->run(
-            ['restic', '--insecure-no-password', '--repo', $this->repoDir, 'dump', $snapId, '/'],
-            []
+            ResticCommandBuilder::buildCommand(['dump', $snapId, '/'], $this->repo),
+            ResticCommandBuilder::buildEnv($this->repo)
         );
 
         $this->assertSame(0, $result['exitCode'], 'dump / should succeed: ' . $result['stderr']);
@@ -380,8 +381,8 @@ class SnapshotEndToEndTest extends TestCase
     private function lsPath(string $snapId, string $path): array
     {
         $result = $this->runner->run(
-            ['restic', '--insecure-no-password', '--repo', $this->repoDir, 'ls', '--json', $snapId, $path],
-            []
+            ResticCommandBuilder::buildCommand(['ls', '--json', $snapId, $path], $this->repo),
+            ResticCommandBuilder::buildEnv($this->repo)
         );
 
         $this->assertSame(0, $result['exitCode'], "ls $path should succeed: " . ($result['stderr'] ?? ''));

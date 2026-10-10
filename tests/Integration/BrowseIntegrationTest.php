@@ -10,6 +10,7 @@ namespace App\Tests\Integration;
 
 use App\Restic\CommandRunner;
 use App\Restic\RepositoryService;
+use App\Restic\ResticCommandBuilder;
 use App\Restic\SnapshotService;
 use PHPUnit\Framework\TestCase;
 
@@ -43,6 +44,8 @@ class BrowseIntegrationTest extends TestCase
     private CommandRunner $runner;
     /** @var string ID снапшота для тестов browse */
     private string $snapId;
+    /** @var array<string, mixed> Конфигурация тестового репозитория */
+    private array $repo;
 
     protected function setUp(): void
     {
@@ -60,6 +63,7 @@ class BrowseIntegrationTest extends TestCase
             'path' => $this->repoDir,
             'password' => null,
         ];
+        $this->repo = $repo;
 
         // Инициализируем репозиторий
         $repoService = new RepositoryService($this->runner);
@@ -97,8 +101,8 @@ class BrowseIntegrationTest extends TestCase
     public function testBrowseRoot(): void
     {
         $result = $this->runner->run(
-            ['restic', '--insecure-no-password', '--repo', $this->repoDir, 'ls', '--json', $this->snapId, '/'],
-            []
+            ResticCommandBuilder::buildCommand(['ls', '--json', $this->snapId, '/'], $this->repo),
+            ResticCommandBuilder::buildEnv($this->repo)
         );
 
         $this->assertSame(0, $result['exitCode'], 'Browse should succeed: ' . $result['stderr']);
@@ -120,8 +124,8 @@ class BrowseIntegrationTest extends TestCase
         $dataDir = $this->tmpDir . '/data';
 
         $result = $this->runner->run(
-            ['restic', '--insecure-no-password', '--repo', $this->repoDir, 'ls', '--json', $this->snapId, $dataDir . '/a/b'],
-            []
+            ResticCommandBuilder::buildCommand(['ls', '--json', $this->snapId, $dataDir . '/a/b'], $this->repo),
+            ResticCommandBuilder::buildEnv($this->repo)
         );
 
         $this->assertSame(0, $result['exitCode'], 'Browse subdir should succeed: ' . $result['stderr']);

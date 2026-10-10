@@ -10,6 +10,7 @@ namespace App\Tests\Integration;
 
 use App\Restic\CommandRunner;
 use App\Restic\RepositoryService;
+use App\Restic\ResticCommandBuilder;
 use App\Restic\SnapshotService;
 use PHPUnit\Framework\TestCase;
 
@@ -45,6 +46,8 @@ class ExportEndToEndTest extends TestCase
     private CommandRunner $runner;
     /** @var string ID снапшота */
     private string $snapId;
+    /** @var array<string, mixed> Конфигурация тестового репозитория */
+    private array $repo;
 
     protected function setUp(): void
     {
@@ -68,6 +71,7 @@ class ExportEndToEndTest extends TestCase
             'path' => $this->repoDir,
             'password' => null,
         ];
+        $this->repo = $repo;
 
         // Инициализируем репозиторий
         $repoService = new RepositoryService($this->runner);
@@ -98,8 +102,8 @@ class ExportEndToEndTest extends TestCase
     public function testDumpSingleFileReturnsCorrectContent(): void
     {
         $result = $this->runner->run(
-            ['restic', '--insecure-no-password', '--repo', $this->repoDir, 'dump', $this->snapId, $this->dataDir . '/dir/file.txt'],
-            []
+            ResticCommandBuilder::buildCommand(['dump', $this->snapId, $this->dataDir . '/dir/file.txt'], $this->repo),
+            ResticCommandBuilder::buildEnv($this->repo)
         );
 
         $this->assertSame(0, $result['exitCode'], 'dump should succeed: ' . $result['stderr']);
@@ -112,8 +116,8 @@ class ExportEndToEndTest extends TestCase
     public function testDumpSnapshotReturnsTarArchive(): void
     {
         $result = $this->runner->run(
-            ['restic', '--insecure-no-password', '--repo', $this->repoDir, 'dump', $this->snapId, '/'],
-            []
+            ResticCommandBuilder::buildCommand(['dump', $this->snapId, '/'], $this->repo),
+            ResticCommandBuilder::buildEnv($this->repo)
         );
 
         $this->assertSame(0, $result['exitCode'], 'dump / should succeed: ' . $result['stderr']);
@@ -128,8 +132,8 @@ class ExportEndToEndTest extends TestCase
     public function testDumpNonexistentFileFails(): void
     {
         $result = $this->runner->run(
-            ['restic', '--insecure-no-password', '--repo', $this->repoDir, 'dump', $this->snapId, '/nonexistent.txt'],
-            []
+            ResticCommandBuilder::buildCommand(['dump', $this->snapId, '/nonexistent.txt'], $this->repo),
+            ResticCommandBuilder::buildEnv($this->repo)
         );
 
         $this->assertNotSame(0, $result['exitCode'], 'dump of nonexistent file should fail');

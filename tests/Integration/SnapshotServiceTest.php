@@ -16,24 +16,22 @@ use PHPUnit\Framework\TestCase;
 /**
  * Интеграционный тест SnapshotService (работа со снапшотами restic).
  *
- * Цель: проверить операции listSnapshots, getSnapshot, addTag, removeTag,
- *       copy (копирование снапшота между репозиториями) при реальном
- *       взаимодействии с restic CLI.
+ * Цель: проверить операции listSnapshots, getSnapshot, addTag, removeTag
+ *       при реальном взаимодействии с restic CLI.
  *
  * Сценарий:
  *   1. Инициализируется репозиторий, создаётся тестовый файл и backup.
  *   2. Тестируется listSnapshots (структура ответа, обязательные поля).
  *   3. Тестируется getSnapshot по short_id.
  *   4. Тестируется добавление и удаление тегов (addTag/removeTag).
- *   5. Тестируется копирование снапшота во второй репозиторий.
- *   6. Тестируется копирование с пустым ID (должно вернуть ошибку).
  *
  * Критерий успеха:
  *   - listSnapshots возвращает массив с ключами id, short_id, time, paths, summary.
  *   - getSnapshot находит снапшот по short_id.
  *   - Тег добавляется и удаляется (проверяется через перечитывание списка).
- *   - Копирование создаёт снапшот в целевом репозитории.
- *   - Копирование с пустым ID возвращает ok=false.
+ *
+ * Примечание: фоновое копирование снепшота (ResticTaskService::startSnapshotCopy)
+ *       покрыто юнит-тестом ResticTaskServiceTest (порядок флагов, env, -E).
  *
  * Требует: restic в PATH.
  */
@@ -178,81 +176,6 @@ class SnapshotServiceTest extends TestCase
         $snapshots = $service->listSnapshots($this->repo);
         $tags = $snapshots[0]['tags'] ?? [];
         $this->assertNotContains('test-tag-xyz', $tags, 'Tag should be removed');
-    }
-
-    /**
-     * Проверяет копирование снапшота из одного репозитория в другой.
-     *
-     * Сценарий: создаётся второй (пустой) репозиторий, в него копируется
-     *            снапшот из основного. После копирования целевой репозиторий
-     *            должен содержать хотя бы один снапшот.
-     */
-    public function testCopySnapshot(): void
-    {
-        $runner = new CommandRunner();
-
-        // Arrange: создаём и инициализируем целевой репозиторий
-        $destDir = $this->tmpDir . '/dest-repo';
-        mkdir($destDir, 0777, true);
-
-        $repoService = new RepositoryService($runner);
-        $initResult = $repoService->init([
-            'id' => 'test-dest',
-            'name' => 'Dest',
-            'type' => 'local',
-            'path' => $destDir,
-            'password' => null,
-        ]);
-
-        if (!$initResult['ok']) {
-            $this->markTestSkipped('Failed to init dest restic repo: ' . $initResult['error']);
-        }
-
-        $service = new SnapshotService($runner);
-
-        // Получаем ID снапшота из исходного репозитория
-        $snapshots = $service->listSnapshots($this->repo);
-        $this->assertNotEmpty($snapshots, 'Source repo should have at least one snapshot');
-        $snapId = $snapshots[0]['id'];
-
-        $destRepo = [
-            'id' => 'test-dest',
-            'name' => 'Dest',
-            'type' => 'local',
-            'path' => $destDir,
-            'password' => null,
-        ];
-
-        // Act: копируем снапшот
-        $result = $service->copy($this->repo, $destRepo, $snapId);
-
-        // Assert: копирование успешно, в целевом репо есть снапшот
-        $this->assertTrue($result['ok'], 'Copy should succeed: ' . ($result['error'] ?? ''));
-
-        $destSnapshots = $service->listSnapshots($destRepo);
-        $this->assertNotEmpty($destSnapshots, 'Dest repo should have at least one snapshot after copy');
-    }
-
-    /**
-     * Проверяет, что copy с пустым snapshot ID возвращает ошибку.
-     */
-    public function testCopySnapshotWithEmptyId(): void
-    {
-        $service = new SnapshotService(new CommandRunner());
-        $destRepo = [
-            'id' => 'test-dest',
-            'name' => 'Dest',
-            'type' => 'local',
-            'path' => '/nonexistent',
-            'password' => null,
-        ];
-
-        // Act: копирование с пустым ID
-        $result = $service->copy($this->repo, $destRepo, '');
-
-        // Assert: должно вернуть ошибку с непустым сообщением
-        $this->assertFalse($result['ok']);
-        $this->assertNotEmpty($result['error'], 'Error message should not be empty for empty snapshot ID');
     }
 
     private function removeDir(string $dir): void

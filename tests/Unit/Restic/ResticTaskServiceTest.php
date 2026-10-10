@@ -29,6 +29,8 @@ use PHPUnit\Framework\TestCase;
  * Сценарий: TspClient замокан (перехватываем enqueue), реальный TspTaskManager;
  *       username фиксируется через сессию. Для каждой операции проверяются
  *       метка (op) и подкоманда restic; для JSON-задач — флаг отдельного stderr.
+ *       Для копирования снепшота отдельно проверяются порядок --repo/--from-repo,
+ *       пароли обоих бэкендов в env и флаг tsp -E.
  *
  * Критерий успеха: все assert проходят.
  */
@@ -160,18 +162,103 @@ class ResticTaskServiceTest extends TestCase
         $this->assertStartedWith('init', ['init']);
     }
 
-    /** copy — op copysnap (глобальная от source, но с repoId). */
-    public function testStartSnapshotCopy(): void
+    /**
+     * copy — порядок команд: цель в --repo (до copy), источник в --from-repo (после),
+     * id снепшота — последним. Метка несёт op copysnap и repoId источника.
+     */
+    public function testStartSnapshotCopyBuildsCommandOrder(): void
     {
-        $dest = ['id' => 'r2', 'type' => 'local', 'local_path' => '/backups/dest', 'password' => null];
-        $this->service()->startSnapshotCopy($this->repo(), $dest, 'abcd1234');
+        $source = ['id' => 'r1', 'type' => 'local', 'local_path' => '/backups/src', 'password' => 'srcpass'];
+        $dest = ['id' => 'r2', 'type' => 'local', 'local_path' => '/backups/dest', 'password' => 'dstpass'];
+
+        $this->service()->startSnapshotCopy($source, $dest, 'abcd1234');
 
         $this->assertCount(1, $this->captured);
-        $parsed = TaskLabel::parse($this->captured[0]['label']);
+        $captured = $this->captured[0];
+
+        // Метка: op copysnap, repoId источника.
+        $parsed = TaskLabel::parse($captured['label']);
         $this->assertNotNull($parsed);
         $this->assertSame('copysnap', $parsed['op']);
-        $this->assertContains('copy', $this->captured[0]['command']);
-        $this->assertContains('abcd1234', $this->captured[0]['command']);
+        $this->assertSame('r1', $parsed['repoId']);
+
+        // Точный порядок: restic --repo <dest> copy --from-repo <source> <id>.
+        $this->assertSame(
+            ['restic', '--repo', '/backups/dest', 'copy', '--from-repo', '/backups/src', 'abcd1234'],
+            $captured['command']
+        );
+
+        // Пароли у обоих репозиториев → insecure-флагов нет.
+        $this->assertNotContains('--insecure-no-password', $captured['command']);
+        $this->assertNotContains('--from-insecure-no-password', $captured['command']);
+
+        // -E: restic пишет отчёт/ошибки в stderr, стрим читает отдельный `.e`.
+        $this->assertTrue($captured['separateStderr'], 'copy must start with tsp -E');
+    }
+
+    /** copy — env: пароль цели в RESTIC_PASSWORD, источник в RESTIC_FROM_PASSWORD. */
+    public function testStartSnapshotCopyPassesBothBackendCredentials(): void
+    {
+        $source = ['id' => 'r1', 'type' => 'local', 'local_path' => '/backups/src', 'password' => 'srcpass'];
+        $dest = ['id' => 'r2', 'type' => 'local', 'local_path' => '/backups/dest', 'password' => 'dstpass'];
+
+        $this->service()->startSnapshotCopy($source, $dest, 'abcd1234');
+
+        $env = $this->captured[0]['env'];
+        $this->assertSame('dstpass', $env['RESTIC_PASSWORD'], 'dest credentials drive --repo');
+        $this->assertSame('srcpass', $env['RESTIC_FROM_PASSWORD'], 'source credentials drive --from-repo');
+    }
+
+    /** copy без паролей — insecure-флаги по обе стороны, паролей в env нет. */
+    public function testStartSnapshotCopyWithoutPasswordsUsesInsecureFlags(): void
+    {
+        $source = ['id' => 'r1', 'type' => 'local', 'local_path' => '/backups/src', 'password' => null];
+        $dest = ['id' => 'r2', 'type' => 'local', 'local_path' => '/backups/dest', 'password' => null];
+
+        $this->service()->startSnapshotCopy($source, $dest, 'abcd1234');
+
+        $command = $this->captured[0]['command'];
+        $this->assertContains('--insecure-no-password', $command);
+        $this->assertContains('--from-insecure-no-password', $command);
+
+        // Флаг цели (глобальный) идёт ДО подкоманды, флаг источника — ПОСЛЕ.
+        $copyPos = array_search('copy', $command, true);
+        $destFlag = array_search('--insecure-no-password', $command, true);
+        $srcFlag = array_search('--from-insecure-no-password', $command, true);
+        $this->assertIsInt($copyPos);
+        $this->assertIsInt($destFlag);
+        $this->assertIsInt($srcFlag);
+        $this->assertLessThan($copyPos, $destFlag, '--insecure-no-password must precede `copy`');
+        $this->assertGreaterThan($copyPos, $srcFlag, '--from-insecure-no-password must follow `copy`');
+
+        $env = $this->captured[0]['env'];
+        $this->assertArrayNotHasKey('RESTIC_PASSWORD', $env);
+        $this->assertArrayNotHasKey('RESTIC_FROM_PASSWORD', $env);
+    }
+
+    /**
+     * copy объединяет env обоих бэкендов: цель перекрывает источник по общим ключам
+     * (один набор backend-переменных на оба репо — документированное ограничение restic),
+     * а AWS_ENDPOINT (метаданные приложения) в restic не уходит.
+     */
+    public function testStartSnapshotCopyMergesBackendEnvs(): void
+    {
+        $source = [
+            'id' => 'r1', 'type' => 's3', 's3_bucket' => 'src-bucket', 'password' => 'srcpass',
+            'env' => ['AWS_ACCESS_KEY_ID' => 'SRCKEY', 'AWS_ENDPOINT' => 'https://src.example'],
+        ];
+        $dest = [
+            'id' => 'r2', 'type' => 's3', 's3_bucket' => 'dst-bucket', 'password' => 'dstpass',
+            'env' => ['AWS_ACCESS_KEY_ID' => 'DSTKEY'],
+        ];
+
+        $this->service()->startSnapshotCopy($source, $dest, 'abcd1234');
+
+        $env = $this->captured[0]['env'];
+        $this->assertSame('DSTKEY', $env['AWS_ACCESS_KEY_ID'], 'dest backend env overrides source');
+        $this->assertArrayNotHasKey('AWS_ENDPOINT', $env, 'AWS_ENDPOINT is app metadata, not passed to restic');
+        $this->assertSame('srcpass', $env['RESTIC_FROM_PASSWORD']);
+        $this->assertSame('dstpass', $env['RESTIC_PASSWORD']);
     }
 
     /** stats снепшота — op snapstats, отдельный stderr (JSON). */

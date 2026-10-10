@@ -146,7 +146,10 @@ $pollInterval = (int) (\App\Core\App::configStorage()->loadSettings()['task_poll
         })
         .then(function (r) { return r.json(); })
         .then(function (data) {
-            if (data._csrf_token) { btn.dataset.csrf = data._csrf_token; }
+            if (data._csrf_token) {
+                btn.dataset.csrf = data._csrf_token;
+                if (window.TaskUI && window.TaskUI.updateCsrf) { window.TaskUI.updateCsrf(data._csrf_token); }
+            }
             if (!data.ok || !data.label) {
                 btn.disabled = false;
                 dataDiv.insertAdjacentHTML('beforeend', '<p class="flash flash-error">' + (data.error || '') + '</p>');
@@ -227,6 +230,7 @@ $pollInterval = (int) (\App\Core\App::configStorage()->loadSettings()['task_poll
         .then(function(data) {
             if (data._csrf_token) {
                 copyBtn.dataset.csrf = data._csrf_token;
+                if (window.TaskUI && window.TaskUI.updateCsrf) { window.TaskUI.updateCsrf(data._csrf_token); }
             }
             copyConfirm.disabled = false;
 
