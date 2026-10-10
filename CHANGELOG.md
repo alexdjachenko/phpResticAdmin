@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.8.1](https://github.com/alexdjachenko/phpResticAdmin/compare/v0.8.0...v0.8.1) (2026-10-10)
+
+
+### Bug Fixes
+
+* **auth:** mask credentials in login debug log ([52f9fc1](https://github.com/alexdjachenko/phpResticAdmin/commit/52f9fc156a79abb52be5a90a9a970d0154913c61))
+* **auth:** mask credentials in login debug log ([cb1173f](https://github.com/alexdjachenko/phpResticAdmin/commit/cb1173f51af8f30b03cb9ea14f7ceee09d42b2ac))
+* **csrf:** make CSRF token session-bound (stop one-time rotation) ([c7103e5](https://github.com/alexdjachenko/phpResticAdmin/commit/c7103e5240580fde6818abbdd15e27412875de6e))
+* **csrf:** session-bound CSRF token + hardened session cookie ([cc768b1](https://github.com/alexdjachenko/phpResticAdmin/commit/cc768b105cae9639c5174493545990b09123a5fb))
+* **tasks,ui:** show restic stderr and fix "network error" on snapshot copy ([6829a87](https://github.com/alexdjachenko/phpResticAdmin/commit/6829a87d7ae9e6a26e65884c490effee634bec26))
+* **tasks:** return JSON on AJAX failure and propagate single-use CSRF to forms ([1a06f59](https://github.com/alexdjachenko/phpResticAdmin/commit/1a06f5910d62f237d811e59c466e49fe81f610d6))
+* **tasks:** show restic stderr and fix empty task output ([a800d44](https://github.com/alexdjachenko/phpResticAdmin/commit/a800d448a66bb1f1b0414e689f8488546ace26a8))
+* **ui:** send Content-Type on data-ajax-task fetch (task buttons were 403) ([4fe105b](https://github.com/alexdjachenko/phpResticAdmin/commit/4fe105ba24d1b467d34c6d84133f1b27133e0993))
+
 ## [0.8.0](https://github.com/alexdjachenko/phpResticAdmin/compare/v0.7.4...v0.8.0) (2026-10-07)
 
 
