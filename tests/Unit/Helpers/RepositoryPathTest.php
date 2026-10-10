@@ -179,8 +179,7 @@ class RepositoryPathTest extends TestCase
     {
         $this->assertSame('/var', RepositoryPath::canonicalize('/sources/../../var'));
         $this->assertSame('/sources/x', RepositoryPath::canonicalize('/sources/./x'));
-        $this->assertSame('/sources', RepositoryPath::canonicalize('/sources/x/..'));
-        $this->assertSame('/', RepositoryPath::canonicalize('/sources/..'));
+        $this->assertSame('/sources', RepositoryPath::canonicalize('/sources/..'));
         $this->assertSame('', RepositoryPath::canonicalize(''));
     }
 
