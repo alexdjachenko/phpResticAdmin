@@ -15,16 +15,15 @@ use PHPUnit\Framework\TestCase;
 /**
  * Юнит-тест Security (CSRF-токены и экранирование HTML).
  *
- * Цель: проверить генерацию, валидацию и переиспользуемость CSRF-токенов
- *       (session-bound), ротацию и корректность htmlspecialchars-экранирования.
+ * Цель: проверить генерацию, валидацию и одноразовость CSRF-токенов,
+ *       а также корректность htmlspecialchars-экранирования.
  *
  * Сценарий:
  *   1. csrfToken(): генерация возвращает непустую строку, повторный вызов — тот же токен.
  *   2. validateCsrf(): валидный токен → true, невалидный → false.
  *   3. validateCsrf() без предварительной генерации → false.
- *   4. Токен НЕ гасится при проверке — один и тот же токен валиден многократно.
- *   5. rotate() выпускает новый токен (старый перестаёт быть валидным).
- *   6. h(): экранирование HTML-сущностей.
+ *   4. Токен потребляется после первой проверки (одноразовость).
+ *   5. h(): экранирование HTML-сущностей.
  *
  * Критерий успеха: все проверки проходят.
  */
@@ -85,31 +84,15 @@ class SecurityTest extends TestCase
         $this->assertFalse($this->security->validateCsrf('anything'));
     }
 
-    /**
-     * Токен переиспользуемый: один и тот же токен проходит проверку многократно.
-     *
-     * Это ключевое свойство session-bound токена: несколько вкладок и носителей
-     * делят один токен, и успешный POST не ломает остальные.
-     */
-    public function testValidateCsrfTokenIsReusableWithinSession(): void
+    /** Токен потребляется (удаляется) после первой успешной проверки. */
+    public function testValidateCsrfConsumesTokenOnFirstValidation(): void
     {
         $token = $this->security->csrfToken();
 
-        $this->assertTrue($this->security->validateCsrf($token), 'first validation must pass');
-        $this->assertTrue($this->security->validateCsrf($token), 'same token must stay valid (session-bound)');
-    }
-
-    /** rotate() выпускает новый токен, старый становится невалидным. */
-    public function testRotateIssuesNewToken(): void
-    {
-        $old = $this->security->csrfToken();
-
-        $this->security->rotate();
-        $new = $this->security->csrfToken();
-
-        $this->assertNotSame($old, $new, 'rotate must issue a different token');
-        $this->assertFalse($this->security->validateCsrf($old), 'old token must not validate after rotation');
-        $this->assertTrue($this->security->validateCsrf($new));
+        // Первая проверка — успешна
+        $this->assertTrue($this->security->validateCsrf($token));
+        // Вторая проверка с тем же токеном — неуспешна (токен уже удалён)
+        $this->assertFalse($this->security->validateCsrf($token));
     }
 
     /** Экранирование HTML: <, >, &, " */

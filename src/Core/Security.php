@@ -17,20 +17,11 @@ class Security
         $this->session = $session;
     }
 
-    /**
-     * Токен CSRF, привязанный к сессии (synchronizer token pattern).
-     *
-     * Токен живёт всю сессию и НЕ меняется на каждый запрос — это устраняет
-     * рассинхронизацию между носителями (data-csrf, скрытые поля форм) и между
-     * вкладками: несколько вкладок делят одну сессию, и любой успешный POST в
-     * одной вкладке не должен ломать токен в другой. Ротация — только при
-     * входе/выходе (см. Authenticator).
-     */
     public function csrfToken(): string
     {
         $token = $this->session->get('_csrf_token');
 
-        if (!is_string($token) || $token === '') {
+        if ($token === null) {
             $token = bin2hex(random_bytes(32));
             $this->session->set('_csrf_token', $token);
         }
@@ -38,33 +29,17 @@ class Security
         return $token;
     }
 
-    /**
-     * Проверяет CSRF-токен.
-     *
-     * Сравнение через hash_equals; токен при проверке НЕ гасится (переиспользуемый).
-     * Раньше токен был одноразовым, но AJAX-интерфейс с автополлингом задач и
-     * несколькими носителями/вкладками постоянно ловил рассинхронизацию: успешный
-     * POST ротировал токен, а другой носитель оставался со старым → следующий
-     * запрос падал с «Invalid security token». Session-bound токен эту проблему
-     * убирает и остаётся достаточной защитой.
-     */
     public function validateCsrf(string $token): bool
     {
         $stored = $this->session->get('_csrf_token');
 
-        if (!is_string($stored) || $stored === '') {
+        if ($stored === null || $stored === '') {
             return false;
         }
 
-        return hash_equals($stored, $token);
-    }
-
-    /**
-     * Ротация токена (вход/выход). Ближайший рендер выпустит новый токен.
-     */
-    public function rotate(): void
-    {
         $this->session->remove('_csrf_token');
+
+        return hash_equals($stored, $token);
     }
 
     public function h(string $value): string

@@ -320,7 +320,10 @@
                 var url = form.getAttribute('action') || window.location.pathname;
                 fetch(url, {
                     method: 'POST',
-                    headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
+                    // Content-Type обязателен: тело — urlencoded-СТРОКА. Без него
+                    // браузер помечает тело как text/plain, PHP не заполняет $_POST,
+                    // и CSRF-токен приходит пустым ('Invalid security token').
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
                     body: new URLSearchParams(new FormData(form)).toString()
                 })
                 .then(function (r) { return r.json(); })
