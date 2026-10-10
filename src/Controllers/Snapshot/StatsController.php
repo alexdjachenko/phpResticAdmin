@@ -45,11 +45,8 @@ class StatsController extends BaseController
 
         $started = App::resticTasks()->startSnapshotStats($repo, $snapId);
 
-        $this->jsonOk([
-            'label' => $started['label'],
-            'title' => __('tasks.op_snapstats'),
-            'stream_url' => '/tasks/stream?label=' . urlencode($started['label']),
-        ]);
+        // respondTaskStarted() сам вернёт ошибку, если задача не поставлена.
+        $this->respondTaskStarted($started, __('tasks.op_snapstats'));
     }
 
     /**
@@ -84,7 +81,15 @@ class StatsController extends BaseController
 
         $result = $tasks->catResult($user, $label, $privileged);
         if ($result === null || $result['exitCode'] !== 0) {
-            $this->jsonError(__('snap.stats_failed'), 200);
+            // Показываем настоящую причину из stderr задачи, а не общее сообщение.
+            $detail = '';
+            if (is_array($result)) {
+                $detail = trim((string) ($result['stderr'] ?? ''));
+                if ($detail === '') {
+                    $detail = trim((string) ($result['output'] ?? ''));
+                }
+            }
+            $this->jsonError($detail !== '' ? $detail : __('snap.stats_failed'), 200);
             return;
         }
 

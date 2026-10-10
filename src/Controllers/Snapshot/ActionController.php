@@ -106,11 +106,9 @@ class ActionController extends BaseController
 
         $started = App::resticTasks()->startSnapshotCopy($sourceRepo, $destRepo, $snapId);
 
-        $this->jsonOk([
-            'label' => $started['label'],
-            'title' => __('tasks.op_copysnap'),
-            'stream_url' => '/tasks/stream?label=' . urlencode($started['label']),
-        ]);
+        // respondTaskStarted() сам вернёт ошибку, если задача не поставлена
+        // (tsp id < 0): открывать модалку для несуществующей задачи нельзя.
+        $this->respondTaskStarted($started, __('tasks.op_copysnap'));
     }
 
     /**

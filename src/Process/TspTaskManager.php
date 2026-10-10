@@ -169,6 +169,9 @@ class TspTaskManager
     /**
      * Статус задачи: state, exitCode (если известен), позиция и хвост вывода.
      *
+     * Хвост включает и stderr (отдельный `.e`-файл для задач с `tsp -E`),
+     * чтобы причина ошибки была видна и в опросе статуса.
+     *
      * @return array{label: string, id: int, state: string, exitCode: ?int, position: ?int, output: string}|null
      */
     public function status(string $username, string $label, bool $privileged): ?array
@@ -212,7 +215,10 @@ class TspTaskManager
     /**
      * Полный вывод завершённой задачи вместе с кодом возврата.
      *
-     * @return array{exitCode: int, output: string}|null
+     * `output` — stdout задачи (нужен для парсинга JSON), `stderr` — отдельный
+     * `.e`-файл (для задач с `tsp -E`), чтобы донести настоящую ошибку.
+     *
+     * @return array{exitCode: int, output: string, stderr: string}|null
      */
     public function catResult(string $username, string $label, bool $privileged): ?array
     {
@@ -230,6 +236,7 @@ class TspTaskManager
         return [
             'exitCode' => $result['exitCode'],
             'output' => $result['stdout'],
+            'stderr' => $this->readErrFile($job['id']),
         ];
     }
 
@@ -306,6 +313,12 @@ class TspTaskManager
     /**
      * Стримит вывод задачи в браузер по мере появления.
      *
+     * Вывод собирается из двух файлов: основного (stdout) и отдельного `.e`
+     * (stderr, создаётся только для задач с `tsp -E`). После терминального
+     * состояния делается финальный дозабор — иначе остаток вывода (в том числе
+     * ошибка restic) может потеряться из-за гонки между чтением файла и
+     * проверкой состояния.
+     *
      * @param string|null $prefix необязательная строка, выводимая до вывода задачи
      */
     public function streamOutput(string $username, string $label, bool $privileged, ?string $prefix = null): void
@@ -336,30 +349,33 @@ class TspTaskManager
             flush();
         }
 
-        $pos = 0;
+        $outputFile = $this->tsp->outputFile($id);
+        $errFile = $outputFile !== null ? $outputFile . '.e' : null;
+
+        $outPos = 0;
+        $errPos = 0;
+
+        $pump = function () use ($outputFile, $errFile, &$outPos, &$errPos): void {
+            $out = $this->readNewBytes($outputFile, $outPos);
+            if ($out !== '') {
+                echo $out;
+            }
+            $err = $this->readNewBytes($errFile, $errPos);
+            if ($err !== '') {
+                echo $err;
+            }
+            if ($out !== '' || $err !== '') {
+                flush();
+            }
+        };
 
         while (true) {
-            $outputFile = $this->tsp->outputFile($id);
-
-            if ($outputFile !== null && file_exists($outputFile)) {
-                $handle = @fopen($outputFile, 'rb');
-                if ($handle !== false) {
-                    fseek($handle, $pos);
-                    while (!feof($handle)) {
-                        $chunk = fread($handle, 8192);
-                        if ($chunk === false || $chunk === '') {
-                            break;
-                        }
-                        echo $chunk;
-                        $pos += strlen($chunk);
-                        flush();
-                    }
-                    fclose($handle);
-                }
-            }
+            $pump();
 
             $state = $this->tsp->state($id);
             if (in_array($state, ['finished', 'skipped', 'unknown'], true)) {
+                // Финальный дозабор: процесс завершён, новых байтов уже не будет.
+                $pump();
                 break;
             }
 
@@ -402,17 +418,13 @@ class TspTaskManager
     }
 
     /**
-     * Читает хвост output-файла задачи без блокировки (для status()).
+     * Читает хвост вывода задачи без блокировки (для status()):
+     * основной output-файл плюс отдельный stderr (`.e`).
      */
     private function readTail(int $id, int $lines = 50): string
     {
-        $outputFile = $this->tsp->outputFile($id);
-        if ($outputFile === null || !file_exists($outputFile)) {
-            return '';
-        }
-
-        $data = @file_get_contents($outputFile);
-        if ($data === false || $data === '') {
+        $data = $this->readTaskOutput($id);
+        if ($data === '') {
             return '';
         }
 
@@ -420,5 +432,80 @@ class TspTaskManager
         $tail = array_slice($chunks, -$lines);
 
         return implode("\n", $tail);
+    }
+
+    /**
+     * Полный вывод задачи: основной output-файл + отдельный stderr (`.e`).
+     */
+    private function readTaskOutput(int $id): string
+    {
+        $outputFile = $this->tsp->outputFile($id);
+        if ($outputFile === null) {
+            return '';
+        }
+
+        $data = $this->readFile($outputFile);
+        $err = $this->readFile($outputFile . '.e');
+
+        if ($err !== '') {
+            $data = $data === '' ? $err : rtrim($data) . "\n" . $err;
+        }
+
+        return $data;
+    }
+
+    /**
+     * stderr задачи из отдельного `.e`-файла (создаётся только при `tsp -E`).
+     */
+    private function readErrFile(int $id): string
+    {
+        $outputFile = $this->tsp->outputFile($id);
+        return $outputFile !== null ? $this->readFile($outputFile . '.e') : '';
+    }
+
+    /**
+     * Безопасное чтение файла (отсутствие/ошибка → пустая строка).
+     */
+    private function readFile(string $path): string
+    {
+        if (!file_exists($path)) {
+            return '';
+        }
+        $data = @file_get_contents($path);
+        return $data === false ? '' : $data;
+    }
+
+    /**
+     * Читает новые байты файла начиная с позиции $pos и сдвигает её вперёд.
+     */
+    private function readNewBytes(?string $file, int &$pos): string
+    {
+        if ($file === null || !file_exists($file)) {
+            return '';
+        }
+
+        $handle = @fopen($file, 'rb');
+        if ($handle === false) {
+            return '';
+        }
+
+        if (fseek($handle, $pos) !== 0) {
+            fclose($handle);
+            return '';
+        }
+
+        $data = '';
+        while (!feof($handle)) {
+            $chunk = fread($handle, 8192);
+            if ($chunk === false || $chunk === '') {
+                break;
+            }
+            $data .= $chunk;
+        }
+        fclose($handle);
+
+        $pos += strlen($data);
+
+        return $data;
     }
 }

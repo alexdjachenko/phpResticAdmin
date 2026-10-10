@@ -169,6 +169,67 @@ class TspTaskManagerTest extends TestCase
     }
 
     /**
+     * catResult отдаёт stderr из отдельного `.e`-файла (задачи с tsp -E),
+     * чтобы вызывающий код мог показать настоящую ошибку restic.
+     */
+    public function testCatResultIncludesSeparateStderr(): void
+    {
+        $dir = sys_get_temp_dir() . '/phpresticadmin_cat_' . uniqid();
+        mkdir($dir, 0777, true);
+        $outFile = $dir . '/out';
+        file_put_contents($outFile, '');
+        file_put_contents($outFile . '.e', 'Fatal: unable to open repository');
+
+        $label = 'alice#snapstatsr10123456789abcdef';
+
+        $mock = $this->createMock(TspClient::class);
+        $mock->method('list')->willReturn([$this->job(9, $label)]);
+        $mock->method('catRaw')->with(9)->willReturn(['exitCode' => 1, 'stdout' => '', 'stderr' => '']);
+        $mock->method('outputFile')->with(9)->willReturn($outFile);
+
+        $result = (new TspTaskManager($mock))->catResult('alice', $label, false);
+
+        $this->assertNotNull($result);
+        $this->assertSame(1, $result['exitCode']);
+        $this->assertStringContainsString('Fatal', $result['stderr']);
+
+        @unlink($outFile);
+        @unlink($outFile . '.e');
+        @rmdir($dir);
+    }
+
+    /**
+     * status().output объединяет stdout и stderr из отдельного `.e`-файла,
+     * чтобы ошибка была видна и в опросе статуса, а не только в стриме.
+     */
+    public function testStatusOutputMergesSeparateStderr(): void
+    {
+        $dir = sys_get_temp_dir() . '/phpresticadmin_status_' . uniqid();
+        mkdir($dir, 0777, true);
+        $outFile = $dir . '/out';
+        file_put_contents($outFile, "progress 100%\n");
+        file_put_contents($outFile . '.e', "Fatal: wrong password\n");
+
+        $label = 'alice#checkr10123456789abcdef';
+
+        $mock = $this->createMock(TspClient::class);
+        $mock->method('list')->willReturn([$this->job(3, $label)]);
+        $mock->method('state')->with(3)->willReturn('finished');
+        $mock->method('wait')->with(3)->willReturn(1);
+        $mock->method('outputFile')->with(3)->willReturn($outFile);
+
+        $status = (new TspTaskManager($mock))->status('alice', $label, false);
+
+        $this->assertNotNull($status);
+        $this->assertStringContainsString('progress 100%', $status['output']);
+        $this->assertStringContainsString('Fatal', $status['output']);
+
+        @unlink($outFile);
+        @unlink($outFile . '.e');
+        @rmdir($dir);
+    }
+
+    /**
      * Мемоизация: несколько запросов за один рендер дают один вызов list();
      * после App::resetCaches() кеш области запроса пуст и list() вызывается вновь.
      */
