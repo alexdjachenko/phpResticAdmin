@@ -161,6 +161,22 @@ abstract class BaseController
     }
 
     /**
+     * Заголовок задачи с указанием источника (имени репозитория), если он есть.
+     *
+     * Нужен, чтобы в модалке и списке задач было видно не только название
+     * операции, но и репозиторий, к которому она относится.
+     *
+     * @param array<string, mixed>|null $repo
+     */
+    protected function taskTitle(string $opKey, ?array $repo): string
+    {
+        $title = __($opKey);
+        $name = is_array($repo) ? (string) ($repo['name'] ?? '') : '';
+
+        return $name !== '' ? $title . ' — ' . $name : $title;
+    }
+
+    /**
      * Ответ после старта фоновой задачи.
      *
      * Принимает результат `start*()` сервиса (`{label, id}`): если tsp не смог

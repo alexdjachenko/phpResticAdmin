@@ -88,6 +88,7 @@ return [
     'repo.invalid_category' => 'Invalid category.',
     'repo.env_key_masked'=> 'Key: {key}',
     'snap.title'         => 'Snapshots',
+    'snap.source'        => 'Source',
     'snap.id'            => 'ID',
     'snap.date'          => 'Date',
     'snap.host'          => 'Host',

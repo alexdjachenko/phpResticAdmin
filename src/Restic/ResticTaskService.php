@@ -73,7 +73,9 @@ class ResticTaskService
     {
         $command = $this->buildCopyCommand($source, $dest, $snapId);
         $env = $this->buildCopyEnv($source, $dest);
-        return $this->tasks->start($this->username(), 'copysnap', (string) ($source['id'] ?? ''), $command, $env);
+        // restic пишет отчёт/ошибки в stderr; -E держит его в отдельном `.e`,
+        // который читает стрим вывода — иначе окно задачи остаётся пустым.
+        return $this->tasks->start($this->username(), 'copysnap', (string) ($source['id'] ?? ''), $command, $env, true);
     }
 
     /**

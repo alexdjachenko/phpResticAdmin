@@ -46,7 +46,8 @@ class StatsController extends BaseController
         $started = App::resticTasks()->startSnapshotStats($repo, $snapId);
 
         // respondTaskStarted() сам вернёт ошибку, если задача не поставлена.
-        $this->respondTaskStarted($started, __('tasks.op_snapstats'));
+        // В заголовке указываем источник (репозиторий снепшота).
+        $this->respondTaskStarted($started, $this->taskTitle('tasks.op_snapstats', $repo));
     }
 
     /**

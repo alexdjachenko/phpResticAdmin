@@ -108,7 +108,8 @@ class ActionController extends BaseController
 
         // respondTaskStarted() сам вернёт ошибку, если задача не поставлена
         // (tsp id < 0): открывать модалку для несуществующей задачи нельзя.
-        $this->respondTaskStarted($started, __('tasks.op_copysnap'));
+        // В заголовке указываем источник — из какого репозитория копируем.
+        $this->respondTaskStarted($started, $this->taskTitle('tasks.op_copysnap', $sourceRepo));
     }
 
     /**

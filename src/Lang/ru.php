@@ -88,6 +88,7 @@ return [
     'repo.invalid_category' => 'Недопустимая категория.',
     'repo.env_key_masked'=> 'Ключ: {key}',
     'snap.title'         => 'Снепшоты',
+    'snap.source'        => 'Источник',
     'snap.id'            => 'ID',
     'snap.date'          => 'Дата',
     'snap.host'          => 'Хост',
