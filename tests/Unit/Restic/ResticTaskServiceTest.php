@@ -81,7 +81,7 @@ class ResticTaskServiceTest extends TestCase
     /**
      * @param array<int, string> $expectedSubcommand
      */
-    private function assertStartedWith(string $expectedOp, array $expectedSubcommand, bool $separateStderr = false): void
+    private function assertStartedWith(string $expectedOp, array $expectedSubcommand, bool $separateStderr = false, ?string $expectedObjectId = null): void
     {
         $this->assertCount(1, $this->captured, 'exactly one task must be started');
         $captured = $this->captured[0];
@@ -91,6 +91,7 @@ class ResticTaskServiceTest extends TestCase
         $this->assertSame('tester', $parsed['username']);
         $this->assertSame($expectedOp, $parsed['op']);
         $this->assertSame('r1', $parsed['repoId']);
+        $this->assertSame($expectedObjectId, $parsed['objectId'], 'objectId must match for op ' . $expectedOp);
 
         // Подкоманда стоит после глобальных флагов (--repo <path>).
         $position = array_search($expectedSubcommand[0], $captured['command'], true);
@@ -261,11 +262,11 @@ class ResticTaskServiceTest extends TestCase
         $this->assertSame('dstpass', $env['RESTIC_PASSWORD']);
     }
 
-    /** stats снепшота — op snapstats, отдельный stderr (JSON). */
+    /** stats снепшота — op snapstats, snapId в метке (objectId), отдельный stderr (JSON). */
     public function testStartSnapshotStats(): void
     {
         $this->service()->startSnapshotStats($this->repo(), 'abcd1234');
-        $this->assertStartedWith('snapstats', ['stats', '--json', '--mode', 'raw-data'], true);
+        $this->assertStartedWith('snapstats', ['stats', '--json', '--mode', 'raw-data'], true, 'abcd1234');
     }
 
     /** список снепшотов — op snapshots, отдельный stderr (JSON). */

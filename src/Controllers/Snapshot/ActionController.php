@@ -12,9 +12,45 @@ namespace App\Controllers\Snapshot;
 
 use App\Controllers\BaseController;
 use App\Core\App;
+use App\Storage\ContentTargets;
 
 class ActionController extends BaseController
 {
+    /**
+     * POST /snapshots/load — запуск списка снепшотов в фоне (AJAX).
+     *
+     * Явный старт отдельной операцией (кнопка): GET-страница не запускает
+     * задачи сама, а только читает кеш. schedule() ставит задачу и записывает
+     * обещание; если активная задача уже есть — вторую не ставит.
+     */
+    public function load(): void
+    {
+        if ($this->requireUser(true) === null) {
+            return;
+        }
+
+        if (!$this->requireCsrf(true)) {
+            return;
+        }
+
+        $user = App::auth()->user() ?? '';
+        $repoId = (string) $this->request()->post('repo_id', '');
+
+        if ($repoId === '') {
+            $this->jsonError('Missing parameters', 400);
+            return;
+        }
+
+        $repo = $this->requireRepo($user, $repoId, 'read', true);
+        if ($repo === null) {
+            return;
+        }
+
+        $started = App::contentResolver()->schedule(ContentTargets::forSnapshots($repo), $repo);
+
+        $this->respondTaskStarted($started, $this->taskTitle('tasks.op_snapshots', $repo));
+    }
+
     /**
      * POST /snapshots/tag — тегирование (AJAX).
      */
@@ -51,7 +87,7 @@ class ActionController extends BaseController
 
         // Теги входят в кешированный список — снимаем запись, чтобы UI увидел тег.
         if (!empty($result['ok'])) {
-            App::snapshotCache()->invalidateList($repo);
+            App::contentCache()->clear(ContentTargets::forSnapshots($repo));
         }
 
         $this->jsonOk($result);
@@ -137,9 +173,9 @@ class ActionController extends BaseController
             return;
         }
 
-        // Инвалидация записи: задачу поставит list() при следующем заходе
+        // Инвалидация записи: задачу поставит POST /snapshots/load
         // (refresh = «снять запись», а не «запустить задачу самому»).
-        App::snapshotCache()->invalidateList($repo);
+        App::contentCache()->clear(ContentTargets::forSnapshots($repo));
 
         App::response()->redirect('/snapshots?repo=' . urlencode($repoId), 303);
     }

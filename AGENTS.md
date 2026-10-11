@@ -101,11 +101,12 @@ src/
   Storage/
     ConfigStorage.php    # Чтение PHP-конфигов из data/cfg/ (users.php, settings.php) + userSource(); мемоизация на запрос
     RepositoryStorage.php # CRUD (save/delete/move/update) + три категории: public/private/session
-    SnapshotCacheStorage.php # доменная обёртка над кеш-слоем: список снепшотов и полная статистика (выбор области по категории репо)
-    SnapshotListState.php # автомат страницы списка снепшотов (list/progress/error/start), без HTTP
+    SnapshotCacheStorage.php -> ContentCacheStorage.php # запись кеша контента: value+promise (выбор области по категории)
+    ContentTarget.php / ContentTargets.php # целевой объект контента и резолвер метка<->объект
+    ContentEntry.php / ContentResolver.php # состояние записи и read/schedule/reconcile
     UserStorage.php       # CRUD YAML-пользователей (users.yaml)
     UserBootstrap.php     # автосоздание admin2 при первом старте
-  Cache/
+    Cache/
     CacheScope.php        # enum областей кеша: System / User / Request
     CacheInterface.php    # контракт одной области (get/entry/set/remove/remember)
     CacheManager.php      # for(CacheScope): единственная точка выбора области и драйвера
@@ -122,6 +123,7 @@ src/
     TspClient.php          # низкоуровневая обёртка tsp (enqueue/list/cat/state/wait/...)
     TaskLabel.php          # единый источник правды о схеме метки: build/parse/isValid/OPS
     TspTaskManager.php     # менеджер задач: метки через TaskLabel, describe/listActiveFor/queuePosition/cancel/promote
+    TaskPostProcessor.php  # постобработка вывода завершённой задачи (реестр op -> processor)
     TspCommandRunner.php   # адаптер контракта CommandRunner::run() поверх tsp (REST-шов)
     Controllers/                        # доменные подкаталоги + единый базовый контроллер
       BaseController.php                # auth → CSRF → поиск репо → право → JSON (общие хелперы)
@@ -132,9 +134,9 @@ src/
       Repository/DetailController.php   # GET /repositories/detail
       Repository/FormController.php     # addForm/add, editForm/edit
       Repository/ActionController.php   # check, delete, move, backup, select
-      Snapshot/ListController.php       # GET /snapshots (автомат list/progress/error/start)
+      Snapshot/ListController.php       # GET /snapshots (чтение кеша + reconcile готового вывода)
       Snapshot/DetailController.php     # GET /snapshots/detail
-      Snapshot/ActionController.php     # POST /snapshots/tag|copy|refresh
+      Snapshot/ActionController.php     # POST /snapshots/load|tag|copy|refresh
       Snapshot/StatsController.php      # POST /snapshots/stats, GET /snapshots/stats/result
       Browse/BrowseController.php       # GET /browse — дерево файлов + хлебные крошки
       Export/ExportController.php       # GET /download, GET /export — скачивание
@@ -243,6 +245,7 @@ docker/
 | POST  | `/repositories/backup` | Repository\ActionController::backup | isLoggedIn + canUseWrite |
 | POST  | `/repositories/select` | Repository\ActionController::select | user != null |
 | GET   | `/snapshots`           | Snapshot\ListController::list       | user != null + canUseRead |
+| POST  | `/snapshots/load`      | Snapshot\ActionController::load     | user != null + canUseRead |
 | GET   | `/snapshots/detail`    | Snapshot\DetailController::detail   | user != null + canUseRead |
 | POST  | `/snapshots/stats`     | Snapshot\StatsController::stats     | user != null + canUseRead |
 | POST  | `/snapshots/tag`       | Snapshot\ActionController::tag      | isLoggedIn + canUseWrite |
@@ -450,13 +453,18 @@ Fallback-правила для пользователей без секции `r
 - **Схема метки** (единственный источник правды — `App\Process\TaskLabel`):
 
   ```
-  <username>#<op><repoId><rand16>   # операции по репозиторию
-  <username>#<op><rand16>          # глобальные (без repoId)
+  <username>#<op><repoId><rand16>            # операции по репозиторию
+  <username>#<op><repoId>@<objectId><rand16> # per-object (snapId для snapstats)
+  <username>#<op><rand16>                    # глобальные (без repoId)
   ```
 
   - `op` — код операции из `TaskLabel::OPS` (словарь ниже);
   - `repoId` — id репозитория; **длина не проверяется** (в `repositories.yaml` id
     правят руками, hex-формат не гарантирован);
+  - `objectId` — необязательный целевой объект операции (для `snapstats` — id
+    снепшота). Отделяется `@` — символом вне `[A-Za-z0-9._-]`, чтобы не
+    конфликтовать с `repoId`/логином; для операций без объекта опускается
+    (обратная совместимость старых меток сохраняется);
   - `rand16` — 16 hex-символов (`bin2hex(random_bytes(8))`), уникальность задачи.
 
   Словарь `op` (соответствие строкам операций в коде):
@@ -550,17 +558,29 @@ apcu — задача будущего этапа; рецепт добавлен
 
 | Что | Область | Владелец | Ключ/суффикс | TTL | Инвалидация |
 |---|---|---|---|---|---|
-| Список снепшотов репо | System (public) / User (private/session) | `SnapshotCacheStorage` | `repos/<repoId>/snapshots.json` | `snapshot_cache_ttl` | `invalidateList()` (refresh, delete репо) |
-| Полная статистика снепшота | System | `SnapshotCacheStorage` | `snapshots/<snapId>/stats.json` | `snapshot_stats_cache_ttl` | перезапись при `snapstats` |
+| Список снепшотов репо | System (public) / User (private/session) | `ContentCacheStorage` | `repos/<repoId>/snapshots.json` | `snapshot_cache_ttl` | `clear()` (refresh, delete репо) |
+| Полная статистика снепшота | System | `ContentCacheStorage` | `snapshots/<snapId>/stats.json` | `snapshot_stats_cache_ttl` | `clear()` / перезапись при `snapstats` |
 | `restic_version` | Request поверх User | `App::resticVersion()` | `restic_version` | — | сброс сессии / `resetCaches()` |
 | Список задач tsp | Request | `TspTaskManager` | `tsp.list` | — | `App::resetCaches()` |
 | Настройки/пользователи | Request | `ConfigStorage` | `cfg.<md5(dir)>.<name>` | — | `forgetYamlUsers()` после записи |
 | Базовое окружение процесса | Request | `CommandRunner` | `env.base`, `env.process` | — | `resetEnvCache()` / `resetCaches()` |
 | Листинг ключей (реквизиты) | Request | `KeyService` | `keys.list.<repoId>` | — | `forgetKeyList()` после мутации |
 
+### Модель «обещание контента» (запись кеша)
+
+Запись целевого объекта (`ContentTarget`) хранит и контент, и обещание:
+`{ value, promise, error, meta }`. Состояние вычисляется из записи
+(`ContentEntry::state()`): `ready` (есть value) | `waiting` (обещание + задача
+в очереди/выполняется) | `ready_to_process` (обещание + задача завершена) |
+`failed` (липкая ошибка, повтор только по кнопке) | `absent` (пусто).
+Разделение операций (`ContentResolver`): `read()` — только чтение; `schedule()`
+— поставить tsp-задачу и записать обещание (кнопка UI, POST); `reconcile()` —
+разобрать УЖЕ готовый вывод и записать контент (идемпотентно, задач не ставит).
+GET-страницы вызывают `read()` + `reconcile()` и НИКОГДА — `schedule()`.
+
 ### Что кешем НЕ является (не переносить в кеш-слой)
 
-`auth_user`, flash-сообщения, `lang`, `current_repo`, `session_repos`, `snapshot_list_state`
+`auth_user`, flash-сообщения, `lang`, `current_repo`, `session_repos`
 — это **состояние сессии/домена**, а не производные данные. У них своя семантика
 (например, flash самоуничтожается после чтения). «Унифицировать» их нельзя.
 
@@ -670,6 +690,16 @@ REST/CLI работают только с `system()` + `request()` (сессии
 - **`tsp -E`** нужен для раздельного stderr; по умолчанию tsp пишет stdout и stderr в один output-файл. Для JSON-задач (`startListSnapshots`, `startSnapshotStats`) stderr отделяется через `-E`, чтобы предупреждения restic не ломали JSON. Также `startSnapshotCopy` использует `-E`: restic пишет отчёт/ошибки в stderr, и без отдельного `.e` окно задачи остаётся пустым.
 - **Заголовок задачи несёт источник.** `BaseController::taskTitle()` добавляет к названию операции имя репозитория (модалка копирования/статистики и список задач показывают, из какого репо действуем). Страница деталей снепшота показывает источник (строку «Источник») и имя репо в хлебных крошках.
 - **Вывод задачи собирается из двух файлов.** `/tasks/stream`, `/tasks/status` и `/tasks/view` читают и основной output-файл, и отдельный `.e` (stderr для задач с `-E`): иначе ошибки restic (в т.ч. при `copy`) в модалке не видны. После терминального состояния стрим делает финальный дозабор — без него остаток вывода теряется из-за гонки: задача успевает завершиться сразу после пустого чтения файла, стрим тут же видит `finished` и закрывается пустым (`streamOutput()`). Запуск фоновой операции обязан идти через `BaseController::respondTaskStarted()` (проверяет `id < 0` и отвечает JSON-ошибкой), а не через «сырой» `jsonOk()`.
+- **Вывод читается из файла задачи, а не через блокирующий `tsp -c`.** `tsp -c`
+  (man: "block until all the output can be sent to standard output") блокирует
+  воркер до завершения и при выводе больше буфера пайпа вешает сервер. Горячий
+  путь (`TspTaskManager::catResult()`, `TspCommandRunner::run()`) берёт путь через
+  `tsp -o` и читает файл (+ `.e`), а код возврата — через `tsp -w` ТОЛЬКО у
+  завершённой задачи (на запущенной `tsp -w` блокируется сам).
+- **`CommandRunner::run()` дренирует пайпы во время ожидания процесса.** Иначе
+  при выводе больше ~64 КиБ (размер буфера пайпа) процесс навсегда блокируется
+  на записи — вечный дедлок. `tsp -c` теперь используется только как тонкая
+  обёртка (тесты), горячие пути с него уходят.
 - **Передача окружения в задачу**: `$env` задачи передаётся через proc_open-окружение
   `tsp`-клиента. на версии из образа подтверждено, что окружение доходит до задачи,
   даже если она стоит в очереди (фиксирует `TspClientTest::testTwoTasksWithDifferentEnvs`:

@@ -32,7 +32,8 @@ class TspTaskManager
     /**
      * Ставит команду в очередь от имени пользователя.
      *
-     * Метка строится через TaskLabel::build(): `<username>#<op><repoId><rand16>`.
+     * Метка строится через TaskLabel::build():
+     * `<username>#<op><repoId>[@<objectId>]<rand16>`.
      *
      * `$separateStderr = true` включает `tsp -E`: stdout и stderr задачи пишутся
      * в разные файлы (нужно для JSON-задач).
@@ -47,9 +48,10 @@ class TspTaskManager
         ?string $repoId,
         array $command,
         array $env = [],
-        bool $separateStderr = false
+        bool $separateStderr = false,
+        ?string $objectId = null
     ): array {
-        $label = TaskLabel::build($username, $op, $repoId);
+        $label = TaskLabel::build($username, $op, $repoId, $objectId);
         return $this->tsp->enqueue($label, $command, $env, $separateStderr);
     }
 
@@ -79,7 +81,7 @@ class TspTaskManager
      * блокирует нашу независимо от авторства — прятать её нельзя. Возвращаются
      * задачи (любого пользователя) с совпадающими op и repoId.
      *
-     * @return array<int, array{id: int, state: string, label: string, username: string, op: string, repoId: ?string}>
+     * @return array<int, array{id: int, state: string, label: string, username: string, op: string, repoId: ?string, objectId: ?string}>
      */
     public function listActiveFor(string $op, ?string $repoId): array
     {
@@ -103,6 +105,7 @@ class TspTaskManager
                 'username' => $parsed['username'],
                 'op' => $parsed['op'],
                 'repoId' => $parsed['repoId'],
+                'objectId' => $parsed['objectId'] ?? null,
             ];
         }
 
@@ -204,7 +207,7 @@ class TspTaskManager
     }
 
     /**
-     * Полный вывод завершённой задачи (tsp -c), блокируется до завершения.
+     * Полный вывод завершённой задачи.
      */
     public function fullOutput(string $username, string $label, bool $privileged): ?string
     {
@@ -214,6 +217,12 @@ class TspTaskManager
 
     /**
      * Полный вывод завершённой задачи вместе с кодом возврата.
+     *
+     * Вывод читается из output-файла задачи (`tsp -o`), а НЕ через `tsp -c`:
+     * `tsp -c` (man: "block until all the output can be sent to standard
+     * output") блокирует воркер и при большом выводе вешает сервер. Код возврата
+     * берётся через `tsp -w` только у УЖЕ завершённой задачи (на запущенной
+     * `tsp -w` сам блокируется).
      *
      * `output` — stdout задачи (нужен для парсинга JSON), `stderr` — отдельный
      * `.e`-файл (для задач с `tsp -E`), чтобы донести настоящую ошибку.
@@ -231,12 +240,19 @@ class TspTaskManager
             return null;
         }
 
-        $result = $this->tsp->catRaw($job['id']);
+        $id = $job['id'];
+        $state = $this->tsp->state($id);
+        if ($state !== 'finished') {
+            return null;
+        }
+
+        $outputFile = $this->tsp->outputFile($id);
+        $output = $outputFile !== null ? $this->readFile($outputFile) : '';
 
         return [
-            'exitCode' => $result['exitCode'],
-            'output' => $result['stdout'],
-            'stderr' => $this->readErrFile($job['id']),
+            'exitCode' => $this->tsp->wait($id),
+            'output' => $output,
+            'stderr' => $this->readErrFile($id),
         ];
     }
 
@@ -396,7 +412,7 @@ class TspTaskManager
     /**
      * Разбор метки (делегирует в TaskLabel).
      *
-     * @return array{username: string, op: string, repoId: ?string, rand: string}|null
+     * @return array{username: string, op: string, repoId: ?string, objectId: ?string, rand: string}|null
      */
     public function parseLabel(string $label): ?array
     {

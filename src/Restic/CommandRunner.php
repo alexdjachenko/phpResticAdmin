@@ -43,11 +43,50 @@ class CommandRunner
         }
         fclose($pipes[0]);
 
+        // Пайпы читаются НЕБЛОКИРУЮЩЕ и дренируются на каждой итерации опроса
+        // процесса. Если читать пайп только после выхода процесса, то при выводе
+        // больше буфера пайпа (~64 КиБ) процесс навсегда блокируется на записи,
+        // а мы ждём его завершения — вечный дедлок (регресс зависания на больших
+        // репозиториях).
+        stream_set_blocking($pipes[1], false);
+        stream_set_blocking($pipes[2], false);
+
+        $stdout = '';
+        $stderr = '';
         $timedOut = false;
         $deadline = ($timeout > 0) ? microtime(true) + $timeout : PHP_FLOAT_MAX;
         $exitCode = -1;
 
         while (true) {
+            $read = [];
+            if (is_resource($pipes[1]) && !feof($pipes[1])) {
+                $read[] = $pipes[1];
+            }
+            if (is_resource($pipes[2]) && !feof($pipes[2])) {
+                $read[] = $pipes[2];
+            }
+
+            if ($read !== []) {
+                $write = null;
+                $except = null;
+                $ready = @stream_select($read, $write, $except, 0, 50000);
+                if ($ready > 0) {
+                    foreach ($read as $stream) {
+                        $chunk = fread($stream, 65536);
+                        if ($chunk === false || $chunk === '') {
+                            continue;
+                        }
+                        if ($stream === $pipes[1]) {
+                            $stdout .= $chunk;
+                        } else {
+                            $stderr .= $chunk;
+                        }
+                    }
+                }
+            } else {
+                usleep(20000);
+            }
+
             $status = proc_get_status($process);
             if (!$status['running']) {
                 $exitCode = $status['exitcode'];
@@ -67,20 +106,22 @@ class CommandRunner
                 $timedOut = true;
                 break;
             }
-
-            usleep(50000);
         }
 
-        $stdout = stream_get_contents($pipes[1]);
+        // Финальный дозабор остатка (и если процесс убит по таймауту).
+        $tailOut = stream_get_contents($pipes[1]);
+        if ($tailOut !== false && $tailOut !== '') {
+            $stdout .= $tailOut;
+        }
         fclose($pipes[1]);
 
-        $stderr = stream_get_contents($pipes[2]);
+        $tailErr = stream_get_contents($pipes[2]);
+        if ($tailErr !== false && $tailErr !== '') {
+            $stderr .= $tailErr;
+        }
         fclose($pipes[2]);
 
         proc_close($process);
-
-        $stdout = $stdout !== false ? $stdout : '';
-        $stderr = $stderr !== false ? $stderr : '';
 
         if ($timedOut) {
             $stderr = rtrim($stderr) . "\nCommand timed out after {$timeout} seconds";

@@ -16,13 +16,14 @@ use PHPUnit\Framework\TestCase;
  *
  * Цель: проверить построение и разбор метки для всех операций словаря, включая
  *       операции, начинающиеся с hex-буквы (check, forget), префиксные
- *       (snapshots / snapstats) и глобальные (run).
+ *       (snapshots / snapstats), глобальные (run) и per-object (с `@objectId`).
  *
  * Сценарий:
- *   - build → parse даёт те же username/op/repoId.
+ *   - build → parse даёт те же username/op/repoId/objectId.
  *   - repoId не обязан быть hex и может быть коротким.
- *   - старый формат user#hex, мусор, пустая метка и метка с '#' в середине
- *     отвергаются.
+ *   - objectId (напр. snapId) переносится через `@` и разбирается обратно.
+ *   - старый формат (без objectId) остаётся совместимым.
+ *   - мусор, пустая метка, '#' в середине, невалидный objectId отвергаются.
  *   - extractFromTspLine находит метку в строке вывода tsp и не «обрезает» её.
  *
  * Критерий успеха: все assert проходят.
@@ -30,23 +31,24 @@ use PHPUnit\Framework\TestCase;
 class TaskLabelTest extends TestCase
 {
     /**
-     * @return array<string, array{string, string, ?string}>
+     * @return array<string, array{string, ?string, string, ?string}>
      */
     public static function opProvider(): array
     {
         return [
-            'backup' => ['backup', 'r1', 'backup'],
-            'snapshots' => ['snapshots', 'r1', 'snapshots'],
-            'check (hex-буква)' => ['check', 'r1', 'check'],
-            'forget (hex-буква)' => ['forget', 'r1', 'forget'],
-            'prune' => ['prune', 'r1', 'prune'],
-            'unlock' => ['unlock', 'r1', 'unlock'],
-            'repair (from repair index)' => ['repair', 'r1', 'repair'],
-            'init' => ['init', 'r1', 'init'],
-            'stats (repo)' => ['stats', 'r1', 'stats'],
-            'snapstats (snapshot)' => ['snapstats', 'r1', 'snapstats'],
-            'copysnap (copy)' => ['copysnap', 'r1', 'copysnap'],
-            'run (global)' => ['run', null, 'run'],
+            'backup' => ['backup', 'r1', 'backup', null],
+            'snapshots' => ['snapshots', 'r1', 'snapshots', null],
+            'check (hex-буква)' => ['check', 'r1', 'check', null],
+            'forget (hex-буква)' => ['forget', 'r1', 'forget', null],
+            'prune' => ['prune', 'r1', 'prune', null],
+            'unlock' => ['unlock', 'r1', 'unlock', null],
+            'repair (from repair index)' => ['repair', 'r1', 'repair', null],
+            'init' => ['init', 'r1', 'init', null],
+            'stats (repo)' => ['stats', 'r1', 'stats', null],
+            'snapstats (snapshot)' => ['snapstats', 'r1', 'snapstats', null],
+            'snapstats with objectId' => ['snapstats', 'r1', 'snapstats', 'deadbeef01'],
+            'copysnap (copy)' => ['copysnap', 'r1', 'copysnap', null],
+            'run (global)' => ['run', null, 'run', null],
         ];
     }
 
@@ -55,15 +57,16 @@ class TaskLabelTest extends TestCase
      *
      * @dataProvider opProvider
      */
-    public function testBuildThenParse(string $op, ?string $repoId, string $expectedOp): void
+    public function testBuildThenParse(string $op, ?string $repoId, string $expectedOp, ?string $objectId): void
     {
-        $label = TaskLabel::build('alice', $op, $repoId);
+        $label = TaskLabel::build('alice', $op, $repoId, $objectId);
         $parsed = TaskLabel::parse($label);
 
         $this->assertNotNull($parsed);
         $this->assertSame('alice', $parsed['username']);
         $this->assertSame($expectedOp, $parsed['op']);
         $this->assertSame($repoId, $parsed['repoId']);
+        $this->assertSame($objectId, $parsed['objectId']);
         $this->assertMatchesRegularExpression('/^[0-9a-f]{16}$/', $parsed['rand']);
     }
 
@@ -74,6 +77,7 @@ class TaskLabelTest extends TestCase
         $this->assertNotNull($snapshots);
         $this->assertSame('snapshots', $snapshots['op']);
         $this->assertSame('r1', $snapshots['repoId']);
+        $this->assertNull($snapshots['objectId']);
 
         $snapstats = TaskLabel::parse('alice#snapstatsr10123456789abcdef');
         $this->assertNotNull($snapstats);
@@ -83,6 +87,19 @@ class TaskLabelTest extends TestCase
         $copysnap = TaskLabel::parse('alice#copysnapr10123456789abcdef');
         $this->assertNotNull($copysnap);
         $this->assertSame('copysnap', $copysnap['op']);
+    }
+
+    /** objectId переносится через `@` и разбирается обратно. */
+    public function testObjectIdRoundTrip(): void
+    {
+        $label = TaskLabel::build('alice', 'snapstats', 'repo1', 'abcd1234');
+        $this->assertStringContainsString('#snapstatsrepo1@abcd1234', $label);
+
+        $parsed = TaskLabel::parse($label);
+        $this->assertNotNull($parsed);
+        $this->assertSame('snapstats', $parsed['op']);
+        $this->assertSame('repo1', $parsed['repoId']);
+        $this->assertSame('abcd1234', $parsed['objectId']);
     }
 
     /** repoId не обязан быть hex и может быть коротким. */
@@ -110,6 +127,8 @@ class TaskLabelTest extends TestCase
             'too short' => ['alice#checkabc'],
             'non-hex rand' => ['alice#checkr1zzzzzzzzzzzzzzzz'],
             'repo op without repoId' => ['alice#check0123456789abcdef'],
+            'empty objectId' => ['alice#snapstatsr1@0123456789abcdef'],
+            'invalid objectId char' => ['alice#snapstatsr1@ab#cd0123456789abcdef'],
         ];
     }
 
@@ -131,10 +150,13 @@ class TaskLabelTest extends TestCase
         $line = '9   running   restic snapshots   bob#snapshotsr20123456789abcdef   0   1';
         $this->assertSame('bob#snapshotsr20123456789abcdef', TaskLabel::extractFromTspLine($line));
 
+        $line = '11   finished   restic stats   bob#snapstatsr2@abcd12340123456789abcdef   0';
+        $this->assertSame('bob#snapstatsr2@abcd12340123456789abcdef', TaskLabel::extractFromTspLine($line));
+
         $this->assertNull(TaskLabel::extractFromTspLine('7   finished   echo hello   0'));
     }
 
-    /** Глобальная операция не принимает repoId. */
+    /** Глобальная операция не принимает repoId/objectId. */
     public function testBuildRunRejectsRepoId(): void
     {
         $this->expectException(\InvalidArgumentException::class);

@@ -47,6 +47,11 @@ class ExportController extends BaseController
         $command = ResticCommandBuilder::buildCommand(['dump', $snapId, $path], $repo);
         $env = ResticCommandBuilder::buildEnv($repo);
 
+        // Освобождаем сессию ПЕРЕД многогигабайтной перекачкой: дальше в запросе
+        // ни кеш, ни CSRF, ни flash не нужны, а держать файловую блокировку
+        // сессии на время перекачки нельзя (заблокирует другие запросы клиента).
+        App::session()->close();
+
         App::runner()->runStreamWithHeaders($command, $env, $mime, $filename);
     }
 
@@ -79,6 +84,9 @@ class ExportController extends BaseController
 
         $command = ResticCommandBuilder::buildCommand(['dump', $snapId, '/'], $repo);
         $env = ResticCommandBuilder::buildEnv($repo);
+
+        // Освобождаем сессию перед потоковой отдачей архива (см. file()).
+        App::session()->close();
 
         App::runner()->runStreamWithHeaders($command, $env, 'application/x-tar', $filename);
     }

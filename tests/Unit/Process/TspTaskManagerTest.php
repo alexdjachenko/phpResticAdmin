@@ -169,8 +169,9 @@ class TspTaskManagerTest extends TestCase
     }
 
     /**
-     * catResult отдаёт stderr из отдельного `.e`-файла (задачи с tsp -E),
-     * чтобы вызывающий код мог показать настоящую ошибку restic.
+     * catResult читает вывод из ФАЙЛА задачи (`tsp -o`), а не блокирующим
+     * `tsp -c`; код возврата берётся через `tsp -w` только у завершённой задачи.
+     * stderr приходит из отдельного `.e`-файла (задачи с tsp -E).
      */
     public function testCatResultIncludesSeparateStderr(): void
     {
@@ -180,12 +181,14 @@ class TspTaskManagerTest extends TestCase
         file_put_contents($outFile, '');
         file_put_contents($outFile . '.e', 'Fatal: unable to open repository');
 
-        $label = 'alice#snapstatsr10123456789abcdef';
+        $label = 'alice#snapstatsr1@abcd12340123456789abcdef';
 
         $mock = $this->createMock(TspClient::class);
         $mock->method('list')->willReturn([$this->job(9, $label)]);
-        $mock->method('catRaw')->with(9)->willReturn(['exitCode' => 1, 'stdout' => '', 'stderr' => '']);
-        $mock->method('outputFile')->with(9)->willReturn($outFile);
+        $mock->expects($this->once())->method('state')->with(9)->willReturn('finished');
+        $mock->expects($this->once())->method('wait')->with(9)->willReturn(1);
+        $mock->expects($this->once())->method('outputFile')->with(9)->willReturn($outFile);
+        $mock->expects($this->never())->method('catRaw');
 
         $result = (new TspTaskManager($mock))->catResult('alice', $label, false);
 
@@ -196,6 +199,24 @@ class TspTaskManagerTest extends TestCase
         @unlink($outFile);
         @unlink($outFile . '.e');
         @rmdir($dir);
+    }
+
+    /**
+     * catResult на незавершённой задаче возвращает null (никогда не блокируется
+     * на `tsp -w`).
+     */
+    public function testCatResultIsNullWhenTaskNotFinished(): void
+    {
+        $label = 'alice#snapstatsr1@abcd12340123456789abcdef';
+
+        $mock = $this->createMock(TspClient::class);
+        $mock->method('list')->willReturn([$this->job(9, $label)]);
+        $mock->method('state')->with(9)->willReturn('running');
+        $mock->expects($this->never())->method('wait');
+
+        $result = (new TspTaskManager($mock))->catResult('alice', $label, false);
+
+        $this->assertNull($result);
     }
 
     /**

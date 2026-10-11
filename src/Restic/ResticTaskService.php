@@ -87,8 +87,10 @@ class ResticTaskService
         $command = ResticCommandBuilder::buildCommand(['stats', '--json', '--mode', 'raw-data'], $repo);
         $command[] = $snapId;
         $env = ResticCommandBuilder::buildEnv($repo);
-        // --json: отдельный stderr, чтобы предупреждения restic не ломали JSON
-        return $this->tasks->start($this->username(), 'snapstats', (string) ($repo['id'] ?? ''), $command, $env, true);
+        // --json: отдельный stderr, чтобы предупреждения restic не ломали JSON.
+        // snapId идёт в метку (objectId) — иначе по завершённой задаче нельзя
+        // восстановить целевой объект кеша `snapshots/<snapId>/stats.json`.
+        return $this->tasks->start($this->username(), 'snapstats', (string) ($repo['id'] ?? ''), $command, $env, true, $snapId);
     }
 
     /**

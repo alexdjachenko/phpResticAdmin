@@ -25,7 +25,9 @@ use PHPUnit\Framework\TestCase;
  *   1. POST /maintenance/check с заголовками AJAX и без CSRF-токена
  *      → 403 и JSON-тело {ok:false}.
  *   2. POST /repositories/backup с заголовками AJAX → 403 и JSON {ok:false}.
- *   3. GET /tasks/active с Accept: application/json → JSON {ok:...}.
+ *   3. POST /snapshots/load с заголовками AJAX без CSRF → JSON {ok:false}.
+ *   4. GET /snapshots НЕ имеет побочных эффектов (не ставит задачу).
+ *   5. GET /tasks/active с Accept: application/json → JSON {ok:...}.
  *
  * Критерий успеха:
  *   - ответы содержат Content-Type: application/json;
@@ -112,6 +114,48 @@ class TaskEndpointContractTest extends TestCase
         $decoded = json_decode($response['body'], true);
         $this->assertIsArray($decoded);
         $this->assertFalse($decoded['ok']);
+    }
+
+    /** AJAX-отказ на новом POST /snapshots/load приходит как JSON. */
+    public function testSnapshotLoadAjaxFailureIsJson(): void
+    {
+        $response = $this->request(
+            'POST',
+            '/snapshots/load',
+            ['X-Requested-With' => 'XMLHttpRequest', 'Accept' => 'application/json', 'Content-Type' => 'application/x-www-form-urlencoded'],
+            'repo_id=whatever'
+        );
+
+        $this->assertStringContainsString('application/json', $response['contentType'], 'AJAX failure must be JSON, not a redirect/HTML');
+        $decoded = json_decode($response['body'], true);
+        $this->assertIsArray($decoded, 'body must be valid JSON: ' . $response['body']);
+        $this->assertFalse($decoded['ok']);
+        $this->assertNotEmpty($decoded['error']);
+    }
+
+    /**
+     * GET /snapshots не ставит задач (только чтение): после захода в списке
+     * активных задач нет ни одной задачи списка снепшотов.
+     */
+    public function testGetSnapshotsDoesNotEnqueueTask(): void
+    {
+        // Act: заход на страницу списка (не стартует задачу).
+        $this->request('GET', '/snapshots', ['Accept' => 'text/html']);
+
+        // Assert: среди активных задач нет ни одной snapshots-задачи.
+        $active = $this->request('GET', '/tasks/active', ['Accept' => 'application/json']);
+        $this->assertStringContainsString('application/json', $active['contentType']);
+        $decoded = json_decode($active['body'], true);
+        $this->assertIsArray($decoded);
+        $this->assertArrayHasKey('ok', $decoded);
+
+        foreach ($decoded['tasks'] ?? [] as $task) {
+            $this->assertStringNotContainsString(
+                '#snapshots',
+                (string) ($task['label'] ?? ''),
+                'GET /snapshots must not enqueue a snapshots task'
+            );
+        }
     }
 
     /** Индикатор активных задач отдаёт JSON. */

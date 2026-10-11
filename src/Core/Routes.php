@@ -46,6 +46,7 @@ final class Routes
             ['POST', '/repositories/select', \App\Controllers\Repository\ActionController::class, 'select'],
 
             ['GET', '/snapshots', \App\Controllers\Snapshot\ListController::class, 'list'],
+            ['POST', '/snapshots/load', \App\Controllers\Snapshot\ActionController::class, 'load'],
             ['GET', '/snapshots/detail', \App\Controllers\Snapshot\DetailController::class, 'detail'],
             ['GET', '/snapshots/stats/result', \App\Controllers\Snapshot\StatsController::class, 'statsResult'],
             ['POST', '/snapshots/stats', \App\Controllers\Snapshot\StatsController::class, 'stats'],

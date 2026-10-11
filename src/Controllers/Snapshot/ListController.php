@@ -12,11 +12,17 @@ namespace App\Controllers\Snapshot;
 
 use App\Controllers\BaseController;
 use App\Core\App;
+use App\Storage\ContentTargets;
 
 class ListController extends BaseController
 {
     /**
-     * GET /snapshots — список снепшотов (автомат list/progress/error/start).
+     * GET /snapshots — список снепшотов.
+     *
+     * Только чтение: read() + reconcile() (постобработка УЖЕ готового вывода).
+     * Старт задачи — отдельная операция POST /snapshots/load (кнопка). Раньше
+     * страница сама блокирующе запускала задачу и ждала результат — из-за этого
+     * зависал сервер на больших репозиториях.
      */
     public function list(): void
     {
@@ -30,7 +36,7 @@ class ListController extends BaseController
         if ($repoId === null) {
             $this->render('snapshots/list.php', [
                 'repo' => null,
-                'view' => ['state' => 'list', 'snapshots' => []],
+                'view' => ['state' => 'absent'],
                 'isLoggedIn' => App::auth()->isLoggedIn(),
                 'username' => $user,
             ]);
@@ -42,20 +48,12 @@ class ListController extends BaseController
             return;
         }
 
-        $privileged = App::auth()->canManageProcesses();
-        $view = App::snapshotListState()->resolve($repo, $user, $privileged);
+        $resolver = App::contentResolver();
+        $target = ContentTargets::forSnapshots($repo);
 
-        // Автомат решил, что нужен старт: ставим задачу и фиксируем её метку.
-        if ($view['state'] === 'start') {
-            $started = App::resticTasks()->startListSnapshots($repo);
-            if ($started['id'] < 0) {
-                App::snapshotCache()->setListError($repo, __('snap.load_error'));
-                $view = ['state' => 'error', 'error' => __('snap.load_error'), 'task_label' => null];
-            } else {
-                App::snapshotCache()->markTask($repo, $started['label']);
-                $view = ['state' => 'progress', 'task_label' => $started['label'], 'task_state' => 'queued', 'position' => null];
-            }
-        }
+        // Постобработка уже завершённого вывода (задач НЕ ставит).
+        $resolver->reconcile($target);
+        $view = $resolver->read($target);
 
         $this->render('snapshots/list.php', [
             'repo' => $repo,

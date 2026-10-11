@@ -12,6 +12,7 @@ namespace App\Controllers\Dashboard;
 
 use App\Controllers\BaseController;
 use App\Core\App;
+use App\Storage\ContentTargets;
 
 class DashboardController extends BaseController
 {
@@ -60,8 +61,8 @@ class DashboardController extends BaseController
             if ($repo !== null) {
                 // «Последние 5» режем в PHP из кешированного списка (семантика
                 // «5 всего», а не «5 на каждую пару host+path»).
-                $allSnapshots = App::snapshotCache()->list($repo);
-                if ($allSnapshots === null) {
+                $allSnapshots = App::contentCache()->value(ContentTargets::forSnapshots($repo));
+                if (!is_array($allSnapshots)) {
                     $needLoad = true;
                 } else {
                     usort($allSnapshots, static function (array $a, array $b): int {
@@ -73,10 +74,17 @@ class DashboardController extends BaseController
         }
 
         $tasks = App::tasks()->listForUser($user, $auth->canManageProcesses());
+        $resolver = App::contentResolver();
         foreach ($tasks as &$task) {
             $label = (string) ($task['label'] ?? '');
             $described = $label !== '' ? App::tasks()->describe($label) : null;
             $task['title'] = $described['title'] ?? ($label !== '' ? $label : '—');
+
+            // «Момент, когда мы узнали»: по завершённой задаче дёшево проверить
+            // обещание и довести постобработку до конца (если обещания нет — no-op).
+            if ($label !== '' && ($task['state'] ?? '') === 'finished') {
+                $resolver->reconcileByLabel($label);
+            }
         }
         unset($task);
 

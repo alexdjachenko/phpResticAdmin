@@ -13,6 +13,7 @@ namespace App\Controllers\Task;
 use App\Controllers\BaseController;
 use App\Core\App;
 use App\Helpers\Format;
+use App\Storage\ContentTargets;
 
 /**
  * Web-роуты фоновых задач.
@@ -127,6 +128,8 @@ class TaskController extends BaseController
             return;
         }
 
+        // Статус постобработки обещанного контента (не блокирует: только чтение).
+        $status['proc'] = $this->postProcessState($label);
         $status['ok'] = true;
         $this->jsonOk($status);
     }
@@ -223,12 +226,19 @@ class TaskController extends BaseController
         }
 
         $tasks = App::tasks();
+        $resolver = App::contentResolver();
         $rows = [];
 
         foreach ($jobs as $job) {
             $label = (string) ($job['label'] ?? '');
             $parsed = $label !== '' ? $tasks->parseLabel($label) : null;
             $described = $label !== '' ? $tasks->describe($label) : null;
+
+            // «Момент, когда мы узнали»: по завершённой задаче довести
+            // постобработку обещанного контента (если обещания нет — no-op).
+            if ($label !== '' && ($job['state'] ?? '') === 'finished') {
+                $resolver->reconcileByLabel($label);
+            }
 
             $repoId = $described['repoId'] ?? null;
             $state = (string) ($job['state'] ?? 'unknown');
@@ -249,5 +259,30 @@ class TaskController extends BaseController
         }
 
         return $rows;
+    }
+
+    /**
+     * Статус постобработки обещанного контента по метке задачи.
+     *
+     * Возвращает одно из: none (не требуется), waiting (ожидаем завершения),
+     * processing (обработка), done (завершена), error (ошибка); null — метка не
+     * связана с целевым объектом кеша (например, backup/check).
+     */
+    private function postProcessState(string $label): ?string
+    {
+        $target = ContentTargets::fromLabel($label);
+        if ($target === null) {
+            return null;
+        }
+
+        $read = App::contentResolver()->read($target);
+
+        return match ($read['state'] ?? 'absent') {
+            'ready' => 'done',
+            'waiting' => 'waiting',
+            'ready_to_process' => 'processing',
+            'failed' => 'error',
+            default => 'none',
+        };
     }
 }

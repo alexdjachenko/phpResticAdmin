@@ -12,12 +12,15 @@ namespace App\Controllers\Snapshot;
 
 use App\Controllers\BaseController;
 use App\Core\App;
-use App\Restic\SnapshotService;
+use App\Storage\ContentTargets;
 
 class StatsController extends BaseController
 {
     /**
      * POST /snapshots/stats — запуск фоновой задачи статистики (AJAX).
+     *
+     * Явный старт: schedule() ставит задачу и записывает обещание в запись
+     * статистики. Если активная задача по этому снепшоту уже есть — вторую не ставит.
      */
     public function stats(): void
     {
@@ -43,7 +46,8 @@ class StatsController extends BaseController
             return;
         }
 
-        $started = App::resticTasks()->startSnapshotStats($repo, $snapId);
+        $target = ContentTargets::forStats($repoId, $snapId);
+        $started = App::contentResolver()->schedule($target, $repo);
 
         // respondTaskStarted() сам вернёт ошибку, если задача не поставлена.
         // В заголовке указываем источник (репозиторий снепшота).
@@ -53,8 +57,8 @@ class StatsController extends BaseController
     /**
      * GET /snapshots/stats/result — результат задачи статистики.
      *
-     * Проверяет, что метка принадлежит пользователю и её op = snapstats с этим
-     * id снепшота, читает вывод задачи, парсит и кладёт в системную область.
+     * Доводит обработку до конца (reconcile) и отдаёт готовую статистику из
+     * кеша. Задач не ставит — только разбирает уже завершённый вывод.
      */
     public function statsResult(): void
     {
@@ -80,31 +84,22 @@ class StatsController extends BaseController
             return;
         }
 
-        $result = $tasks->catResult($user, $label, $privileged);
-        if ($result === null || $result['exitCode'] !== 0) {
-            // Показываем настоящую причину из stderr задачи, а не общее сообщение.
-            $detail = '';
-            if (is_array($result)) {
-                $detail = trim((string) ($result['stderr'] ?? ''));
-                if ($detail === '') {
-                    $detail = trim((string) ($result['output'] ?? ''));
-                }
-            }
-            $this->jsonError($detail !== '' ? $detail : __('snap.stats_failed'), 200);
+        $resolver = App::contentResolver();
+        $resolver->reconcileByLabel($label);
+
+        $target = ContentTargets::forStats((string) ($parsed['repoId'] ?? ''), $snapId);
+        $read = $resolver->read($target);
+
+        if (($read['state'] ?? '') === 'ready' && is_array($read['value'])) {
+            $this->jsonOk([
+                'stats' => $read['value'],
+                'computed_at' => (int) ($read['cached_at'] ?? time()),
+            ]);
             return;
         }
 
-        $stats = SnapshotService::parseStatsOutput($result['output']);
-        if ($stats === null) {
-            $this->jsonError(__('snap.stats_failed'), 200);
-            return;
-        }
-
-        App::snapshotCache()->setStats($snapId, $stats);
-
-        $this->jsonOk([
-            'stats' => $stats,
-            'computed_at' => time(),
-        ]);
+        // Показываем настоящую причину из записи кеша, а не общее сообщение.
+        $detail = trim((string) ($read['error'] ?? ''));
+        $this->jsonError($detail !== '' ? $detail : __('snap.stats_failed'), 200);
     }
 }
