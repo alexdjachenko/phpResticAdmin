@@ -73,9 +73,10 @@ class ResticTaskService
     {
         $command = $this->buildCopyCommand($source, $dest, $snapId);
         $env = $this->buildCopyEnv($source, $dest);
-        // restic пишет отчёт/ошибки в stderr; -E держит его в отдельном `.e`,
-        // который читает стрим вывода — иначе окно задачи остаётся пустым.
-        return $this->tasks->start($this->username(), 'copysnap', (string) ($source['id'] ?? ''), $command, $env, true);
+        // Без `tsp -E`: упакованный task-spooler (v1.0.1) на этом флаге падает
+        // (exit 255, пустой вывод). stdout и stderr задачи идут в один файл,
+        // который читает стрим вывода (и `.e`, если он появится).
+        return $this->tasks->start($this->username(), 'copysnap', (string) ($source['id'] ?? ''), $command, $env);
     }
 
     /**
@@ -87,10 +88,10 @@ class ResticTaskService
         $command = ResticCommandBuilder::buildCommand(['stats', '--json', '--mode', 'raw-data'], $repo);
         $command[] = $snapId;
         $env = ResticCommandBuilder::buildEnv($repo);
-        // --json: отдельный stderr, чтобы предупреждения restic не ломали JSON.
         // snapId идёт в метку (objectId) — иначе по завершённой задаче нельзя
         // восстановить целевой объект кеша `snapshots/<snapId>/stats.json`.
-        return $this->tasks->start($this->username(), 'snapstats', (string) ($repo['id'] ?? ''), $command, $env, true, $snapId);
+        // JSON разбирается терпимо к служебным строкам restic (TaskPostProcessor).
+        return $this->tasks->start($this->username(), 'snapstats', (string) ($repo['id'] ?? ''), $command, $env, false, $snapId);
     }
 
     /**
@@ -101,8 +102,8 @@ class ResticTaskService
     {
         $command = ResticCommandBuilder::buildCommand(['snapshots', '--json'], $repo);
         $env = ResticCommandBuilder::buildEnv($repo);
-        // --json: отдельный stderr, чтобы предупреждения restic не ломали JSON
-        return $this->tasks->start($this->username(), 'snapshots', (string) ($repo['id'] ?? ''), $command, $env, true);
+        // JSON разбирается терпимо к служебным строкам restic (TaskPostProcessor).
+        return $this->tasks->start($this->username(), 'snapshots', (string) ($repo['id'] ?? ''), $command, $env);
     }
 
     /**

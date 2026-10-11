@@ -28,9 +28,10 @@ use PHPUnit\Framework\TestCase;
  *
  * Сценарий: TspClient замокан (перехватываем enqueue), реальный TspTaskManager;
  *       username фиксируется через сессию. Для каждой операции проверяются
- *       метка (op) и подкоманда restic; для JSON-задач — флаг отдельного stderr.
- *       Для копирования снепшота отдельно проверяются порядок --repo/--from-repo,
- *       пароли обоих бэкендов в env и флаг tsp -E.
+ *       метка (op) и подкоманда restic. Задачи НЕ используют `tsp -E`
+ *       (упакованный task-spooler падает на этом флаге), поэтому stdout и stderr
+ *       пишутся в один файл. Для копирования снепшота отдельно проверяются
+ *       порядок --repo/--from-repo и пароли обоих бэкендов в env.
  *
  * Критерий успеха: все assert проходят.
  */
@@ -193,8 +194,9 @@ class ResticTaskServiceTest extends TestCase
         $this->assertNotContains('--insecure-no-password', $captured['command']);
         $this->assertNotContains('--from-insecure-no-password', $captured['command']);
 
-        // -E: restic пишет отчёт/ошибки в stderr, стрим читает отдельный `.e`.
-        $this->assertTrue($captured['separateStderr'], 'copy must start with tsp -E');
+        // Без `tsp -E`: упакованный task-spooler падает на этом флаге, поэтому
+        // stdout и stderr задачи идут в один файл.
+        $this->assertFalse($captured['separateStderr'], 'copy must not use tsp -E');
     }
 
     /** copy — env: пароль цели в RESTIC_PASSWORD, источник в RESTIC_FROM_PASSWORD. */
@@ -262,18 +264,18 @@ class ResticTaskServiceTest extends TestCase
         $this->assertSame('dstpass', $env['RESTIC_PASSWORD']);
     }
 
-    /** stats снепшота — op snapstats, snapId в метке (objectId), отдельный stderr (JSON). */
+    /** stats снепшота — op snapstats, snapId в метке (objectId), без tsp -E. */
     public function testStartSnapshotStats(): void
     {
         $this->service()->startSnapshotStats($this->repo(), 'abcd1234');
-        $this->assertStartedWith('snapstats', ['stats', '--json', '--mode', 'raw-data'], true, 'abcd1234');
+        $this->assertStartedWith('snapstats', ['stats', '--json', '--mode', 'raw-data'], false, 'abcd1234');
     }
 
-    /** список снепшотов — op snapshots, отдельный stderr (JSON). */
+    /** список снепшотов — op snapshots, без tsp -E. */
     public function testStartListSnapshots(): void
     {
         $this->service()->startListSnapshots($this->repo());
-        $this->assertStartedWith('snapshots', ['snapshots', '--json'], true);
+        $this->assertStartedWith('snapshots', ['snapshots', '--json']);
     }
 
     /** Неизвестная операция — ошибка программиста, не тихий сбой. */

@@ -154,11 +154,9 @@ class SnapshotPromiseEndToEndTest extends TestCase
 
     /**
      * Собирает диагностику для ассертов reconcile: состояние записи кеша,
-     * найденную задачу в очереди, её сырой вывод и — отдельно — пробу того, что
-     * видит дочерний процесс фоновой задачи (PATH и resolvability `restic`).
-     *
-     * Вызывается только при падении ассерта (ленивый вызов), поэтому лишних
-     * задач на зелёных прогонах не создаёт.
+     * найденную задачу в очереди и её сырой вывод. Включается в сообщение
+     * ассерта (ленивый вызов — только при падении), чтобы падение CI объясняло
+     * причину (например, задача restic завершилась с ошибкой).
      */
     private function reconcileDiagnostics(string $label, ContentTarget $target): string
     {
@@ -166,7 +164,7 @@ class SnapshotPromiseEndToEndTest extends TestCase
         $job = $this->tasks->findByLabel($label);
         $result = $this->tasks->catResult('tester', $label, true);
 
-        $data = array_merge([
+        return (string) json_encode([
             'cache_state' => $read['state'] ?? null,
             'cache_error' => $read['error'] ?? null,
             'cache_promise' => $read['promise'] ?? null,
@@ -174,66 +172,7 @@ class SnapshotPromiseEndToEndTest extends TestCase
             'task_exit' => $result['exitCode'] ?? null,
             'task_stdout' => $result['output'] ?? null,
             'task_stderr' => $result['stderr'] ?? null,
-        ], $this->childEnvironmentProbe());
-
-        return (string) json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-    }
-
-    /**
-     * Изолирующая проба: одна и та же команда запускается с `tsp -E` и без него.
-     * Единственное отличие падающих задач от зелёных tsp-тестов — флаг `-E`;
-     * проба подтверждает ли опровергает это.
-     *
-     * @return array<string, mixed>
-     */
-    private function childEnvironmentProbe(): array
-    {
-        return [
-            'tsp_version' => trim($this->runner->run(['tsp', '-V'])['stdout']),
-            'probe_no_E' => $this->probeTask(['/bin/echo', 'PROBE_NO_E'], false),
-            'probe_with_E' => $this->probeTask(['/bin/echo', 'PROBE_WITH_E'], true),
-            'probe_sh_no_E' => $this->probeTask(
-                ['/bin/sh', '-c', 'echo "CHILD_PATH=$PATH"; command -v restic || echo NO_RESTIC_HERE'],
-                false
-            ),
-        ];
-    }
-
-    /**
-     * Запускает команду как фоновую задачу и возвращает её состояние и вывод.
-     *
-     * @param array<int, string> $command
-     * @return array<string, mixed>
-     */
-    private function probeTask(array $command, bool $separateStderr): array
-    {
-        $started = $this->tasks->start('diag', 'run', null, $command, [], $separateStderr);
-        $label = (string) ($started['label'] ?? '');
-
-        if ((int) ($started['id'] ?? -1) < 0 || $label === '') {
-            return ['enqueue' => 'failed', 'result' => $started];
-        }
-
-        $deadline = microtime(true) + 10;
-        while (microtime(true) < $deadline) {
-            App::resetCaches();
-            $job = $this->tasks->findByLabel($label);
-            if ($job !== null && in_array($job['state'], ['finished', 'skipped', 'unknown'], true)) {
-                break;
-            }
-            usleep(100000);
-        }
-
-        $job = $this->tasks->findByLabel($label);
-        $result = $this->tasks->catResult('diag', $label, true);
-
-        return [
-            'id' => $started['id'] ?? null,
-            'state' => $job['state'] ?? null,
-            'exit' => $result['exitCode'] ?? null,
-            'stdout' => $result['output'] ?? null,
-            'stderr' => $result['stderr'] ?? null,
-        ];
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     }
 
     /** schedule → waiting → reconcileByLabel → ready (список снепшотов). */

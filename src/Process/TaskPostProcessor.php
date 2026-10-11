@@ -85,13 +85,40 @@ class TaskPostProcessor
     }
 
     /**
+     * Извлекает JSON-документ из вывода задачи.
+     *
+     * Без `tsp -E` stdout и stderr задачи пишутся в один файл, поэтому перед
+     * JSON-документом может стоять служебная строка restic ("repository ...
+     * opened"). Прямой json_decode всего текста тогда падает: сначала пробуем
+     * весь текст, затем — подстроку от первого `[`/`{` (JSON-документ
+     * многострочный, поэтому опираемся на позицию, а не на строки).
+     */
+    private static function extractJson(string $text): ?string
+    {
+        $trimmed = trim($text);
+        if ($trimmed !== '' && is_array(json_decode($trimmed, true))) {
+            return $trimmed;
+        }
+
+        $offset = strcspn($text, '[{');
+        if ($offset >= strlen($text)) {
+            return null;
+        }
+
+        $candidate = trim(substr($text, $offset));
+
+        return is_array(json_decode($candidate, true)) ? $candidate : null;
+    }
+
+    /**
      * @return callable(string, ContentTarget, ?int): bool|null
      */
     private function processorFor(string $op): ?callable
     {
         return match ($op) {
             'snapshots' => function (string $output, ContentTarget $target, ?int $duration): bool {
-                $decoded = json_decode(trim($output), true);
+                $json = self::extractJson($output);
+                $decoded = $json !== null ? json_decode($json, true) : null;
                 if (!is_array($decoded)) {
                     $this->storage->fail($target, __('snap.load_error'));
                     return false;
@@ -100,7 +127,8 @@ class TaskPostProcessor
                 return true;
             },
             'snapstats' => function (string $output, ContentTarget $target, ?int $duration): bool {
-                $stats = SnapshotService::parseStatsOutput($output);
+                $json = self::extractJson($output);
+                $stats = $json !== null ? SnapshotService::parseStatsOutput($json) : null;
                 if ($stats === null) {
                     $this->storage->fail($target, __('snap.stats_failed'));
                     return false;

@@ -36,7 +36,8 @@ class TspTaskManager
      * `<username>#<op><repoId>[@<objectId>]<rand16>`.
      *
      * `$separateStderr = true` включает `tsp -E`: stdout и stderr задачи пишутся
-     * в разные файлы (нужно для JSON-задач).
+     * в разные файлы. ВНИМАНИЕ: упакованный task-spooler (v1.0.1) на `-E` падает
+     * (exit 255, пустой вывод), поэтому `true` нигде не передаётся.
      *
      * @param array<int, string> $command
      * @param array<string, string> $env

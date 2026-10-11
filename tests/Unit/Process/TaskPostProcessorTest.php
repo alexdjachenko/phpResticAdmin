@@ -86,6 +86,35 @@ class TaskPostProcessorTest extends TestCase
         $this->assertSame(['total_size' => 42, 'total_file_count' => 3], $this->storage->read($target)->value);
     }
 
+    /**
+     * Без `tsp -E` stdout и stderr в одном файле: служебная строка restic перед
+     * JSON не должна ломать разбор (snapshots-список).
+     */
+    public function testSnapshotsToleratesLogLineBeforeJson(): void
+    {
+        $target = ContentTargets::forSnapshots(['id' => 'pub1', 'category' => 'public']);
+        $output = "repository abc123 opened (version 2, compression level auto)\n[{\"id\":\"a\"},{\"id\":\"b\"}]";
+        $tasks = $this->tasksReturning(['exitCode' => 0, 'output' => $output, 'stderr' => '']);
+
+        $handled = $this->processor($tasks)->process('snapshots', 'alice', 'alice#snapshotspub10123456789abcdef', true, $target);
+
+        $this->assertTrue($handled);
+        $this->assertSame([['id' => 'a'], ['id' => 'b']], $this->storage->read($target)->value);
+    }
+
+    /** То же для snapstats — служебная строка перед JSON-объектом. */
+    public function testSnapstatsToleratesLogLineBeforeJson(): void
+    {
+        $target = ContentTargets::forStats('r1', 'snap123');
+        $output = "repository abc123 opened (version 2)\n{\"total_size\":7,\"total_file_count\":1}";
+        $tasks = $this->tasksReturning(['exitCode' => 0, 'output' => $output, 'stderr' => '']);
+
+        $handled = $this->processor($tasks)->process('snapstats', 'alice', 'alice#snapstatsr1@snap1230123456789abcdef', true, $target);
+
+        $this->assertTrue($handled);
+        $this->assertSame(['total_size' => 7, 'total_file_count' => 1], $this->storage->read($target)->value);
+    }
+
     /** Битый JSON → контент не записан, зафиксирована ошибка. */
     public function testSnapshotsBrokenJsonSetsError(): void
     {

@@ -49,8 +49,11 @@ class TspClient
      *
      * При $separateStderr = true используется флаг `tsp -E`: stdout задачи
      * пишется в основной output-файл, а stderr — в отдельный файл `.e`.
-     * Это нужно для JSON-задач (restic snapshots/stats --json), чтобы
-     * предупреждения restic из stderr не ломали парсинг stdout.
+     *
+     * ВНИМАНИЕ: упакованный task-spooler (v1.0.1) на флаге `-E` падает (задача
+     * завершается с exit 255 и пустым выводом), поэтому `true` не передаётся
+     * нигде в коде. Флаг оставлен как есть, но включать его можно только после
+     * проверки конкретной сборки tsp.
      *
      * @param array<int, string> $command
      * @param array<string, string> $env
