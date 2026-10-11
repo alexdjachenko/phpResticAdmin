@@ -13,7 +13,6 @@ namespace App\Controllers\Task;
 use App\Controllers\BaseController;
 use App\Core\App;
 use App\Helpers\Format;
-use App\Storage\ContentTargets;
 
 /**
  * Web-роуты фоновых задач.
@@ -270,12 +269,16 @@ class TaskController extends BaseController
      */
     private function postProcessState(string $label): ?string
     {
-        $target = ContentTargets::fromLabel($label);
+        // targetForLabel учитывает категорию репозитория (область кеша), иначе
+        // для приватного/сессионного репозитория чтение шло бы из System-области
+        // и состояние всегда было бы absent ("постобработка не требуется").
+        $resolver = App::contentResolver();
+        $target = $resolver->targetForLabel($label);
         if ($target === null) {
             return null;
         }
 
-        $read = App::contentResolver()->read($target);
+        $read = $resolver->read($target);
 
         return match ($read['state'] ?? 'absent') {
             'ready' => 'done',

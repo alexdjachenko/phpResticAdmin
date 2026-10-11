@@ -193,31 +193,48 @@ class ContentResolver
     }
 
     /**
+     * Целевой объект по метке задачи — с учётом КАТЕГОРИИ репозитория, чтобы
+     * область кеша совпадала с той, куда пишет reconcile. Для списка снепшотов
+     * приватного/сессионного репозитория это User, а НЕ System (жёсткий System
+     * в ContentTargets::fromLabel читал бы пустую системную область). Возвращает
+     * null, если метка не связана с целевым объектом кеша.
+     */
+    public function targetForLabel(string $label): ?ContentTarget
+    {
+        $parsed = TaskLabel::parse($label);
+        if ($parsed === null) {
+            return null;
+        }
+
+        if ($parsed['op'] === 'snapstats') {
+            $objectId = $parsed['objectId'] ?? null;
+            if ($objectId === null || $objectId === '') {
+                return null;
+            }
+            return ContentTargets::forStats((string) ($parsed['repoId'] ?? ''), $objectId);
+        }
+
+        if ($parsed['op'] === 'snapshots') {
+            $repoId = (string) ($parsed['repoId'] ?? '');
+            if ($repoId === '') {
+                return null;
+            }
+            $repo = $this->findRepo($parsed['username'], $repoId);
+            return $repo !== null
+                ? ContentTargets::forSnapshots($repo)
+                : ContentTargets::fromLabel($label);
+        }
+
+        return null;
+    }
+
+    /**
      * Довести до конца по метке задачи (для дашборда: «по завершённой задаче
      * найти обещание и обработать вывод»).
      */
     public function reconcileByLabel(string $label): bool
     {
-        $parsed = TaskLabel::parse($label);
-        if ($parsed === null) {
-            return false;
-        }
-
-        $target = null;
-
-        if ($parsed['op'] === 'snapstats') {
-            $objectId = $parsed['objectId'] ?? null;
-            if ($objectId !== null && $objectId !== '') {
-                $target = ContentTargets::forStats((string) ($parsed['repoId'] ?? ''), $objectId);
-            }
-        } elseif ($parsed['op'] === 'snapshots' && ($parsed['repoId'] ?? null) !== null) {
-            $repoId = (string) $parsed['repoId'];
-            $repo = $this->findRepo($parsed['username'], $repoId);
-            $target = $repo !== null
-                ? ContentTargets::forSnapshots($repo)
-                : ContentTargets::fromLabel($label);
-        }
-
+        $target = $this->targetForLabel($label);
         if ($target === null) {
             return false;
         }

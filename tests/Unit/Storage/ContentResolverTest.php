@@ -9,6 +9,7 @@
 namespace App\Tests\Unit\Storage;
 
 use App\Cache\CacheManager;
+use App\Cache\CacheScope;
 use App\Process\TaskPostProcessor;
 use App\Process\TspTaskManager;
 use App\Restic\ResticTaskService;
@@ -247,5 +248,33 @@ class ContentResolverTest extends TestCase
 
         $this->assertTrue($this->resolver($tasks, $repos)->reconcileByLabel($label));
         $this->assertSame([['id' => 'a']], $this->storage->read($target)->value);
+    }
+
+    /**
+     * targetForLabel: для списка снепшотов ПРИВАТНОГО репо берёт User-область
+     * (а не жёсткий System из ContentTargets::fromLabel) — иначе чтение шло бы
+     * из пустой системной области и состояние всегда было бы absent.
+     */
+    public function testTargetForLabelUsesRepoCategoryScope(): void
+    {
+        $repo = ['id' => 'priv1', 'category' => 'private'];
+        $label = ContentTargets::labelOf(ContentTargets::forSnapshots($repo), 'alice');
+
+        $repos = $this->createMock(RepositoryStorage::class);
+        $repos->method('loadAll')->with('alice')->willReturn([$repo]);
+
+        $target = $this->resolver($this->createMock(TspTaskManager::class), $repos)->targetForLabel($label);
+
+        $this->assertNotNull($target);
+        $this->assertSame(CacheScope::User, $target->scope);
+        $this->assertSame('repos/priv1/snapshots.json', $target->cacheKey());
+    }
+
+    /** targetForLabel: метка несвязанной операции → null (нет целевого объекта кеша). */
+    public function testTargetForLabelReturnsNullForUnrelatedOp(): void
+    {
+        $target = $this->resolver($this->createMock(TspTaskManager::class))->targetForLabel('alice#backupr10123456789abcdef');
+
+        $this->assertNull($target);
     }
 }
