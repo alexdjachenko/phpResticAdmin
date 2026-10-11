@@ -180,22 +180,40 @@ class SnapshotPromiseEndToEndTest extends TestCase
     }
 
     /**
-     * Запускает в фоне (`/bin/sh` — абсолютным путём) команду, печатающую PATH
-     * дочернего процесса и результат поиска `restic`, и возвращает её вывод.
-     * Показывает, доходит ли до фоновой задачи окружение и виден ли ей restic.
+     * Изолирующая проба: одна и та же команда запускается с `tsp -E` и без него.
+     * Единственное отличие падающих задач от зелёных tsp-тестов — флаг `-E`;
+     * проба подтверждает ли опровергает это.
      *
      * @return array<string, mixed>
      */
     private function childEnvironmentProbe(): array
     {
-        $command = ['/bin/sh', '-c', 'echo "CHILD_PATH=$PATH"; command -v restic || echo NO_RESTIC_HERE; restic version 2>&1; echo "RC=$?"'];
-        $started = $this->tasks->start('diag', 'run', null, $command, [], true);
+        return [
+            'tsp_version' => trim($this->runner->run(['tsp', '-V'])['stdout']),
+            'probe_no_E' => $this->probeTask(['/bin/echo', 'PROBE_NO_E'], false),
+            'probe_with_E' => $this->probeTask(['/bin/echo', 'PROBE_WITH_E'], true),
+            'probe_sh_no_E' => $this->probeTask(
+                ['/bin/sh', '-c', 'echo "CHILD_PATH=$PATH"; command -v restic || echo NO_RESTIC_HERE'],
+                false
+            ),
+        ];
+    }
 
-        if ((int) ($started['id'] ?? -1) < 0) {
-            return ['probe' => 'enqueue failed'];
+    /**
+     * Запускает команду как фоновую задачу и возвращает её состояние и вывод.
+     *
+     * @param array<int, string> $command
+     * @return array<string, mixed>
+     */
+    private function probeTask(array $command, bool $separateStderr): array
+    {
+        $started = $this->tasks->start('diag', 'run', null, $command, [], $separateStderr);
+        $label = (string) ($started['label'] ?? '');
+
+        if ((int) ($started['id'] ?? -1) < 0 || $label === '') {
+            return ['enqueue' => 'failed', 'result' => $started];
         }
 
-        $label = (string) $started['label'];
         $deadline = microtime(true) + 10;
         while (microtime(true) < $deadline) {
             App::resetCaches();
@@ -206,12 +224,15 @@ class SnapshotPromiseEndToEndTest extends TestCase
             usleep(100000);
         }
 
-        $probe = $this->tasks->catResult('diag', $label, true);
+        $job = $this->tasks->findByLabel($label);
+        $result = $this->tasks->catResult('diag', $label, true);
 
         return [
-            'probe_exit' => $probe['exitCode'] ?? null,
-            'probe_stdout' => $probe['output'] ?? null,
-            'probe_stderr' => $probe['stderr'] ?? null,
+            'id' => $started['id'] ?? null,
+            'state' => $job['state'] ?? null,
+            'exit' => $result['exitCode'] ?? null,
+            'stdout' => $result['output'] ?? null,
+            'stderr' => $result['stderr'] ?? null,
         ];
     }
 
