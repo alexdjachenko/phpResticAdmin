@@ -21,6 +21,7 @@ use App\Restic\ResticTaskService;
 use App\Restic\SnapshotService;
 use App\Storage\ContentCacheStorage;
 use App\Storage\ContentResolver;
+use App\Storage\ContentTarget;
 use App\Storage\ContentTargets;
 use App\Storage\RepositoryStorage;
 use PHPUnit\Framework\TestCase;
@@ -147,7 +148,31 @@ class SnapshotPromiseEndToEndTest extends TestCase
             }
             usleep(200000);
         }
-        $this->fail('task did not finish in time: ' . $label);
+
+        $this->fail('task did not finish in time: ' . $label . ' (last state: ' . json_encode($this->tasks->findByLabel($label)) . ')');
+    }
+
+    /**
+     * Диагностика для ассертов reconcile: состояние записи кеша, найденная
+     * задача в очереди и её сырой вывод. Включается в сообщение ассерта, чтобы
+     * падение CI объясняло причину (например, задача restic завершилась с
+     * ошибкой, а не сломанная модель обещания).
+     */
+    private function reconcileDiagnostics(string $label, ContentTarget $target): string
+    {
+        $read = $this->resolver->read($target);
+        $job = $this->tasks->findByLabel($label);
+        $result = $this->tasks->catResult('tester', $label, true);
+
+        return (string) json_encode([
+            'cache_state' => $read['state'] ?? null,
+            'cache_error' => $read['error'] ?? null,
+            'cache_promise' => $read['promise'] ?? null,
+            'job' => $job,
+            'task_exit' => $result['exitCode'] ?? null,
+            'task_stdout' => $result['output'] ?? null,
+            'task_stderr' => $result['stderr'] ?? null,
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     }
 
     /** schedule → waiting → reconcileByLabel → ready (список снепшотов). */
@@ -174,11 +199,14 @@ class SnapshotPromiseEndToEndTest extends TestCase
         $this->assertSame($target->cacheKey(), $restored->cacheKey());
 
         // Act: постобработка (как дашборд по завершённой задаче).
-        $this->assertTrue($this->resolver->reconcileByLabel($started['label']));
+        $this->assertTrue(
+            $this->resolver->reconcileByLabel($started['label']),
+            'reconcileByLabel failed: ' . $this->reconcileDiagnostics($started['label'], $target)
+        );
 
         // Assert: контент записан, обещание снято.
         $ready = $this->resolver->read($target);
-        $this->assertSame('ready', $ready['state']);
+        $this->assertSame('ready', $ready['state'], 'diagnostics: ' . $this->reconcileDiagnostics($started['label'], $target));
         $this->assertNull($ready['promise']);
         $this->assertCount(2, $ready['value']);
 
@@ -201,12 +229,15 @@ class SnapshotPromiseEndToEndTest extends TestCase
         $this->assertGreaterThanOrEqual(0, $started['id']);
         $this->waitFinished($started['label']);
 
-        $this->assertTrue($this->resolver->reconcile($target));
+        $this->assertTrue(
+            $this->resolver->reconcile($target),
+            'reconcile failed: ' . $this->reconcileDiagnostics($started['label'], $target)
+        );
 
         // Assert
         $ready = $this->resolver->read($target);
-        $this->assertSame('ready', $ready['state']);
-        $this->assertGreaterThan(0, (int) ($ready['value']['total_size'] ?? 0));
+        $this->assertSame('ready', $ready['state'], 'diagnostics: ' . $this->reconcileDiagnostics($started['label'], $target));
+        $this->assertGreaterThan(0, (int) ($ready['value']['total_size'] ?? 0), 'stats: ' . json_encode($ready['value'] ?? null));
     }
 
     /** Негативный путь: несуществующий snapId → failed, ошибка липкая. */
@@ -219,7 +250,10 @@ class SnapshotPromiseEndToEndTest extends TestCase
         $started = $this->resolver->schedule($target, $this->repo);
         $this->assertGreaterThanOrEqual(0, $started['id']);
         $this->waitFinished($started['label']);
-        $this->assertFalse($this->resolver->reconcile($target));
+        $this->assertFalse(
+            $this->resolver->reconcile($target),
+            'reconcile must fail for a nonexistent snapshot: ' . $this->reconcileDiagnostics($started['label'], $target)
+        );
 
         // Assert: ошибка зафиксирована и липкая.
         $failed = $this->resolver->read($target);
