@@ -153,10 +153,12 @@ class SnapshotPromiseEndToEndTest extends TestCase
     }
 
     /**
-     * Диагностика для ассертов reconcile: состояние записи кеша, найденная
-     * задача в очереди и её сырой вывод. Включается в сообщение ассерта, чтобы
-     * падение CI объясняло причину (например, задача restic завершилась с
-     * ошибкой, а не сломанная модель обещания).
+     * Собирает диагностику для ассертов reconcile: состояние записи кеша,
+     * найденную задачу в очереди, её сырой вывод и — отдельно — пробу того, что
+     * видит дочерний процесс фоновой задачи (PATH и resolvability `restic`).
+     *
+     * Вызывается только при падении ассерта (ленивый вызов), поэтому лишних
+     * задач на зелёных прогонах не создаёт.
      */
     private function reconcileDiagnostics(string $label, ContentTarget $target): string
     {
@@ -164,7 +166,7 @@ class SnapshotPromiseEndToEndTest extends TestCase
         $job = $this->tasks->findByLabel($label);
         $result = $this->tasks->catResult('tester', $label, true);
 
-        return (string) json_encode([
+        $data = array_merge([
             'cache_state' => $read['state'] ?? null,
             'cache_error' => $read['error'] ?? null,
             'cache_promise' => $read['promise'] ?? null,
@@ -172,7 +174,45 @@ class SnapshotPromiseEndToEndTest extends TestCase
             'task_exit' => $result['exitCode'] ?? null,
             'task_stdout' => $result['output'] ?? null,
             'task_stderr' => $result['stderr'] ?? null,
-        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        ], $this->childEnvironmentProbe());
+
+        return (string) json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+
+    /**
+     * Запускает в фоне (`/bin/sh` — абсолютным путём) команду, печатающую PATH
+     * дочернего процесса и результат поиска `restic`, и возвращает её вывод.
+     * Показывает, доходит ли до фоновой задачи окружение и виден ли ей restic.
+     *
+     * @return array<string, mixed>
+     */
+    private function childEnvironmentProbe(): array
+    {
+        $command = ['/bin/sh', '-c', 'echo "CHILD_PATH=$PATH"; command -v restic || echo NO_RESTIC_HERE; restic version 2>&1; echo "RC=$?"'];
+        $started = $this->tasks->start('diag', 'run', null, $command, [], true);
+
+        if ((int) ($started['id'] ?? -1) < 0) {
+            return ['probe' => 'enqueue failed'];
+        }
+
+        $label = (string) $started['label'];
+        $deadline = microtime(true) + 10;
+        while (microtime(true) < $deadline) {
+            App::resetCaches();
+            $job = $this->tasks->findByLabel($label);
+            if ($job !== null && in_array($job['state'], ['finished', 'skipped', 'unknown'], true)) {
+                break;
+            }
+            usleep(100000);
+        }
+
+        $probe = $this->tasks->catResult('diag', $label, true);
+
+        return [
+            'probe_exit' => $probe['exitCode'] ?? null,
+            'probe_stdout' => $probe['output'] ?? null,
+            'probe_stderr' => $probe['stderr'] ?? null,
+        ];
     }
 
     /** schedule → waiting → reconcileByLabel → ready (список снепшотов). */
@@ -199,14 +239,19 @@ class SnapshotPromiseEndToEndTest extends TestCase
         $this->assertSame($target->cacheKey(), $restored->cacheKey());
 
         // Act: постобработка (как дашборд по завершённой задаче).
+        $reconciled = $this->resolver->reconcileByLabel($started['label']);
         $this->assertTrue(
-            $this->resolver->reconcileByLabel($started['label']),
-            'reconcileByLabel failed: ' . $this->reconcileDiagnostics($started['label'], $target)
+            $reconciled,
+            $reconciled ? '' : 'reconcileByLabel failed: ' . $this->reconcileDiagnostics($started['label'], $target)
         );
 
         // Assert: контент записан, обещание снято.
         $ready = $this->resolver->read($target);
-        $this->assertSame('ready', $ready['state'], 'diagnostics: ' . $this->reconcileDiagnostics($started['label'], $target));
+        $this->assertSame(
+            'ready',
+            $ready['state'],
+            ($ready['state'] ?? '') === 'ready' ? '' : 'diagnostics: ' . $this->reconcileDiagnostics($started['label'], $target)
+        );
         $this->assertNull($ready['promise']);
         $this->assertCount(2, $ready['value']);
 
@@ -229,15 +274,20 @@ class SnapshotPromiseEndToEndTest extends TestCase
         $this->assertGreaterThanOrEqual(0, $started['id']);
         $this->waitFinished($started['label']);
 
+        $reconciled = $this->resolver->reconcile($target);
         $this->assertTrue(
-            $this->resolver->reconcile($target),
-            'reconcile failed: ' . $this->reconcileDiagnostics($started['label'], $target)
+            $reconciled,
+            $reconciled ? '' : 'reconcile failed: ' . $this->reconcileDiagnostics($started['label'], $target)
         );
 
         // Assert
         $ready = $this->resolver->read($target);
-        $this->assertSame('ready', $ready['state'], 'diagnostics: ' . $this->reconcileDiagnostics($started['label'], $target));
-        $this->assertGreaterThan(0, (int) ($ready['value']['total_size'] ?? 0), 'stats: ' . json_encode($ready['value'] ?? null));
+        $this->assertSame(
+            'ready',
+            $ready['state'],
+            ($ready['state'] ?? '') === 'ready' ? '' : 'diagnostics: ' . $this->reconcileDiagnostics($started['label'], $target)
+        );
+        $this->assertGreaterThan(0, (int) ($ready['value']['total_size'] ?? 0));
     }
 
     /** Негативный путь: несуществующий snapId → failed, ошибка липкая. */
@@ -250,9 +300,12 @@ class SnapshotPromiseEndToEndTest extends TestCase
         $started = $this->resolver->schedule($target, $this->repo);
         $this->assertGreaterThanOrEqual(0, $started['id']);
         $this->waitFinished($started['label']);
+
+        // Для негативного сценария reconcile ОБЯЗАН вернуть false.
+        $reconciled = $this->resolver->reconcile($target);
         $this->assertFalse(
-            $this->resolver->reconcile($target),
-            'reconcile must fail for a nonexistent snapshot: ' . $this->reconcileDiagnostics($started['label'], $target)
+            $reconciled,
+            $reconciled ? 'reconcile unexpectedly succeeded: ' . $this->reconcileDiagnostics($started['label'], $target) : ''
         );
 
         // Assert: ошибка зафиксирована и липкая.
