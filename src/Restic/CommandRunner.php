@@ -270,6 +270,15 @@ class CommandRunner
         $base = \App\Core\App::cache()->request()->remember('env.base', null, static function (): array {
             $base = ['HOME' => '/tmp'];
 
+            // PATH обязателен для дочерних процессов: proc_open с явным
+            // окружением не наследует путь поиска, а фоновая tsp-задача ищет
+            // bare-имена (напр. `restic`) в PATH СВОЕГО окружения. Без PATH
+            // задача падает с «command not found», хотя прямой вызов работает.
+            $path = getenv('PATH');
+            if (is_string($path) && $path !== '') {
+                $base['PATH'] = $path;
+            }
+
             $settings = \App\Core\App::configStorage()->loadSettings();
             $tmpDir = rtrim((string) ($settings['tmp_dir'] ?? '/tmp'), '/');
             $cacheDir = $tmpDir . '/restic-cache';

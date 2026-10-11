@@ -240,19 +240,22 @@ class TspTaskManager
             return null;
         }
 
-        $id = $job['id'];
-        $state = $this->tsp->state($id);
-        if ($state !== 'finished') {
+        // Состояние берём из уже полученного списка задач (тот же источник, что и
+        // в reconcile/read), а не отдельным `tsp -s`: исключает расхождение между
+        // `tsp -l` и `tsp -s`. `tsp -w` безопасен — задача именно finished.
+        if (($job['state'] ?? '') !== 'finished') {
             return null;
         }
 
+        $id = $job['id'];
         $outputFile = $this->tsp->outputFile($id);
         $output = $outputFile !== null ? $this->readFile($outputFile) : '';
+        $stderr = $outputFile !== null ? $this->readFile($outputFile . '.e') : '';
 
         return [
             'exitCode' => $this->tsp->wait($id),
             'output' => $output,
-            'stderr' => $this->readErrFile($id),
+            'stderr' => $stderr,
         ];
     }
 
@@ -420,6 +423,18 @@ class TspTaskManager
     }
 
     /**
+     * Сбрасывает мемоизацию списка задач на текущий запрос.
+     *
+     * Вызывается после постановки новой задачи: иначе `findByLabel()` в том же
+     * запросе вернул бы устаревший (снятый ДО enqueue) список и не увидел бы
+     * только что поставленную задачу.
+     */
+    public function invalidateList(): void
+    {
+        App::cache()->request()->remove('tsp.list');
+    }
+
+    /**
      * Список задач очереди с мемоизацией на текущий запрос.
      *
      * Проблема: `tsp -l` вызывался до трёх раз за рендер (findByLabel + isFinished
@@ -468,15 +483,6 @@ class TspTaskManager
         }
 
         return $data;
-    }
-
-    /**
-     * stderr задачи из отдельного `.e`-файла (создаётся только при `tsp -E`).
-     */
-    private function readErrFile(int $id): string
-    {
-        $outputFile = $this->tsp->outputFile($id);
-        return $outputFile !== null ? $this->readFile($outputFile . '.e') : '';
     }
 
     /**

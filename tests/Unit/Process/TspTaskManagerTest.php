@@ -185,7 +185,7 @@ class TspTaskManagerTest extends TestCase
 
         $mock = $this->createMock(TspClient::class);
         $mock->method('list')->willReturn([$this->job(9, $label)]);
-        $mock->expects($this->once())->method('state')->with(9)->willReturn('finished');
+        $mock->expects($this->never())->method('state');
         $mock->expects($this->once())->method('wait')->with(9)->willReturn(1);
         $mock->expects($this->once())->method('outputFile')->with(9)->willReturn($outFile);
         $mock->expects($this->never())->method('catRaw');
@@ -209,10 +209,13 @@ class TspTaskManagerTest extends TestCase
     {
         $label = 'alice#snapstatsr1@abcd12340123456789abcdef';
 
+        $running = $this->job(9, $label);
+        $running['state'] = 'running';
+
         $mock = $this->createMock(TspClient::class);
-        $mock->method('list')->willReturn([$this->job(9, $label)]);
-        $mock->method('state')->with(9)->willReturn('running');
+        $mock->method('list')->willReturn([$running]);
         $mock->expects($this->never())->method('wait');
+        $mock->expects($this->never())->method('outputFile');
 
         $result = (new TspTaskManager($mock))->catResult('alice', $label, false);
 

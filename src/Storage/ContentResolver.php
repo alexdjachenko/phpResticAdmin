@@ -132,6 +132,10 @@ class ContentResolver
             $started = $this->resticTasks->startListSnapshots($repo);
         }
 
+        // Очередь изменилась — сбрасываем мемоизацию списка задач на запрос,
+        // иначе последующий read() в этом же запросе не увидел бы новую задачу.
+        $this->tasks->invalidateList();
+
         if (($started['id'] ?? -1) >= 0) {
             $this->storage->promise($target, (string) $started['label']);
         } else {
