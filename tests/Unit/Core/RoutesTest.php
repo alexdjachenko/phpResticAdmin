@@ -79,6 +79,7 @@ class RoutesTest extends TestCase
             'POST /repositories/select' => [RepositoryActionController::class, 'select'],
 
             'GET /snapshots' => [SnapshotListController::class, 'list'],
+            'POST /snapshots/load' => [SnapshotActionController::class, 'load'],
             'GET /snapshots/detail' => [SnapshotDetailController::class, 'detail'],
             'GET /snapshots/stats/result' => [SnapshotStatsController::class, 'statsResult'],
             'POST /snapshots/stats' => [SnapshotStatsController::class, 'stats'],

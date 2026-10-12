@@ -13,6 +13,7 @@ use App\Cache\CacheManager;
 use App\Process\TspClient;
 use App\Process\TspCommandRunner;
 use App\Process\TspTaskManager;
+use App\Process\TaskPostProcessor;
 use App\Restic\CommandRunner;
 use App\Restic\KeyService;
 use App\Restic\MaintenanceService;
@@ -20,9 +21,9 @@ use App\Restic\RepositoryService;
 use App\Restic\ResticTaskService;
 use App\Restic\SnapshotService;
 use App\Storage\ConfigStorage;
+use App\Storage\ContentCacheStorage;
+use App\Storage\ContentResolver;
 use App\Storage\RepositoryStorage;
-use App\Storage\SnapshotCacheStorage;
-use App\Storage\SnapshotListState;
 
 class App
 {
@@ -43,7 +44,7 @@ class App
     private static ?Security $security = null;
     private static ?Response $response = null;
     private static ?CacheManager $cache = null;
-    private static ?SnapshotCacheStorage $snapshotCache = null;
+    private static ?ContentCacheStorage $contentCache = null;
 
     private static int $debugLevel = 0;
 
@@ -301,22 +302,39 @@ class App
     /**
      * Доменная обёртка кеша производных от restic данных (список/статистика).
      */
-    public static function snapshotCache(): SnapshotCacheStorage
+    public static function contentCache(): ContentCacheStorage
     {
-        if (self::$snapshotCache === null) {
+        if (self::$contentCache === null) {
             $settings = self::configStorage()->loadSettings();
-            self::$snapshotCache = new SnapshotCacheStorage(
+            self::$contentCache = new ContentCacheStorage(
                 self::cache(),
                 isset($settings['snapshot_cache_ttl']) ? (int) $settings['snapshot_cache_ttl'] : null,
                 isset($settings['snapshot_stats_cache_ttl']) ? (int) $settings['snapshot_stats_cache_ttl'] : null
             );
         }
-        return self::$snapshotCache;
+        return self::$contentCache;
     }
 
-    public static function snapshotListState(): SnapshotListState
+    /**
+     * Постобработка вывода завершённых задач (реестр op -> processor).
+     */
+    public static function taskPostProcessor(): TaskPostProcessor
     {
-        return new SnapshotListState(self::snapshotCache(), self::tasks());
+        return new TaskPostProcessor(self::tasks(), self::contentCache());
+    }
+
+    /**
+     * Резолвер контента: единая точка read/schedule/reconcile.
+     */
+    public static function contentResolver(): ContentResolver
+    {
+        return new ContentResolver(
+            self::contentCache(),
+            self::tasks(),
+            self::resticTasks(),
+            self::taskPostProcessor(),
+            self::repoStorage()
+        );
     }
 
     /**

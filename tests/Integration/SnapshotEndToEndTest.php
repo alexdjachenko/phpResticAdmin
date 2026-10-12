@@ -166,7 +166,7 @@ class SnapshotEndToEndTest extends TestCase
         $seenIds = [];
         foreach ($this->snapshots as $snap) {
             $entry = $snapService->getStats($this->repo, $snap['id']);
-            $this->assertIsArray($entry, "Stats for snapshot " . ($snap['short_id'] ?? '?') . " should be an array");
+            $this->assertIsArray($entry, "Stats for snapshot " . $snap['short_id'] . " should be an array");
 
             $seenIds[] = $snap['short_id'];
 
@@ -385,7 +385,7 @@ class SnapshotEndToEndTest extends TestCase
             ResticCommandBuilder::buildEnv($this->repo)
         );
 
-        $this->assertSame(0, $result['exitCode'], "ls $path should succeed: " . ($result['stderr'] ?? ''));
+        $this->assertSame(0, $result['exitCode'], "ls $path should succeed: " . $result['stderr']);
 
         $files = [];
         $lines = explode("\n", trim($result['stdout']));

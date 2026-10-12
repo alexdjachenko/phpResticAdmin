@@ -1,3 +1,10 @@
+<?php
+/**
+ * @var mixed $title
+ * @var mixed $state
+ * @var mixed $label
+ */
+?>
 <div class="breadcrumb">
     <a href="/tasks" id="task-back-link"><?= htmlspecialchars(__('tasks.back'), ENT_QUOTES, 'UTF-8') ?></a>
 </div>

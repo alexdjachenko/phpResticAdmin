@@ -30,7 +30,6 @@ class IndexController extends BaseController
         if ($repoId === null) {
             App::session()->flash('success', __('flash.select_repo'));
             App::response()->redirect('/repositories');
-            return;
         }
 
         $repo = $this->requireRepo($user, $repoId, 'write');
@@ -64,7 +63,6 @@ class IndexController extends BaseController
         $repoId = (string) $this->request()->post('repo_id', '');
         if ($repoId === '') {
             App::response()->error(400, 'Missing repository ID');
-            return;
         }
 
         $repo = $this->requireRepo($user, $repoId, 'write');

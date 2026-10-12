@@ -14,9 +14,9 @@ use App\Restic\CommandRunner;
  * Низкоуровневая обёртка над бинарником `tsp` (task spooler).
  *
  * Каждый экземпляр работает со своей очередью через переменные окружения
- * TMPDIR/TS_SOCKET (и, при необходимости, TS_SLOTS). Все вызовы `tsp`
- * выполняются через CommandRunner без таймаута (timeout 0), потому что
- * часть операций (например, `tsp -w`) может блокироваться до завершения задачи.
+ * TMPDIR/TS_SOCKET (и, при необходимости, TS_SLOTS). Вызовы `tsp`
+ * выполняются через CommandRunner с конечным дедлайном; без таймаута идёт
+ * только `tsp -w` (ожидание завершения задачи — оно и должно блокироваться).
  *
  * Символ `#` в label запрещён на уровне TspTaskManager; сюда label приходит
  * уже сформированным.
@@ -49,8 +49,11 @@ class TspClient
      *
      * При $separateStderr = true используется флаг `tsp -E`: stdout задачи
      * пишется в основной output-файл, а stderr — в отдельный файл `.e`.
-     * Это нужно для JSON-задач (restic snapshots/stats --json), чтобы
-     * предупреждения restic из stderr не ломали парсинг stdout.
+     *
+     * ВНИМАНИЕ: упакованный task-spooler (v1.0.1) на флаге `-E` падает (задача
+     * завершается с exit 255 и пустым выводом), поэтому `true` не передаётся
+     * нигде в коде. Флаг оставлен как есть, но включать его можно только после
+     * проверки конкретной сборки tsp.
      *
      * @param array<int, string> $command
      * @param array<string, string> $env
@@ -169,10 +172,13 @@ class TspClient
 
     /**
      * Ожидание завершения задачи (tsp -w <id>). Возвращает код возврата задачи.
+     *
+     * Вызывать только для уже завершённых задач: на запущенной `tsp -w`
+     * блокируется до её окончания. Здесь таймаут отключён осознанно.
      */
     public function wait(int $id): int
     {
-        $result = $this->run(['-w', (string) $id]);
+        $result = $this->run(['-w', (string) $id], [], 0);
         return $result['exitCode'];
     }
 
@@ -246,9 +252,10 @@ class TspClient
      *
      * @param array<int, string> $args
      * @param array<string, string> $env
+     * @param int $timeout 0 — без таймаута (только `tsp -w`)
      * @return array{exitCode: int, stdout: string, stderr: string}
      */
-    private function run(array $args, array $env = []): array
+    private function run(array $args, array $env = [], int $timeout = 30): array
     {
         $merged = [
             'TMPDIR' => $this->tmpDir,
@@ -261,6 +268,6 @@ class TspClient
             $merged[$key] = $value;
         }
 
-        return $this->runner->run(array_merge([$this->binary], $args), $merged, null, 0);
+        return $this->runner->run(array_merge([$this->binary], $args), $merged, null, $timeout);
     }
 }

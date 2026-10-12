@@ -55,7 +55,22 @@ class ConfigStorage
     }
 
     /**
-     * @return array{guest_user: ?string, debug: int, tmp_dir: string, log_dir: string, timezone: string, repo_base_dir?: string, backup_paths_roots?: array<int, string>, repo_paths_roots?: array<int, string>}
+     * @return array{
+     *     guest_user: ?string,
+     *     debug?: int,
+     *     tmp_dir?: string,
+     *     log_dir?: string,
+     *     timezone: ?string,
+     *     repo_base_dir?: string,
+     *     backup_paths_roots?: array<int, string>,
+     *     repo_paths_roots?: array<int, string>,
+     *     tsp_binary?: string,
+     *     tsp_slots?: int,
+     *     snapshot_cache_ttl?: int,
+     *     snapshot_stats_cache_ttl?: int,
+     *     task_poll_interval?: int,
+     *     cache_driver?: string
+     * }
      */
     public function loadSettings(): array
     {
@@ -102,9 +117,6 @@ class ConfigStorage
     public function forgetYamlUsers(): void
     {
         $cache = $this->requestCache();
-        if ($cache === null) {
-            return;
-        }
 
         $prefix = 'cfg.' . md5($this->configDir) . '.';
         $cache->remove($prefix . 'yaml-users');
@@ -185,9 +197,6 @@ class ConfigStorage
     private function memo(string $name, callable $producer): array
     {
         $cache = $this->requestCache();
-        if ($cache === null) {
-            return $producer();
-        }
 
         $key = 'cfg.' . md5($this->configDir) . '.' . $name;
         $value = $cache->remember($key, null, $producer);
@@ -195,7 +204,7 @@ class ConfigStorage
         return is_array($value) ? $value : [];
     }
 
-    private function requestCache(): ?CacheInterface
+    private function requestCache(): CacheInterface
     {
         if ($this->requestCache === null) {
             $this->requestCache = App::cache()->request();

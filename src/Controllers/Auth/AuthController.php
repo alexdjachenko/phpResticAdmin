@@ -22,7 +22,6 @@ class AuthController extends BaseController
 
         if ($auth->isLoggedIn()) {
             App::response()->redirect('/repositories');
-            return;
         }
 
         $flash = App::session()->flash('error');
@@ -61,7 +60,6 @@ class AuthController extends BaseController
             App::log('Empty credentials, redirecting', 1);
             App::session()->flash('error', __('auth.error_empty'));
             App::response()->redirect('/login');
-            return;
         }
 
         App::log('Calling auth->login()...', 1);
@@ -69,7 +67,6 @@ class AuthController extends BaseController
         if ($auth->login($username, $password)) {
             App::log('LOGIN SUCCESS', 0);
             App::response()->redirect('/repositories');
-            return;
         }
 
         App::log('LOGIN FAILED — password_verify returned false', 1);

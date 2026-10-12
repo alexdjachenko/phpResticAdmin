@@ -75,13 +75,13 @@ class ResticConnectionTest extends TestCase
         // --- Шаг 1: init без пароля ---
         $result = $service->init(['path' => $repoDir, 'password' => null]);
 
-        $this->assertTrue($result['ok'], 'Init should succeed: ' . ($result['error'] ?? ''));
+        $this->assertTrue($result['ok'], 'Init should succeed: ' . $result['error']);
         $this->assertDirectoryExists($repoDir, 'restic init should create the repository directory');
 
         // --- Шаг 2: testConnection (restic cat config) ---
         $connResult = $service->testConnection($repo);
 
-        $this->assertTrue($connResult['ok'], 'Connection should succeed: ' . ($connResult['error'] ?? ''));
+        $this->assertTrue($connResult['ok'], 'Connection should succeed: ' . $connResult['error']);
         $this->assertNotEmpty($connResult['output'], 'cat config should return repository config text');
         $this->assertStringContainsString('id', $connResult['output'], 'config should contain the repository id');
 
@@ -112,7 +112,7 @@ class ResticConnectionTest extends TestCase
         // --- Шаг 1: init с паролем ---
         $result = $service->init(['path' => $repoDir, 'password' => $password]);
 
-        $this->assertTrue($result['ok'], 'Init with password should succeed: ' . ($result['error'] ?? ''));
+        $this->assertTrue($result['ok'], 'Init with password should succeed: ' . $result['error']);
 
         $repo = [
             'id' => 'test',
@@ -125,7 +125,7 @@ class ResticConnectionTest extends TestCase
         // --- Шаг 2: testConnection с правильным паролем → успех ---
         $connOk = $service->testConnection($repo);
 
-        $this->assertTrue($connOk['ok'], 'Connection with correct password should succeed: ' . ($connOk['error'] ?? ''));
+        $this->assertTrue($connOk['ok'], 'Connection with correct password should succeed: ' . $connOk['error']);
         $this->assertNotEmpty($connOk['output'], 'cat config should return repository config text');
 
         // --- Шаг 3: testConnection с неправильным паролем → провал ---

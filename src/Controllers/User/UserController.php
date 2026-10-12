@@ -90,7 +90,6 @@ class UserController extends BaseController
         } catch (\Throwable $e) {
             App::session()->flash('error', $e->getMessage());
             App::response()->redirect('/users/add');
-            return;
         }
 
         App::session()->flash('success', __('users.created'));
@@ -112,7 +111,6 @@ class UserController extends BaseController
         $yamlUsers = $this->users->listAll()['yaml'];
         if (!isset($yamlUsers[$username])) {
             App::response()->error(404, __('flash.not_found'));
-            return;
         }
 
         $this->render('users/form.php', [
@@ -146,7 +144,6 @@ class UserController extends BaseController
         } catch (\Throwable $e) {
             App::session()->flash('error', $e->getMessage());
             App::response()->redirect('/users');
-            return;
         }
 
         App::session()->flash('success', __('users.updated'));
@@ -172,7 +169,6 @@ class UserController extends BaseController
         if ($username === $user) {
             App::session()->flash('error', __('users.cannot_delete_self'));
             App::response()->redirect('/users');
-            return;
         }
 
         try {
@@ -180,7 +176,6 @@ class UserController extends BaseController
         } catch (\Throwable $e) {
             App::session()->flash('error', $e->getMessage());
             App::response()->redirect('/users');
-            return;
         }
 
         App::session()->flash('success', __('users.deleted'));
@@ -201,7 +196,6 @@ class UserController extends BaseController
 
         if (!App::auth()->canManageUsers()) {
             App::response()->error(403, __('error.forbidden'));
-            return null;
         }
 
         return $user;

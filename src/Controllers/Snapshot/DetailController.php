@@ -12,6 +12,7 @@ namespace App\Controllers\Snapshot;
 
 use App\Controllers\BaseController;
 use App\Core\App;
+use App\Storage\ContentTargets;
 
 class DetailController extends BaseController
 {
@@ -30,7 +31,6 @@ class DetailController extends BaseController
 
         if ($repoId === '' || $snapId === '') {
             App::response()->redirect('/snapshots');
-            return;
         }
 
         $repo = $this->requireRepo($user, $repoId, 'read');
@@ -41,7 +41,6 @@ class DetailController extends BaseController
         $snap = App::snapshotService()->getSnapshot($repo, $snapId);
         if ($snap === null) {
             App::response()->error(404, __('flash.not_found'));
-            return;
         }
 
         $auth = App::auth();
@@ -54,12 +53,30 @@ class DetailController extends BaseController
             }
         }
 
+        // Статистика — та же модель обещания: reconcile() разбирает уже готовый
+        // вывод завершённой задачи, read() отдаёт состояние записи кеша.
+        $statsTarget = ContentTargets::forStats($repoId, $snapId);
+        $resolver = App::contentResolver();
+        $resolver->reconcile($statsTarget);
+        $statsRead = $resolver->read($statsTarget);
+
+        $statsEntry = null;
+        if ($statsRead['state'] === 'ready' && is_array($statsRead['value'])) {
+            $statsEntry = [
+                'computed_at' => (int) ($statsRead['cached_at'] ?? time()),
+                'stats' => $statsRead['value'],
+                'stale' => false,
+            ];
+        }
+
         $this->render('snapshots/detail.php', [
             'repo' => $repo,
             'snap' => $snap,
             'csrfToken' => App::security()->csrfToken(),
             'destRepos' => $destRepos,
-            'statsEntry' => App::snapshotCache()->statsEntry($snapId),
+            'statsEntry' => $statsEntry,
+            'statsState' => $statsRead['state'],
+            'statsLabel' => $statsRead['promise'] ?? null,
             'isLoggedIn' => $auth->isLoggedIn(),
             'username' => $user,
         ]);

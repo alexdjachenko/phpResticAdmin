@@ -1,4 +1,13 @@
 <?php
+/**
+ * @var mixed $category
+ * @var mixed $isLoggedIn
+ * @var mixed $canBackup
+ * @var mixed $canEdit
+ * @var mixed $canMove
+ * @var mixed $canDelete
+ * @var mixed $hasMoreSnapshots
+ */
 $cat = $category;
 $catLabel = __('repo.category.' . $cat);
 $badgeClass = 'badge-' . $cat;

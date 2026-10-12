@@ -95,6 +95,7 @@
             <div class="task-modal-head">
                 <strong id="task-modal-title"></strong>
                 <span id="task-modal-state" class="task-state"></span>
+                <span id="task-modal-proc" class="task-proc"></span>
                 <button type="button" id="task-modal-close" class="task-modal-close" data-task-close aria-label="close">&times;</button>
             </div>
             <pre id="task-modal-output" class="task-output"></pre>
@@ -117,18 +118,27 @@
             skipped: <?= json_encode(__('tasks.state_skipped')) ?>,
             unknown: <?= json_encode(__('tasks.state_unknown')) ?>
         };
+        var procStates = {
+            none: <?= json_encode(__('tasks.proc_none')) ?>,
+            waiting: <?= json_encode(__('tasks.proc_waiting')) ?>,
+            processing: <?= json_encode(__('tasks.proc_processing')) ?>,
+            done: <?= json_encode(__('tasks.proc_done')) ?>,
+            error: <?= json_encode(__('tasks.proc_error')) ?>
+        };
         var t = {
             active: <?= json_encode(__('tasks.active')) ?>,
             queued: <?= json_encode(__('tasks.queued_position')) ?>,
             loading: <?= json_encode(__('tasks.loading')) ?>,
             streamError: <?= json_encode(__('tasks.stream_error')) ?>,
-            confirmCancel: <?= json_encode(__('tasks.confirm_cancel')) ?>
+            confirmCancel: <?= json_encode(__('tasks.confirm_cancel')) ?>,
+            notResponding: <?= json_encode(__('tasks.state_not_responding')) ?>
         };
 
         var tray = document.getElementById('task-tray');
         var modal = document.getElementById('task-modal');
         var titleEl = document.getElementById('task-modal-title');
         var stateEl = document.getElementById('task-modal-state');
+        var procEl = document.getElementById('task-modal-proc');
         var outEl = document.getElementById('task-modal-output');
         var cancelBtn = document.getElementById('task-modal-cancel');
         var promoteBtn = document.getElementById('task-modal-promote');
@@ -200,9 +210,16 @@
                     .then(function (r) { return r.json(); })
                     .then(function (data) {
                         if (data && data._csrf_token) { updateCsrf(data._csrf_token); }
-                        if (!data || !data.ok) { return; }
+                        if (!data || !data.ok) {
+                            if (procEl) { procEl.textContent = ''; }
+                            if (label === currentLabel) { stateEl.textContent = t.notResponding; }
+                            return;
+                        }
                         if (label !== currentLabel) { return; }
                         stateEl.textContent = stateText(data.state) + (data.position ? ' (' + t.queued.replace('{n}', data.position) + ')' : '');
+                        if (procEl) {
+                            procEl.textContent = data.proc ? (procStates[data.proc] || '') : '';
+                        }
                         if (data.state === 'finished') {
                             cancelBtn.hidden = true;
                             promoteBtn.hidden = true;
@@ -254,6 +271,7 @@
             currentLabel = label;
             titleEl.textContent = title || label;
             stateEl.textContent = '';
+            if (procEl) { procEl.textContent = ''; }
             cancelBtn.hidden = false;
             promoteBtn.hidden = true;
             refreshBtn.hidden = true;

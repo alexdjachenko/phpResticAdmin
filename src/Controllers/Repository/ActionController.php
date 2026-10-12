@@ -13,6 +13,7 @@ namespace App\Controllers\Repository;
 use App\Controllers\BaseController;
 use App\Core\App;
 use App\Helpers\RepositoryPath;
+use App\Storage\ContentTargets;
 
 class ActionController extends BaseController
 {
@@ -79,7 +80,7 @@ class ActionController extends BaseController
         App::repoStorage()->delete((string) ($repo['category'] ?? 'public'), $repoId, $user);
 
         // Снимаем кеш списка снепшотов репозитория (каталог данных уходит вместе с ним).
-        App::snapshotCache()->invalidateList($repo);
+        App::contentCache()->clear(ContentTargets::forSnapshots($repo));
 
         // Сбросить current_repo если удалённый id совпадает
         if (App::session()->get('current_repo') === $repoId) {

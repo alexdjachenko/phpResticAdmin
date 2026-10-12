@@ -255,18 +255,13 @@ class KeyService
         $cacheKey = 'keys.list.' . (string) ($repository['id'] ?? '');
         $cache = $this->requestCache();
 
-        if ($cache !== null) {
-            $cached = $cache->get($cacheKey);
-            if (is_array($cached)) {
-                return $cached;
-            }
+        $cached = $cache->get($cacheKey);
+        if (is_array($cached)) {
+            return $cached;
         }
 
         $keys = $this->fetchKeyList($repository, $repository['password'] ?? null);
-
-        if ($cache !== null) {
-            $cache->set($cacheKey, $keys);
-        }
+        $cache->set($cacheKey, $keys);
 
         return $keys;
     }
@@ -344,13 +339,10 @@ class KeyService
 
     private function forgetKeyList(array $repository): void
     {
-        $cache = $this->requestCache();
-        if ($cache !== null) {
-            $cache->remove('keys.list.' . (string) ($repository['id'] ?? ''));
-        }
+        $this->requestCache()->remove('keys.list.' . (string) ($repository['id'] ?? ''));
     }
 
-    private function requestCache(): ?CacheInterface
+    private function requestCache(): CacheInterface
     {
         if ($this->requestCache === null) {
             $this->requestCache = \App\Core\App::cache()->request();

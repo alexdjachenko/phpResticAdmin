@@ -160,7 +160,7 @@ class SnapshotServiceTest extends TestCase
 
         // Шаг 1: добавляем тег
         $result = $service->addTag($this->repo, $snapId, 'test-tag-xyz');
-        $this->assertTrue($result['ok'], 'Add tag should succeed: ' . ($result['error'] ?? ''));
+        $this->assertTrue($result['ok'], 'Add tag should succeed: ' . $result['error']);
 
         // Шаг 2: перечитываем (ID мог измениться) и проверяем наличие тега
         $snapshots = $service->listSnapshots($this->repo);
@@ -170,7 +170,7 @@ class SnapshotServiceTest extends TestCase
 
         // Шаг 3: удаляем тег (используем свежий ID)
         $result = $service->removeTag($this->repo, $snapId, 'test-tag-xyz');
-        $this->assertTrue($result['ok'], 'Remove tag should succeed: ' . ($result['error'] ?? ''));
+        $this->assertTrue($result['ok'], 'Remove tag should succeed: ' . $result['error']);
 
         // Шаг 4: перечитываем и проверяем, что тега больше нет
         $snapshots = $service->listSnapshots($this->repo);

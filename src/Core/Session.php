@@ -10,8 +10,6 @@ namespace App\Core;
 
 class Session
 {
-    private bool $started = false;
-
     public function start(): void
     {
         // Переоткрываем по фактическому статусу, а не по флагу: после close()
@@ -19,8 +17,6 @@ class Session
         if (session_status() === PHP_SESSION_NONE) {
             session_start();
         }
-
-        $this->started = true;
     }
 
     /**
@@ -35,8 +31,6 @@ class Session
         if (session_status() === PHP_SESSION_ACTIVE) {
             session_write_close();
         }
-
-        $this->started = false;
     }
 
     /**
@@ -66,7 +60,6 @@ class Session
         if (session_status() === PHP_SESSION_ACTIVE) {
             session_destroy();
         }
-        $this->started = false;
     }
 
     /**

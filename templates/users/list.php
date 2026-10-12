@@ -1,3 +1,10 @@
+<?php
+/**
+ * @var mixed $phpUsers
+ * @var mixed $yamlUsers
+ * @var mixed $currentUser
+ */
+?>
 <h2><?= htmlspecialchars(__('users.title'), ENT_QUOTES, 'UTF-8') ?></h2>
 
 <p><a href="/users/add" class="btn-snapshots"><?= htmlspecialchars(__('users.add'), ENT_QUOTES, 'UTF-8') ?></a></p>

@@ -56,6 +56,6 @@ class CanaryTest extends TestCase
         // Assert: сервер должен ответить
         $this->assertNotFalse($response, 'Web server must respond on ' . $url);
         // Assert: ответ должен содержать название приложения
-        $this->assertStringContainsString('phpResticAdmin', $response ?? '', 'Response must contain "phpResticAdmin"');
+        $this->assertStringContainsString('phpResticAdmin', $response, 'Response must contain "phpResticAdmin"');
     }
 }
