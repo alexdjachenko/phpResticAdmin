@@ -6,7 +6,7 @@ PHPResticAdmin — **бесфреймворковое** PHP-приложение
 
 - **Стек**: PHP 8.1+, Apache (mod_rewrite), Docker
 - **Рантайм-зависимость**: `symfony/yaml` (автономный YAML-парсер, не фреймворк)
-- **Dev-зависимости**: PHPUnit 10, PHPStan 1
+- **Dev-зависимости**: PHPUnit 10, PHPStan 5
 - **CLI-инструмент**: `restic` (устанавливается в Docker-образ)
 - **Репозиторий**: `alexdjachenko/PHPResticAdmin` на GitHub
 - **VCS**: Git, хостинг GitHub. Работаем через feature-ветки и Pull Requests
