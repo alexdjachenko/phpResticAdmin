@@ -165,7 +165,6 @@ class ActionController extends BaseController
         $repoId = (string) $this->request()->post('repo_id', '');
         if ($repoId === '') {
             App::response()->redirect('/snapshots');
-            return;
         }
 
         $repo = $this->requireRepo($user, $repoId, 'read');

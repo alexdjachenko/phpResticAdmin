@@ -75,7 +75,7 @@ class ContentResolver
         if ($entry->promise !== null) {
             $job = $this->tasks->findByLabel($entry->promise);
             if ($job !== null) {
-                $taskState = (string) ($job['state'] ?? 'unknown');
+                $taskState = $job['state'];
                 if ($taskState === 'queued') {
                     $position = $this->tasks->queuePosition($entry->promise);
                 }
@@ -171,7 +171,7 @@ class ContentResolver
         }
 
         $job = $this->tasks->findByLabel($label);
-        if ($job === null || (string) ($job['state'] ?? '') !== 'finished') {
+        if ($job === null || $job['state'] !== 'finished') {
             return false;
         }
 

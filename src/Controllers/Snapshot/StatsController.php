@@ -90,7 +90,7 @@ class StatsController extends BaseController
         $target = ContentTargets::forStats((string) ($parsed['repoId'] ?? ''), $snapId);
         $read = $resolver->read($target);
 
-        if (($read['state'] ?? '') === 'ready' && is_array($read['value'])) {
+        if ($read['state'] === 'ready' && is_array($read['value'])) {
             $this->jsonOk([
                 'stats' => $read['value'],
                 'computed_at' => (int) ($read['cached_at'] ?? time()),

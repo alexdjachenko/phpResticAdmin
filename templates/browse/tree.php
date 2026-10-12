@@ -1,4 +1,8 @@
 <?php
+/**
+ * @var mixed $breadcrumbs
+ * @var mixed $snapId
+ */
 $repoId = $repo['id'] ?? '';
 ?>
 <div class="breadcrumbs">

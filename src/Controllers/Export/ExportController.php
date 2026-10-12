@@ -33,7 +33,6 @@ class ExportController extends BaseController
 
         if ($repoId === '' || $snapId === '' || $path === '') {
             App::response()->error(400, 'Missing parameters');
-            return;
         }
 
         $repo = $this->requireRepo($user, $repoId, 'read');
@@ -71,7 +70,6 @@ class ExportController extends BaseController
 
         if ($repoId === '' || $snapId === '') {
             App::response()->error(400, 'Missing parameters');
-            return;
         }
 
         $repo = $this->requireRepo($user, $repoId, 'read');

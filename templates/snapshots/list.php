@@ -1,4 +1,7 @@
 <?php
+/**
+ * @var mixed $repo
+ */
 $state = $view['state'] ?? 'absent';
 $pollInterval = (int) (\App\Core\App::configStorage()->loadSettings()['task_poll_interval'] ?? 3000);
 $label = (string) ($view['promise'] ?? '');

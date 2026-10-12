@@ -58,7 +58,7 @@ class ContentResolverTest extends TestCase
     }
 
     /**
-     * @param array<string, mixed>|null $repo
+     * @param RepositoryStorage|null $repos
      */
     private function resolver(TspTaskManager $tasks, ?RepositoryStorage $repos = null, ?ResticTaskService $restic = null): ContentResolver
     {

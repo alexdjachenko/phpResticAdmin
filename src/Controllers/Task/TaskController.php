@@ -58,7 +58,6 @@ class TaskController extends BaseController
 
         if ($label === '' || !App::tasks()->assertAccess($user, $label, $privileged)) {
             App::response()->error(404, 'Task not found');
-            return;
         }
 
         $described = App::tasks()->describe($label);
@@ -87,7 +86,6 @@ class TaskController extends BaseController
 
         if ($label === '' || !App::tasks()->isValidLabel($label)) {
             App::response()->error(400, 'Invalid task label');
-            return;
         }
 
         $prefix = null;
@@ -280,7 +278,7 @@ class TaskController extends BaseController
 
         $read = $resolver->read($target);
 
-        return match ($read['state'] ?? 'absent') {
+        return match ($read['state']) {
             'ready' => 'done',
             'waiting' => 'waiting',
             'ready_to_process' => 'processing',

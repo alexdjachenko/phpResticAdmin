@@ -100,10 +100,12 @@ class SnapshotPromiseEndToEndTest extends TestCase
         if (!$repoService->init($this->repo)['ok']) {
             $this->markTestSkipped('Failed to init restic repo');
         }
-        if (!$repoService->backupSync($this->repo, [$dataDir])['ok']) {
+        $firstBackup = $repoService->backupSync($this->repo, [$dataDir]);
+        if (!$firstBackup['ok']) {
             $this->markTestSkipped('Failed to create backup');
         }
-        if (!$repoService->backupSync($this->repo, [$dataDir])['ok']) {
+        $secondBackup = $repoService->backupSync($this->repo, [$dataDir]);
+        if (!$secondBackup['ok']) {
             $this->markTestSkipped('Failed to create second backup');
         }
 

@@ -149,7 +149,7 @@ class TspTaskManager
                 return $position + 1;
             }
 
-            if (($job['state'] ?? '') === 'queued') {
+            if ($job['state'] === 'queued') {
                 $position++;
             }
         }
@@ -244,7 +244,7 @@ class TspTaskManager
         // Состояние берём из уже полученного списка задач (тот же источник, что и
         // в reconcile/read), а не отдельным `tsp -s`: исключает расхождение между
         // `tsp -l` и `tsp -s`. `tsp -w` безопасен — задача именно finished.
-        if (($job['state'] ?? '') !== 'finished') {
+        if ($job['state'] !== 'finished') {
             return null;
         }
 

@@ -1,3 +1,9 @@
+<?php
+/**
+ * @var mixed $action
+ * @var mixed $result
+ */
+?>
 <div class="breadcrumb">
     <a href="/maintenance?repo=<?= htmlspecialchars(urlencode($repo['id'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">&larr; <?= htmlspecialchars(__('maint.back'), ENT_QUOTES, 'UTF-8') ?></a>
     &middot;

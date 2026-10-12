@@ -29,7 +29,6 @@ class DetailController extends BaseController
         $repoId = (string) $this->request()->get('repo', '');
         if ($repoId === '') {
             App::response()->redirect('/repositories');
-            return;
         }
 
         $repo = $this->requireRepo($user, $repoId, 'read');

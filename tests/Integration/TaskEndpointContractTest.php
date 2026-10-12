@@ -71,7 +71,7 @@ class TaskEndpointContractTest extends TestCase
 
         $status = 0;
         $contentType = '';
-        foreach ($http_response_header ?? [] as $line) {
+        foreach ($http_response_header as $line) {
             if (preg_match('#^HTTP/\S+\s+(\d{3})#', $line, $m)) {
                 $status = (int) $m[1];
             }

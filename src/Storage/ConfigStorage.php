@@ -55,7 +55,22 @@ class ConfigStorage
     }
 
     /**
-     * @return array{guest_user: ?string, debug: int, tmp_dir: string, log_dir: string, timezone: string, repo_base_dir?: string, backup_paths_roots?: array<int, string>, repo_paths_roots?: array<int, string>}
+     * @return array{
+     *     guest_user: ?string,
+     *     debug?: int,
+     *     tmp_dir?: string,
+     *     log_dir?: string,
+     *     timezone: ?string,
+     *     repo_base_dir?: string,
+     *     backup_paths_roots?: array<int, string>,
+     *     repo_paths_roots?: array<int, string>,
+     *     tsp_binary?: string,
+     *     tsp_slots?: int,
+     *     snapshot_cache_ttl?: int,
+     *     snapshot_stats_cache_ttl?: int,
+     *     task_poll_interval?: int,
+     *     cache_driver?: string
+     * }
      */
     public function loadSettings(): array
     {

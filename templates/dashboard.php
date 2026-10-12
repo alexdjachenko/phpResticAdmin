@@ -1,3 +1,9 @@
+<?php
+/**
+ * @var mixed $repoCount
+ * @var mixed $repo
+ */
+?>
 <h2><?= htmlspecialchars(__('dash.title'), ENT_QUOTES, 'UTF-8') ?></h2>
 
 <div class="dashboard-stats">

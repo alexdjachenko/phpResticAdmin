@@ -31,7 +31,6 @@ class DetailController extends BaseController
 
         if ($repoId === '' || $snapId === '') {
             App::response()->redirect('/snapshots');
-            return;
         }
 
         $repo = $this->requireRepo($user, $repoId, 'read');
@@ -42,7 +41,6 @@ class DetailController extends BaseController
         $snap = App::snapshotService()->getSnapshot($repo, $snapId);
         if ($snap === null) {
             App::response()->error(404, __('flash.not_found'));
-            return;
         }
 
         $auth = App::auth();
@@ -63,7 +61,7 @@ class DetailController extends BaseController
         $statsRead = $resolver->read($statsTarget);
 
         $statsEntry = null;
-        if (($statsRead['state'] ?? '') === 'ready' && is_array($statsRead['value'])) {
+        if ($statsRead['state'] === 'ready' && is_array($statsRead['value'])) {
             $statsEntry = [
                 'computed_at' => (int) ($statsRead['cached_at'] ?? time()),
                 'stats' => $statsRead['value'],
@@ -77,7 +75,7 @@ class DetailController extends BaseController
             'csrfToken' => App::security()->csrfToken(),
             'destRepos' => $destRepos,
             'statsEntry' => $statsEntry,
-            'statsState' => (string) ($statsRead['state'] ?? 'absent'),
+            'statsState' => $statsRead['state'],
             'statsLabel' => $statsRead['promise'] ?? null,
             'isLoggedIn' => $auth->isLoggedIn(),
             'username' => $user,

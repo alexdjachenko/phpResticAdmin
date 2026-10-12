@@ -82,7 +82,7 @@ class DashboardController extends BaseController
 
             // «Момент, когда мы узнали»: по завершённой задаче дёшево проверить
             // обещание и довести постобработку до конца (если обещания нет — no-op).
-            if ($label !== '' && ($task['state'] ?? '') === 'finished') {
+            if ($label !== '' && $task['state'] === 'finished') {
                 $resolver->reconcileByLabel($label);
             }
         }
@@ -91,7 +91,7 @@ class DashboardController extends BaseController
         $activeTasks = [];
         $recentTasks = [];
         foreach ($tasks as $task) {
-            $state = $task['state'] ?? '';
+            $state = $task['state'];
             if (in_array($state, ['queued', 'running'], true)) {
                 $activeTasks[] = $task;
             } elseif ($state === 'finished') {

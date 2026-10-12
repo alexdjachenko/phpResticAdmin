@@ -33,7 +33,6 @@ class BrowseController extends BaseController
 
         if ($repoId === '' || $snapId === '') {
             App::response()->redirect('/snapshots');
-            return;
         }
 
         $repo = $this->requireRepo($user, $repoId, 'read');

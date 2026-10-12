@@ -257,16 +257,16 @@ class Authenticator
             $cat = $repos[$category] ?? ['use' => false, 'use_read' => false, 'use_write' => false, 'edit' => false];
 
             // use (видимость) — старый ключ 'use'
-            $use = $cat['use'] ?? false;
+            $use = (bool) ($cat['use'] ?? false);
 
             // use_read (чтение контента) — новый ключ, без fallback'ов
-            $useRead = $cat['use_read'] ?? false;
+            $useRead = (bool) ($cat['use_read'] ?? false);
 
             // use_write (запись в restic) — новый ключ, без fallback'ов
-            $useWrite = $cat['use_write'] ?? false;
+            $useWrite = (bool) ($cat['use_write'] ?? false);
 
             // edit (CRUD записи) — старый ключ 'edit'
-            $edit = $cat['edit'] ?? false;
+            $edit = (bool) ($cat['edit'] ?? false);
 
             // use_write подразумевает use_read
             if ($useWrite) {
@@ -285,7 +285,15 @@ class Authenticator
     }
 
     /**
-     * @return array{password: ?string, can_init: bool, can_delete: bool, repos?: array}|null
+     * @return array{
+     *     password?: ?string,
+     *     password_var?: ?string,
+     *     can_init?: bool,
+     *     can_delete?: bool,
+     *     can_manage_users?: bool,
+     *     can_manage_processes?: bool,
+     *     repos?: array
+     * }|null
      */
     private function getUserData(): ?array
     {
