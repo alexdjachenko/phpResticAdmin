@@ -3,3 +3,7 @@ parameters:
     paths:
         - src/
         - htdocs/
+        - bin/
+        - templates/
+        - tests/
+
