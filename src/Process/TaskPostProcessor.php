@@ -76,9 +76,9 @@ class TaskPostProcessor
             return $fallback;
         }
 
-        $detail = trim((string) ($result['stderr'] ?? ''));
+        $detail = trim($result['stderr']);
         if ($detail === '') {
-            $detail = trim((string) ($result['output'] ?? ''));
+            $detail = trim($result['output']);
         }
 
         return $detail !== '' ? $detail : $fallback;

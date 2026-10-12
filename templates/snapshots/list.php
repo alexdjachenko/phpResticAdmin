@@ -1,6 +1,7 @@
 <?php
 /**
  * @var mixed $repo
+ * @var mixed $view
  */
 $state = $view['state'] ?? 'absent';
 $pollInterval = (int) (\App\Core\App::configStorage()->loadSettings()['task_poll_interval'] ?? 3000);
@@ -87,7 +88,7 @@ $duration = is_array($view['meta'] ?? null) ? ($view['meta']['duration'] ?? null
             <p><?= htmlspecialchars(__('snap.no_snaps'), ENT_QUOTES, 'UTF-8') ?></p>
         <?php else: ?>
             <?php
-            $caption = __('snap.found', ['{n}' => count($snapshots)]);
+            $caption = __('snap.found', ['{n}' => (string) count($snapshots)]);
             if ($duration !== null) {
                 $caption .= ' ' . __('snap.found_duration', ['{t}' => $duration]);
             }

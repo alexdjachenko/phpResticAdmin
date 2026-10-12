@@ -117,9 +117,6 @@ class ConfigStorage
     public function forgetYamlUsers(): void
     {
         $cache = $this->requestCache();
-        if ($cache === null) {
-            return;
-        }
 
         $prefix = 'cfg.' . md5($this->configDir) . '.';
         $cache->remove($prefix . 'yaml-users');
@@ -200,9 +197,6 @@ class ConfigStorage
     private function memo(string $name, callable $producer): array
     {
         $cache = $this->requestCache();
-        if ($cache === null) {
-            return $producer();
-        }
 
         $key = 'cfg.' . md5($this->configDir) . '.' . $name;
         $value = $cache->remember($key, null, $producer);
@@ -210,7 +204,7 @@ class ConfigStorage
         return is_array($value) ? $value : [];
     }
 
-    private function requestCache(): ?CacheInterface
+    private function requestCache(): CacheInterface
     {
         if ($this->requestCache === null) {
             $this->requestCache = App::cache()->request();

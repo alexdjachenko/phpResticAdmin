@@ -74,7 +74,7 @@ class BrowseController extends BaseController
             $name = $entry['name'] ?? '';
             $entryPath = $entry['path'] ?? '';
 
-            if ($entry === null || $name === '' || $name === '.' || $name === '..') {
+            if ($name === '' || $name === '.' || $name === '..') {
                 continue;
             }
 

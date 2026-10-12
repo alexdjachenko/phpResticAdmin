@@ -30,7 +30,6 @@ class KeyController extends BaseController
         if ($repoId === null) {
             App::session()->flash('success', __('flash.select_repo'));
             App::response()->redirect('/repositories');
-            return;
         }
 
         $repo = $this->requireRepo($user, $repoId, 'read');

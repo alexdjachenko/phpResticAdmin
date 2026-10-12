@@ -136,7 +136,7 @@ class ContentResolver
         // иначе последующий read() в этом же запросе не увидел бы новую задачу.
         $this->tasks->invalidateList();
 
-        if (($started['id'] ?? -1) >= 0) {
+        if ($started['id'] >= 0) {
             $this->storage->promise($target, (string) $started['label']);
         } else {
             $this->storage->fail($target, __('snap.load_error'));
