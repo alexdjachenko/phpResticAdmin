@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.2](https://github.com/alexdjachenko/phpResticAdmin/compare/v0.8.1...v0.8.2) (2026-10-19)
+
+
+### Bug Fixes
+
+* **process:** restore non-blocking tsp task model for snapshot content ([#51](https://github.com/alexdjachenko/phpResticAdmin/issues/51)) ([2cbccde](https://github.com/alexdjachenko/phpResticAdmin/commit/2cbccde9a0e1736a5df9f1870dfeeff42ad6e324))
+
 ## [0.8.1](https://github.com/alexdjachenko/phpResticAdmin/compare/v0.8.0...v0.8.1) (2026-10-10)
 
 
