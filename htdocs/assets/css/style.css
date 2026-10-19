@@ -4,6 +4,15 @@
     padding: 0;
 }
 
+/*
+ * Интерфейс светлый: явно объявляем схему, чтобы браузер не применял
+ * принудительную тёмную тему (forced dark). Иначе белые плашки (main, карточки)
+ * инвертируются в чёрные, а синий и серый текст на них становится нечитаемым.
+ */
+html {
+    color-scheme: light;
+}
+
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     font-size: 14px;
@@ -191,7 +200,7 @@ button:hover,
 }
 
 .repo-status.checking {
-    color: #7f8c8d;
+    color: #495057;
     font-style: italic;
 }
 
@@ -386,7 +395,7 @@ button:hover,
     display: block;
     margin-top: 4px;
     font-size: 12px;
-    color: #6c757d;
+    color: #495057;
 }
 
 .category-options {
@@ -472,7 +481,7 @@ button:hover,
 
 .repo-info th {
     width: 140px;
-    color: #6c757d;
+    color: #495057;
     font-weight: 600;
 }
 
@@ -509,7 +518,7 @@ button:hover,
 }
 
 .no-backup-hint {
-    color: #6c757d;
+    color: #495057;
     font-size: 13px;
     font-style: italic;
 }
@@ -534,12 +543,12 @@ button:hover,
     border-radius: 4px;
     font-size: 14px;
     text-decoration: none;
-    background: #3498db;
+    background: #2471a3;
     color: #fff;
 }
 
 .btn-snapshots:hover {
-    background: #2980b9;
+    background: #1b5c85;
 }
 
 /* Кнопка-индикатор фоновой задачи: «идёт», клик открывает модалку вывода. */
@@ -547,12 +556,12 @@ button:hover,
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    background: #7f8c8d;
-}
+    background: #2c3e50;
+    }
 
-.btn-snapshots.btn-snap-busy:hover {
-    background: #6c7a7b;
-}
+    .btn-snapshots.btn-snap-busy:hover {
+    background: #1f2d3a;
+    }
 
 .btn-snapshots.btn-snap-busy::before {
     content: "";
@@ -632,13 +641,13 @@ button:hover,
 
 .snap-repo-name {
     font-size: 16px;
-    color: #6c757d;
+    color: #495057;
     font-weight: normal;
 }
 
 /* ===== Snapshots: панель фильтров ===== */
 .snap-caption {
-    color: #6c757d;
+    color: #495057;
     font-size: 13px;
     margin-bottom: 8px;
 }
@@ -670,7 +679,7 @@ button:hover,
 
 .snap-filter > span {
     font-size: 11px;
-    color: #6c757d;
+    color: #495057;
     text-transform: uppercase;
     letter-spacing: 0.02em;
     white-space: nowrap;
@@ -680,7 +689,11 @@ button:hover,
 .snap-filter select {
     padding: 5px 8px;
     font-size: 13px;
-    border: 1px solid #ccc;
+    /* цвет текста задаётся явно: иначе в тёмной схеме браузера он окажется
+       светлым на нашем белом фоне (невидимый контрол) */
+    color: #212529;
+    color-scheme: light;
+    border: 1px solid #adb5bd;
     border-radius: 4px;
     background: #fff;
     max-width: 100%;
@@ -705,10 +718,11 @@ button:hover,
     flex: 0 0 auto;
     padding: 5px 12px;
     font-size: 13px;
-    border: 1px solid #ccc;
+    color: #212529;
+    color-scheme: light;
+    border: 1px solid #adb5bd;
     border-radius: 4px;
     background: #fff;
-    color: #333;
     cursor: pointer;
 }
 .snap-filter-reset:hover { background: #eef1f4; }
@@ -717,13 +731,13 @@ button:hover,
     flex: 0 0 auto;
     margin-left: auto;
     font-size: 12px;
-    color: #6c757d;
+    color: #495057;
     white-space: nowrap;
 }
 
 .snap-empty-filter {
     padding: 12px 0;
-    color: #6c757d;
+    color: #495057;
     font-style: italic;
 }
 
@@ -741,11 +755,12 @@ button:hover,
     gap: 8px 16px;
     min-width: 0;             /* иначе длинные пути распирают карточку */
     padding: 12px 16px;
-    border: 1px solid #e3e6ea;
-    border-left: 3px solid #d6dde4;   /* акцентная полоса помогает вертикальному сканированию */
+    color: #212529;           /* фон светлый — цвет текста задаём явно */
+    border: 1px solid #dee2e6;
+    border-left: 3px solid #adb5bd;   /* акцентная полоса помогает вертикальному сканированию */
     border-radius: 6px;
     background: #fff;
-}
+    }
 /* ОБЯЗАТЕЛЬНО: авторский display:flex перебивает UA-правило [hidden] */
 .snap-card[hidden] { display: none; }
 .snap-card:hover { border-color: #c3ccd5; border-left-color: #3498db; }
@@ -769,7 +784,7 @@ button:hover,
 .snap-card-id code { font-size: 14px; font-weight: 600; }
 
 .snap-card-date {
-    color: #6c757d;
+    color: #495057;
     font-size: 12px;
     white-space: nowrap;
 }
@@ -791,7 +806,7 @@ button:hover,
 }
 
 .snap-meta dt {
-    color: #6c757d;
+    color: #495057;
     font-size: 11px;
     text-transform: uppercase;
     letter-spacing: 0.02em;
@@ -819,7 +834,8 @@ button:hover,
 .snap-paths code {
     display: block;
     font-size: 12px;
-    background: #f1f1f1;
+    color: #212529;
+    background: #eef1f4;
     padding: 2px 6px;
     border-radius: 3px;
     overflow-wrap: anywhere;   /* переносим длинный путь, а не обрезаем */
@@ -829,7 +845,8 @@ button:hover,
 .snap-paths-more > summary {
     margin: 4px 0 4px;
     font-size: 12px;
-    color: #3498db;
+    font-weight: 600;
+    color: #1a6fae;            /* тёмно-синий: контрастнее на белом, чем #3498db */
     cursor: pointer;
 }
 
@@ -875,7 +892,7 @@ button:hover,
 .snap-card--compact { padding: 8px 12px; gap: 4px 12px; }
 .snap-card--compact .snap-card-main { flex: 1 1 320px; gap: 4px; }
 .snap-card--compact .snap-card-id code { font-size: 13px; }
-.snap-card--compact .snap-paths code { font-size: 11px; background: #f6f7f8; }
+.snap-card--compact .snap-paths code { font-size: 11px; background: #f4f6f8; }
 .snap-card--compact .snap-card-actions { align-self: center; }
 
 /* Страховка от переполнения для обычных таблиц */
@@ -921,8 +938,11 @@ button:hover,
 .tag-input {
     padding: 2px 6px;
     font-size: 11px;
-    border: 1px solid #ccc;
+    color: #212529;
+    color-scheme: light;
+    border: 1px solid #adb5bd;
     border-radius: 3px;
+    background: #fff;
     width: 80px;
 }
 
@@ -1002,12 +1022,12 @@ button:hover,
     border-radius: 3px;
     font-size: 12px;
     text-decoration: none;
-    background: #3498db;
+    background: #2471a3;
     color: #fff;
 }
 
 .btn-browse:hover {
-    background: #2980b9;
+    background: #1b5c85;
 }
 
 /* Dashboard */
@@ -1099,7 +1119,7 @@ button:hover,
     border-radius: 4px;
 }
 .maintenance-section h3 { margin-bottom: 4px; }
-.maintenance-section p { color: #6c757d; font-size: 13px; margin-bottom: 8px; }
+.maintenance-section p { color: #495057; font-size: 13px; margin-bottom: 8px; }
 .maintenance-section form { margin-top: 8px; }
 .maintenance-warn { color: #e74c3c; font-weight: 600; }
 
@@ -1258,7 +1278,7 @@ button:hover,
 }
 
 .task-chip-running { background: #2980b9; }
-.task-chip-queued { background: #7f8c8d; }
+.task-chip-queued { background: #566573; }
 
 .task-modal[hidden] { display: none; }
 
@@ -1311,7 +1331,7 @@ button:hover,
 
 .task-state {
     font-size: 12px;
-    color: #7f8c8d;
+    color: #495057;
     white-space: nowrap;
 }
 
@@ -1349,7 +1369,7 @@ button:hover,
 .task-modal-actions button:disabled { opacity: 0.6; cursor: default; }
 #task-modal-cancel { background: #e74c3c; }
 .task-modal-full { margin-left: auto; color: #3498db; text-decoration: none; }
-.muted { color: #7f8c8d; }
+.muted { color: #495057; }
 
 .key-badge {
     display: inline-block;

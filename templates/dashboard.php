@@ -23,66 +23,66 @@
 <?php if (!empty($activeTasks)): ?>
     <h3><?= htmlspecialchars(__('dash.active_tasks'), ENT_QUOTES, 'UTF-8') ?></h3>
     <div class="table-scroll">
-    <table class="snapshot-table">
-        <thead>
-            <tr>
-                <th>ID</th>
-                <th><?= htmlspecialchars(__('dash.task_state'), ENT_QUOTES, 'UTF-8') ?></th>
-                <th><?= htmlspecialchars(__('dash.task_label'), ENT_QUOTES, 'UTF-8') ?></th>
-                <th><?= htmlspecialchars(__('dash.task_command'), ENT_QUOTES, 'UTF-8') ?></th>
-                <th></th>
-            </tr>
-        </thead>
-        <tbody>
-            <?php foreach ($activeTasks as $task): ?>
+        <table class="snapshot-table">
+            <thead>
                 <tr>
-                    <td><?= (int) ($task['id'] ?? 0) ?></td>
-                    <td><?= htmlspecialchars(__('tasks.state_' . ($task['state'] ?? 'unknown')), ENT_QUOTES, 'UTF-8') ?></td>
-                    <td><?= htmlspecialchars($task['title'] ?? ($task['label'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
-                    <td><?= htmlspecialchars(\App\Helpers\Format::truncate($task['command'] ?? '', 60), ENT_QUOTES, 'UTF-8') ?></td>
-                    <td>
-                        <?php if (!empty($task['label'])): ?>
-                            <a href="/tasks/view?label=<?= htmlspecialchars(urlencode($task['label']), ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars(__('dash.task_open'), ENT_QUOTES, 'UTF-8') ?></a>
-                        <?php endif ?>
-                    </td>
+                    <th>ID</th>
+                    <th><?= htmlspecialchars(__('dash.task_state'), ENT_QUOTES, 'UTF-8') ?></th>
+                    <th><?= htmlspecialchars(__('dash.task_label'), ENT_QUOTES, 'UTF-8') ?></th>
+                    <th><?= htmlspecialchars(__('dash.task_command'), ENT_QUOTES, 'UTF-8') ?></th>
+                    <th></th>
                 </tr>
-            <?php endforeach ?>
-        </tbody>
+            </thead>
+            <tbody>
+                <?php foreach ($activeTasks as $task): ?>
+                    <tr>
+                        <td><?= (int) ($task['id'] ?? 0) ?></td>
+                        <td><?= htmlspecialchars(__('tasks.state_' . ($task['state'] ?? 'unknown')), ENT_QUOTES, 'UTF-8') ?></td>
+                        <td><?= htmlspecialchars($task['title'] ?? ($task['label'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                        <td><?= htmlspecialchars(\App\Helpers\Format::truncate($task['command'] ?? '', 60), ENT_QUOTES, 'UTF-8') ?></td>
+                        <td>
+                            <?php if (!empty($task['label'])): ?>
+                                <a href="/tasks/view?label=<?= htmlspecialchars(urlencode($task['label']), ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars(__('dash.task_open'), ENT_QUOTES, 'UTF-8') ?></a>
+                            <?php endif ?>
+                        </td>
+                    </tr>
+                <?php endforeach ?>
+            </tbody>
         </table>
-        </div>
-        <?php endif ?>
+    </div>
+<?php endif ?>
 
 <?php if (!empty($recentTasks)): ?>
     <h3><?= htmlspecialchars(__('dash.recent_tasks'), ENT_QUOTES, 'UTF-8') ?></h3>
     <div class="table-scroll">
-    <table class="snapshot-table">
-        <thead>
-            <tr>
-                <th>ID</th>
-                <th><?= htmlspecialchars(__('dash.task_state'), ENT_QUOTES, 'UTF-8') ?></th>
-                <th><?= htmlspecialchars(__('dash.task_label'), ENT_QUOTES, 'UTF-8') ?></th>
-                <th><?= htmlspecialchars(__('dash.task_command'), ENT_QUOTES, 'UTF-8') ?></th>
-                <th></th>
-            </tr>
-        </thead>
-        <tbody>
-            <?php foreach ($recentTasks as $task): ?>
+        <table class="snapshot-table">
+            <thead>
                 <tr>
-                    <td><?= (int) ($task['id'] ?? 0) ?></td>
-                    <td><?= htmlspecialchars(__('tasks.state_' . ($task['state'] ?? 'unknown')), ENT_QUOTES, 'UTF-8') ?></td>
-                    <td><?= htmlspecialchars($task['title'] ?? ($task['label'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
-                    <td><?= htmlspecialchars(\App\Helpers\Format::truncate($task['command'] ?? '', 60), ENT_QUOTES, 'UTF-8') ?></td>
-                    <td>
-                        <?php if (!empty($task['label'])): ?>
-                            <a href="/tasks/view?label=<?= htmlspecialchars(urlencode($task['label']), ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars(__('dash.task_open'), ENT_QUOTES, 'UTF-8') ?></a>
-                        <?php endif ?>
-                    </td>
+                    <th>ID</th>
+                    <th><?= htmlspecialchars(__('dash.task_state'), ENT_QUOTES, 'UTF-8') ?></th>
+                    <th><?= htmlspecialchars(__('dash.task_label'), ENT_QUOTES, 'UTF-8') ?></th>
+                    <th><?= htmlspecialchars(__('dash.task_command'), ENT_QUOTES, 'UTF-8') ?></th>
+                    <th></th>
                 </tr>
-            <?php endforeach ?>
-        </tbody>
+            </thead>
+            <tbody>
+                <?php foreach ($recentTasks as $task): ?>
+                    <tr>
+                        <td><?= (int) ($task['id'] ?? 0) ?></td>
+                        <td><?= htmlspecialchars(__('tasks.state_' . ($task['state'] ?? 'unknown')), ENT_QUOTES, 'UTF-8') ?></td>
+                        <td><?= htmlspecialchars($task['title'] ?? ($task['label'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                        <td><?= htmlspecialchars(\App\Helpers\Format::truncate($task['command'] ?? '', 60), ENT_QUOTES, 'UTF-8') ?></td>
+                        <td>
+                            <?php if (!empty($task['label'])): ?>
+                                <a href="/tasks/view?label=<?= htmlspecialchars(urlencode($task['label']), ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars(__('dash.task_open'), ENT_QUOTES, 'UTF-8') ?></a>
+                            <?php endif ?>
+                        </td>
+                    </tr>
+                <?php endforeach ?>
+            </tbody>
         </table>
-        </div>
-        <?php endif ?>
+    </div>
+<?php endif ?>
 
 <?php if (empty($activeTasks) && empty($recentTasks)): ?>
     <p><?= htmlspecialchars(__('dash.no_tasks'), ENT_QUOTES, 'UTF-8') ?></p>

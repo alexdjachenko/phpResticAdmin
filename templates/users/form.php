@@ -51,32 +51,32 @@ $repos = $data['repos'] ?? [];
 
     <h3><?= htmlspecialchars(__('users.repos_matrix'), ENT_QUOTES, 'UTF-8') ?></h3>
     <div class="table-scroll">
-    <table class="snapshot-table">
-        <thead>
-            <tr>
-                <th><?= htmlspecialchars(__('repo.category'), ENT_QUOTES, 'UTF-8') ?></th>
-                <th>use</th>
-                <th>use_read</th>
-                <th>use_write</th>
-                <th>edit</th>
-            </tr>
-        </thead>
-        <tbody>
-            <?php foreach (['public', 'private', 'session'] as $cat): ?>
-                <?php
-                $catData = $repos[$cat] ?? [];
-                ?>
+        <table class="snapshot-table">
+            <thead>
                 <tr>
-                    <td><?= htmlspecialchars(__('repo.category.' . $cat), ENT_QUOTES, 'UTF-8') ?></td>
-                    <td><input type="checkbox" name="repos[<?= $cat ?>][use]" value="1" <?= !empty($catData['use']) ? 'checked' : '' ?>></td>
-                    <td><input type="checkbox" name="repos[<?= $cat ?>][use_read]" value="1" <?= !empty($catData['use_read']) ? 'checked' : '' ?>></td>
-                    <td><input type="checkbox" name="repos[<?= $cat ?>][use_write]" value="1" <?= !empty($catData['use_write']) ? 'checked' : '' ?>></td>
-                    <td><input type="checkbox" name="repos[<?= $cat ?>][edit]" value="1" <?= !empty($catData['edit']) ? 'checked' : '' ?>></td>
+                    <th><?= htmlspecialchars(__('repo.category'), ENT_QUOTES, 'UTF-8') ?></th>
+                    <th>use</th>
+                    <th>use_read</th>
+                    <th>use_write</th>
+                    <th>edit</th>
                 </tr>
-            <?php endforeach ?>
-        </tbody>
+            </thead>
+            <tbody>
+                <?php foreach (['public', 'private', 'session'] as $cat): ?>
+                    <?php
+                    $catData = $repos[$cat] ?? [];
+                    ?>
+                    <tr>
+                        <td><?= htmlspecialchars(__('repo.category.' . $cat), ENT_QUOTES, 'UTF-8') ?></td>
+                        <td><input type="checkbox" name="repos[<?= $cat ?>][use]" value="1" <?= !empty($catData['use']) ? 'checked' : '' ?>></td>
+                        <td><input type="checkbox" name="repos[<?= $cat ?>][use_read]" value="1" <?= !empty($catData['use_read']) ? 'checked' : '' ?>></td>
+                        <td><input type="checkbox" name="repos[<?= $cat ?>][use_write]" value="1" <?= !empty($catData['use_write']) ? 'checked' : '' ?>></td>
+                        <td><input type="checkbox" name="repos[<?= $cat ?>][edit]" value="1" <?= !empty($catData['edit']) ? 'checked' : '' ?>></td>
+                    </tr>
+                <?php endforeach ?>
+            </tbody>
         </table>
-        </div>
+    </div>
 
     <div class="form-group">
         <button type="submit" class="btn-primary"><?= htmlspecialchars(__('form.submit'), ENT_QUOTES, 'UTF-8') ?></button>
