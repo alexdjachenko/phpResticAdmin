@@ -82,12 +82,28 @@ class TspCommandRunner
             usleep(100000);
         }
 
-        $result = $this->tsp->catRaw($id);
+        // Вывод читается из output-файла задачи (tsp -o), а не через блокирующий
+        // `tsp -c`. Код возврата — `tsp -w` (задача уже завершена).
+        $outputFile = $this->tsp->outputFile($id);
+        $stdout = $outputFile !== null ? $this->readFile($outputFile) : '';
+        $stderr = $outputFile !== null ? $this->readFile($outputFile . '.e') : '';
 
         return [
-            'exitCode' => $result['exitCode'],
-            'stdout' => $result['stdout'],
-            'stderr' => $result['stderr'],
+            'exitCode' => $this->tsp->wait($id),
+            'stdout' => $stdout,
+            'stderr' => $stderr,
         ];
+    }
+
+    /**
+     * Безопасное чтение файла (отсутствие/ошибка → пустая строка).
+     */
+    private function readFile(string $path): string
+    {
+        if (!file_exists($path)) {
+            return '';
+        }
+        $data = @file_get_contents($path);
+        return $data === false ? '' : $data;
     }
 }

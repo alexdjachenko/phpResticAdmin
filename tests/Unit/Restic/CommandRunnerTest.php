@@ -99,6 +99,27 @@ class CommandRunnerTest extends TestCase
         $this->assertNotEmpty($result['stderr'], 'stderr should not be empty when command fails');
     }
 
+    /**
+     * Регресс дедлока: вывод больше буфера пайпа (~64 КиБ). Если читать пайп
+     * только после выхода процесса, процесс заблокируется на записи, а мы
+     * будем вечно ждать его завершения. Проверяем, что многомегабайтный stdout
+     * читается и команда завершается.
+     */
+    public function testRunHandlesLargeOutputWithoutDeadlock(): void
+    {
+        // Arrange: 2 МиБ вывода — сильно больше буфера пайпа.
+        $bigFile = sys_get_temp_dir() . '/phpresticadmin_big_' . uniqid();
+        file_put_contents($bigFile, str_repeat('y', 2000000));
+
+        // Act
+        $result = $this->runner->run(['/bin/cat', $bigFile]);
+
+        // Assert
+        @unlink($bigFile);
+        $this->assertSame(0, $result['exitCode'], 'large-output command must complete: ' . $result['stderr']);
+        $this->assertGreaterThanOrEqual(1000000, strlen($result['stdout']), 'large stdout must be fully read');
+    }
+
     /** stdin передаётся в процесс (/bin/cat). */
     public function testRunWithStdin(): void
     {

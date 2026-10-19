@@ -65,14 +65,12 @@ class AccountController extends BaseController
         if ($currentPassword === '' || $newPassword === '' || $newPassword !== $confirmPassword) {
             App::session()->flash('error', __('account.password_mismatch'));
             App::response()->redirect('/account/password');
-            return;
         }
 
         $hash = App::auth()->resolvePasswordHash($user);
         if ($hash === null || !password_verify($currentPassword, $hash)) {
             App::session()->flash('error', __('account.current_password_invalid'));
             App::response()->redirect('/account/password');
-            return;
         }
 
         $this->users->updatePassword($user, password_hash($newPassword, PASSWORD_DEFAULT));
@@ -95,7 +93,6 @@ class AccountController extends BaseController
 
         if (!App::auth()->isYamlUser()) {
             App::response()->error(403, __('error.forbidden'));
-            return null;
         }
 
         return $user;

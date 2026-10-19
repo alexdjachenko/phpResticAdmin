@@ -13,12 +13,18 @@ namespace App\Process;
  *
  * Метка несёт всё, что нужно интерфейсу, чтобы не заводить вторую очередь:
  *
- *   <username>#<op><repoId><rand16>   # операция по репозиторию
- *   <username>#<op><rand16>           # глобальная операция (без repoId)
+ *   <username>#<op><repoId><rand16>            # операция по репозиторию
+ *   <username>#<op><repoId>@<objectId><rand16> # per-object (напр. snapId)
+ *   <username>#<op><rand16>                    # глобальная (без repoId)
  *
  * - op       — код операции из OPS (только строчные буквы);
  * - repoId   — id репозитория; длина не проверяется (в repositories.yaml id
  *              правят руками, hex-формат не гарантирован);
+ * - objectId — необязательный целевой объект операции (например, id снепшота
+ *              для `snapstats`). Отделяется `@` — разделителем вне
+ *              `[A-Za-z0-9._-]`, чтобы не конфликтовать с repoId и логином;
+ *              для операций без объекта компонент опускается (обратная
+ *              совместимость старых меток сохраняется);
  * - rand16   — 16 hex-символов, уникальность задачи.
  *
  * Разбор идёт по словарю OPS от длинных к коротким, rand16 — последние 16
@@ -77,22 +83,29 @@ final class TaskLabel
     /**
      * Строит метку задачи.
      */
-    public static function build(string $username, string $op, ?string $repoId = null): string
+    public static function build(string $username, string $op, ?string $repoId = null, ?string $objectId = null): string
     {
         if (!in_array($op, self::OPS, true)) {
             throw new \InvalidArgumentException('Unknown task op: ' . $op);
         }
 
         if (self::isGlobal($op)) {
-            if ($repoId !== null) {
-                throw new \InvalidArgumentException('Global task op must not have a repoId: ' . $op);
+            if ($repoId !== null || $objectId !== null) {
+                throw new \InvalidArgumentException('Global task op must not have a repoId/objectId: ' . $op);
             }
             $repoId = '';
+            $objectId = null;
         } elseif ($repoId === null || $repoId === '') {
             throw new \InvalidArgumentException('Repo task op requires a repoId: ' . $op);
         }
 
-        return $username . '#' . $op . (string) $repoId . bin2hex(random_bytes(8));
+        if ($objectId !== null && $objectId === '') {
+            $objectId = null;
+        }
+
+        $object = $objectId !== null ? '@' . $objectId : '';
+
+        return $username . '#' . $op . (string) $repoId . $object . bin2hex(random_bytes(8));
     }
 
     /**
@@ -110,7 +123,7 @@ final class TaskLabel
     /**
      * Разбирает метку.
      *
-     * @return array{username: string, op: string, repoId: ?string, rand: string}|null
+     * @return array{username: string, op: string, repoId: ?string, objectId: ?string, rand: string}|null
      */
     public static function parse(string $label): ?array
     {
@@ -141,14 +154,34 @@ final class TaskLabel
                 continue;
             }
 
-            $repoId = substr($middle, strlen($op));
+            $tail = substr($middle, strlen($op));
 
             if (self::isGlobal($op)) {
-                if ($repoId !== '') {
+                if ($tail !== '') {
                     return null;
                 }
-                $repoId = null;
-            } elseif ($repoId === '' || preg_match('/^[A-Za-z0-9._-]+$/', $repoId) !== 1) {
+
+                return [
+                    'username' => $username,
+                    'op' => $op,
+                    'repoId' => null,
+                    'objectId' => null,
+                    'rand' => $rand,
+                ];
+            }
+
+            $objectId = null;
+            $atPos = strpos($tail, '@');
+            if ($atPos !== false) {
+                $objectId = substr($tail, $atPos + 1);
+                $tail = substr($tail, 0, $atPos);
+            }
+
+            $repoId = $tail;
+            if ($repoId === '' || preg_match('/^[A-Za-z0-9._-]+$/', $repoId) !== 1) {
+                return null;
+            }
+            if ($objectId !== null && preg_match('/^[A-Za-z0-9._-]+$/', $objectId) !== 1) {
                 return null;
             }
 
@@ -156,6 +189,7 @@ final class TaskLabel
                 'username' => $username,
                 'op' => $op,
                 'repoId' => $repoId,
+                'objectId' => $objectId,
                 'rand' => $rand,
             ];
         }
@@ -179,7 +213,7 @@ final class TaskLabel
      */
     public static function extractFromTspLine(string $line): ?string
     {
-        if (preg_match_all('/[A-Za-z0-9._-]+#[A-Za-z0-9._-]+/', $line, $matches) === false) {
+        if (preg_match_all('/[A-Za-z0-9._-]+#[A-Za-z0-9._@-]+/', $line, $matches) === false) {
             return null;
         }
 

@@ -12,6 +12,7 @@ namespace App\Controllers\Repository;
 
 use App\Controllers\BaseController;
 use App\Core\App;
+use App\Storage\ContentTargets;
 
 class DetailController extends BaseController
 {
@@ -28,7 +29,6 @@ class DetailController extends BaseController
         $repoId = (string) $this->request()->get('repo', '');
         if ($repoId === '') {
             App::response()->redirect('/repositories');
-            return;
         }
 
         $repo = $this->requireRepo($user, $repoId, 'read');
@@ -54,8 +54,8 @@ class DetailController extends BaseController
 
         // «Последние 5» режем в PHP из кешированного списка: `restic snapshots
         // --latest 5` означал бы «5 на каждую пару host+path», а не «5 всего».
-        $allSnapshots = App::snapshotCache()->list($repo);
-        $latestSnapshots = $allSnapshots !== null ? self::lastSnapshots($allSnapshots, 5) : [];
+        $allSnapshots = App::contentCache()->value(ContentTargets::forSnapshots($repo));
+        $latestSnapshots = is_array($allSnapshots) ? self::lastSnapshots($allSnapshots, 5) : [];
 
         $this->render('repositories/detail.php', [
             'repo' => $repo,
@@ -67,8 +67,8 @@ class DetailController extends BaseController
             'canMove' => $canMove,
             'availableCategories' => $availableCategories,
             'latestSnapshots' => $latestSnapshots,
-            'hasMoreSnapshots' => $allSnapshots !== null && count($allSnapshots) > 5,
-            'needLoad' => $allSnapshots === null,
+            'hasMoreSnapshots' => is_array($allSnapshots) && count($allSnapshots) > 5,
+            'needLoad' => !is_array($allSnapshots),
             'csrfToken' => App::security()->csrfToken(),
             'isLoggedIn' => $auth->isLoggedIn(),
             'username' => $user,

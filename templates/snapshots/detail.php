@@ -2,6 +2,8 @@
 $summary = $snap['summary'] ?? [];
 $statsComputedAt = $statsEntry['computed_at'] ?? null;
 $stats = $statsEntry['stats'] ?? null;
+$statsState = $statsState ?? 'absent';
+$statsLabel = $statsLabel ?? null;
 $repoName = (string) ($repo['name'] ?? '');
 $pollInterval = (int) (\App\Core\App::configStorage()->loadSettings()['task_poll_interval'] ?? 3000);
 ?>
@@ -47,14 +49,43 @@ $pollInterval = (int) (\App\Core\App::configStorage()->loadSettings()['task_poll
             <p class="muted"><?= htmlspecialchars(__('snap.data_at', ['{date}' => \App\Helpers\Format::date(date('c', (int) $statsComputedAt))]), ENT_QUOTES, 'UTF-8') ?></p>
         <?php endif ?>
     </div>
-    <div id="stats-progress" class="snap-progress" hidden></div>
+    <div id="stats-progress" class="snap-progress" data-label="<?= htmlspecialchars((string) ($statsLabel ?? ''), ENT_QUOTES, 'UTF-8') ?>" hidden></div>
+    <?php if (in_array($statsState, ['waiting', 'ready_to_process'], true) && !empty($statsLabel)): ?>
+        <button type="button" class="stats-open-task" data-label="<?= htmlspecialchars($statsLabel, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars(__('tasks.full_output'), ENT_QUOTES, 'UTF-8') ?></button>
+        <script>
+        (function () {
+            var label = <?= json_encode((string) $statsLabel) ?>;
+            var poll = <?= (int) $pollInterval ?>;
+            document.querySelectorAll('.stats-open-task').forEach(function (b) {
+                b.addEventListener('click', function () {
+                    if (window.TaskUI && window.TaskUI.open) { window.TaskUI.open(label, b.dataset.label); }
+                });
+            });
+            function tick() {
+                if (document.visibilityState !== 'visible') { return; }
+                fetch('/tasks/status?label=' + encodeURIComponent(label), { headers: { 'Accept': 'application/json' } })
+                    .then(function (r) { return r.json(); })
+                    .then(function (data) {
+                        if (!data || !data.ok) { return; }
+                        if (data.state === 'finished') { window.location.reload(); }
+                    })
+                    .catch(function () {});
+            }
+            setInterval(tick, poll);
+        })();
+        </script>
+    <?php else: ?>
     <button type="button" id="btn-stats"
             data-repo-id="<?= htmlspecialchars($repo['id'] ?? '', ENT_QUOTES, 'UTF-8') ?>"
             data-snap-id="<?= htmlspecialchars($snap['id'] ?? '', ENT_QUOTES, 'UTF-8') ?>"
             data-csrf="<?= htmlspecialchars($csrfToken ?? '', ENT_QUOTES, 'UTF-8') ?>">
         <?= htmlspecialchars($stats !== null ? __('snap.stats_recalc') : __('snap.stats_load'), ENT_QUOTES, 'UTF-8') ?>
     </button>
-</div>
+    <?php if ($statsState === 'failed'): ?>
+        <p class="flash flash-error"><?= htmlspecialchars(__('snap.stats_failed'), ENT_QUOTES, 'UTF-8') ?></p>
+    <?php endif ?>
+    <?php endif ?>
+    </div>
 
 <div class="repo-actions">
     <a href="/browse?repo=<?= htmlspecialchars(urlencode($repo['id'] ?? ''), ENT_QUOTES, 'UTF-8') ?>&snapshot=<?= htmlspecialchars(urlencode($snap['id'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" class="btn-snapshots"><?= htmlspecialchars(__('snap.browse'), ENT_QUOTES, 'UTF-8') ?></a>

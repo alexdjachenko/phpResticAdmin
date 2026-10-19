@@ -36,7 +36,6 @@ class FormController extends BaseController
 
         if (empty($availableCategories)) {
             App::response()->error(403, __('error.forbidden'));
-            return;
         }
 
         $flash = App::session()->flash('error');
@@ -84,18 +83,15 @@ class FormController extends BaseController
         if ($name === '' || $locationValue === '') {
             App::session()->flash('error', __('repo.name_path_required'));
             App::response()->redirect('/repositories/add');
-            return;
         }
 
         if (!in_array($category, ['public', 'private', 'session'], true)) {
             App::session()->flash('error', __('repo.invalid_category'));
             App::response()->redirect('/repositories/add');
-            return;
         }
 
         if (!$auth->canEdit($category)) {
             App::response()->error(403, __('error.forbidden'));
-            return;
         }
 
         $settings = App::configStorage()->loadSettings();
@@ -105,7 +101,6 @@ class FormController extends BaseController
         if ($type === 'local' && !RepositoryPath::localRepoAllowed($location, $settings['repo_paths_roots'] ?? [])) {
             App::session()->flash('error', __('repo.path_outside_roots', ['{roots}' => implode(', ', $settings['repo_paths_roots'] ?? [])]));
             App::response()->redirect('/repositories/add');
-            return;
         }
 
         $backupPaths = array_values(array_filter(
@@ -117,7 +112,6 @@ class FormController extends BaseController
         if ($disallowedBackup !== null) {
             App::session()->flash('error', __('repo.backup_path_outside_roots', ['{roots}' => implode(', ', $settings['backup_paths_roots'] ?? [])]));
             App::response()->redirect('/repositories/add');
-            return;
         }
 
         $repository = [
@@ -148,14 +142,12 @@ class FormController extends BaseController
         if ($initRepo) {
             if (!$auth->canInit()) {
                 App::response()->error(403, __('error.forbidden'));
-                return;
             }
 
             $result = App::repoService()->init($repository);
             if (!$result['ok']) {
                 App::session()->flash('error', __('flash.init_failed', ['{error}' => $result['error']]));
                 App::response()->redirect('/repositories/add');
-                return;
             }
         }
 
@@ -177,20 +169,17 @@ class FormController extends BaseController
         $repoId = (string) $this->request()->get('repo', '');
         if ($repoId === '') {
             App::response()->redirect('/repositories');
-            return;
         }
 
         $repo = $this->findRepo($user, $repoId);
         if ($repo === null) {
             App::response()->error(404, __('flash.not_found'));
-            return;
         }
 
         $category = $repo['category'] ?? 'public';
 
         if (!App::auth()->canEdit($category)) {
             App::response()->error(403, __('error.forbidden'));
-            return;
         }
 
         $this->render('repositories/edit.php', [
@@ -235,20 +224,17 @@ class FormController extends BaseController
         if ($name === '' || $locationValue === '') {
             App::session()->flash('error', __('repo.name_path_required'));
             App::response()->redirect('/repositories/edit?repo=' . urlencode($repoId));
-            return;
         }
 
         $found = $this->findRepo($user, $repoId);
         if ($found === null) {
             App::response()->error(404, __('flash.not_found'));
-            return;
         }
 
         $category = $found['category'] ?? 'public';
 
         if (!$auth->canEdit($category)) {
             App::response()->error(403, __('error.forbidden'));
-            return;
         }
 
         $settings = App::configStorage()->loadSettings();
@@ -258,7 +244,6 @@ class FormController extends BaseController
         if ($type === 'local' && !RepositoryPath::localRepoAllowed($location, $settings['repo_paths_roots'] ?? [])) {
             App::session()->flash('error', __('repo.path_outside_roots', ['{roots}' => implode(', ', $settings['repo_paths_roots'] ?? [])]));
             App::response()->redirect('/repositories/edit?repo=' . urlencode($repoId));
-            return;
         }
 
         $backupPaths = array_values(array_filter(
@@ -270,7 +255,6 @@ class FormController extends BaseController
         if ($disallowedBackup !== null) {
             App::session()->flash('error', __('repo.backup_path_outside_roots', ['{roots}' => implode(', ', $settings['backup_paths_roots'] ?? [])]));
             App::response()->redirect('/repositories/edit?repo=' . urlencode($repoId));
-            return;
         }
 
         $newData = [

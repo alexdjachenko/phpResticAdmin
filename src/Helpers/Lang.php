@@ -127,9 +127,15 @@ class Lang
             return [];
         }
 
-        /** @var array<string, string> $data */
         $data = require $path;
-        self::$loaded[$lang] = is_array($data) ? $data : [];
+
+        if (!is_array($data)) {
+            self::$loaded[$lang] = [];
+            return [];
+        }
+
+        /** @var array<string, string> $data */
+        self::$loaded[$lang] = $data;
 
         return self::$loaded[$lang];
     }

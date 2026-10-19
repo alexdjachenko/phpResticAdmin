@@ -1,3 +1,8 @@
+<?php
+/**
+ * @var mixed $categories
+ */
+?>
 <h2><?= htmlspecialchars(__('repo.add_title'), ENT_QUOTES, 'UTF-8') ?></h2>
 
 <?php if (!empty($error)): ?>

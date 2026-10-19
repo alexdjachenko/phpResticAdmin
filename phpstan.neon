@@ -1,5 +1,9 @@
 parameters:
-    level: 1
+    level: 5
     paths:
         - src/
         - htdocs/
+        - bin/
+        - templates/
+        - tests/
+

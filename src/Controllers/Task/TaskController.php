@@ -58,7 +58,6 @@ class TaskController extends BaseController
 
         if ($label === '' || !App::tasks()->assertAccess($user, $label, $privileged)) {
             App::response()->error(404, 'Task not found');
-            return;
         }
 
         $described = App::tasks()->describe($label);
@@ -87,7 +86,6 @@ class TaskController extends BaseController
 
         if ($label === '' || !App::tasks()->isValidLabel($label)) {
             App::response()->error(400, 'Invalid task label');
-            return;
         }
 
         $prefix = null;
@@ -127,6 +125,8 @@ class TaskController extends BaseController
             return;
         }
 
+        // Статус постобработки обещанного контента (не блокирует: только чтение).
+        $status['proc'] = $this->postProcessState($label);
         $status['ok'] = true;
         $this->jsonOk($status);
     }
@@ -223,12 +223,19 @@ class TaskController extends BaseController
         }
 
         $tasks = App::tasks();
+        $resolver = App::contentResolver();
         $rows = [];
 
         foreach ($jobs as $job) {
             $label = (string) ($job['label'] ?? '');
             $parsed = $label !== '' ? $tasks->parseLabel($label) : null;
             $described = $label !== '' ? $tasks->describe($label) : null;
+
+            // «Момент, когда мы узнали»: по завершённой задаче довести
+            // постобработку обещанного контента (если обещания нет — no-op).
+            if ($label !== '' && ($job['state'] ?? '') === 'finished') {
+                $resolver->reconcileByLabel($label);
+            }
 
             $repoId = $described['repoId'] ?? null;
             $state = (string) ($job['state'] ?? 'unknown');
@@ -249,5 +256,34 @@ class TaskController extends BaseController
         }
 
         return $rows;
+    }
+
+    /**
+     * Статус постобработки обещанного контента по метке задачи.
+     *
+     * Возвращает одно из: none (не требуется), waiting (ожидаем завершения),
+     * processing (обработка), done (завершена), error (ошибка); null — метка не
+     * связана с целевым объектом кеша (например, backup/check).
+     */
+    private function postProcessState(string $label): ?string
+    {
+        // targetForLabel учитывает категорию репозитория (область кеша), иначе
+        // для приватного/сессионного репозитория чтение шло бы из System-области
+        // и состояние всегда было бы absent ("постобработка не требуется").
+        $resolver = App::contentResolver();
+        $target = $resolver->targetForLabel($label);
+        if ($target === null) {
+            return null;
+        }
+
+        $read = $resolver->read($target);
+
+        return match ($read['state']) {
+            'ready' => 'done',
+            'waiting' => 'waiting',
+            'ready_to_process' => 'processing',
+            'failed' => 'error',
+            default => 'none',
+        };
     }
 }
