@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.9.0](https://github.com/alexdjachenko/phpResticAdmin/compare/v0.8.2...v0.9.0) (2026-10-19)
+
+
+### Features
+
+* **snapshots:** card list with filters and overflow guards ([f61b529](https://github.com/alexdjachenko/phpResticAdmin/commit/f61b5294327c17f231452c6f556786cc91ea4d47))
+* **snapshots:** card list with filters and overflow guards ([f6f482d](https://github.com/alexdjachenko/phpResticAdmin/commit/f6f482d25cb71e941ff597dfd1477d9e3a13ed8f))
+
+
+### Bug Fixes
+
+* **css:** repair broken page header selector after snap-card fix ([8acdb4b](https://github.com/alexdjachenko/phpResticAdmin/commit/8acdb4b130aff1be2dc55b1760e6e920652b55aa))
+* **css:** stop page header styles from painting snapshot cards ([8295e15](https://github.com/alexdjachenko/phpResticAdmin/commit/8295e153f469b0ca5e2a91c06fffcd6ec81cba91))
+
 ## [0.8.2](https://github.com/alexdjachenko/phpResticAdmin/compare/v0.8.1...v0.8.2) (2026-10-19)
 
 
