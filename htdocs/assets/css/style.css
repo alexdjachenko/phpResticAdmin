@@ -21,7 +21,19 @@ body {
     background: #f5f5f5;
 }
 
-header {
+/*
+ * Стили шапки страницы ограничены прямым потомком body: селектор по тегу
+ * header красил ЛЮБУЮ вложенную шапку, в том числе .snap-card-head в карточках
+ * снепшотов. Карточка получала фон #2c3e50 и color: #fff, из-за чего дата и
+ * подписи Хост/Обработано/Добавлено (#495057) становились тёмным на тёмном.
+ */
+body > /*
+ * Стили шапки страницы ограничены прямым потомком body: селектор по тегу
+ * header красил ЛЮБУЮ вложенную шапку, в том числе .snap-card-head в карточках
+ * снепшотов. Карточка получала фон #2c3e50 и color: #fff, из-за чего дата и
+ * подписи Хост/Обработано/Добавлено (#495057) становились тёмным на тёмном.
+ */
+body > header {
     background: #2c3e50;
     color: #fff;
     padding: 12px 20px;
@@ -38,12 +50,12 @@ header {
     gap: 16px;
 }
 
-header h1 {
+body > header h1 {
     font-size: 18px;
     font-weight: 600;
 }
 
-header h1 a {
+body > header h1 a {
     color: #fff;
     text-decoration: none;
 }
@@ -58,19 +70,19 @@ header h1 a {
     text-decoration: underline;
 }
 
-header nav {
+body > header nav {
     display: flex;
     align-items: center;
     gap: 10px;
 }
 
-header nav a {
+body > header nav a {
     color: #ecf0f1;
     text-decoration: none;
     margin-left: 0;
 }
 
-header nav a:hover {
+body > header nav a:hover {
     text-decoration: underline;
 }
 
@@ -778,9 +790,13 @@ button:hover,
     flex-wrap: wrap;
     align-items: baseline;
     gap: 6px 14px;
+    /* шапка карточки не должна наследовать оформление шапки страницы */
+    background: none;
+    color: inherit;
 }
 
-.snap-card-id { text-decoration: none; }
+.snap-card-id { color: #1a6fae; text-decoration: none; }
+.snap-card-id:hover { text-decoration: underline; }
 .snap-card-id code { font-size: 14px; font-weight: 600; }
 
 .snap-card-date {
