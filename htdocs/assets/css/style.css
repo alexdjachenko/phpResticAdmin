@@ -542,6 +542,39 @@ button:hover,
     background: #2980b9;
 }
 
+/* Кнопка-индикатор фоновой задачи: «идёт», клик открывает модалку вывода. */
+.btn-snapshots.btn-snap-busy {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: #7f8c8d;
+}
+
+.btn-snapshots.btn-snap-busy:hover {
+    background: #6c7a7b;
+}
+
+.btn-snapshots.btn-snap-busy::before {
+    content: "";
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #fff;
+    animation: snap-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes snap-pulse {
+    0%, 100% { opacity: 0.35; }
+    50% { opacity: 1; }
+}
+
+.snap-progress {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 12px 0;
+}
+
 .repo-snapshots {
     margin-top: 20px;
 }
@@ -603,6 +636,254 @@ button:hover,
     font-weight: normal;
 }
 
+/* ===== Snapshots: панель фильтров ===== */
+.snap-caption {
+    color: #6c757d;
+    font-size: 13px;
+    margin-bottom: 8px;
+}
+
+/* путь репозитория под заголовком не должен распирать main */
+.snap-repo-path code {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.snap-filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 8px 10px;
+    margin: 8px 0 12px;
+    padding: 10px 12px;
+    background: #f8f9fa;
+    border: 1px solid #e3e6ea;
+    border-radius: 6px;
+}
+
+.snap-filter {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.snap-filter > span {
+    font-size: 11px;
+    color: #6c757d;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+}
+
+.snap-filter input,
+.snap-filter select {
+    padding: 5px 8px;
+    font-size: 13px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background: #fff;
+    max-width: 100%;
+}
+
+/* поиск забирает свободное место, но сжимается первым */
+.snap-filter-search {
+    flex: 1 1 200px;
+    min-width: 140px;
+}
+.snap-filter-search input { width: 100%; }
+
+.snap-filter-tag  { flex: 0 1 150px; }
+.snap-filter-host { flex: 0 1 150px; }
+.snap-filter-path { flex: 0 1 180px; }
+.snap-filter-date { flex: 0 0 auto; }
+.snap-filter-sort { flex: 0 1 160px; }
+
+.snap-filter select { width: 100%; }
+
+.snap-filter-reset {
+    flex: 0 0 auto;
+    padding: 5px 12px;
+    font-size: 13px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background: #fff;
+    color: #333;
+    cursor: pointer;
+}
+.snap-filter-reset:hover { background: #eef1f4; }
+
+.snap-filter-counter {
+    flex: 0 0 auto;
+    margin-left: auto;
+    font-size: 12px;
+    color: #6c757d;
+    white-space: nowrap;
+}
+
+.snap-empty-filter {
+    padding: 12px 0;
+    color: #6c757d;
+    font-style: italic;
+}
+
+/* ===== Snapshots: список карточек (одна колонка, во всю ширину) ===== */
+.snap-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.snap-card {
+    display: flex;
+    flex-wrap: wrap;          /* кнопки переезжают под контент, когда не влезают */
+    align-items: stretch;
+    gap: 8px 16px;
+    min-width: 0;             /* иначе длинные пути распирают карточку */
+    padding: 12px 16px;
+    border: 1px solid #e3e6ea;
+    border-left: 3px solid #d6dde4;   /* акцентная полоса помогает вертикальному сканированию */
+    border-radius: 6px;
+    background: #fff;
+}
+/* ОБЯЗАТЕЛЬНО: авторский display:flex перебивает UA-правило [hidden] */
+.snap-card[hidden] { display: none; }
+.snap-card:hover { border-color: #c3ccd5; border-left-color: #3498db; }
+
+.snap-card-main {
+    flex: 1 1 420px;          /* гибкий контент; ниже 420px кнопки уходят на свою строку */
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.snap-card-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 6px 14px;
+}
+
+.snap-card-id { text-decoration: none; }
+.snap-card-id code { font-size: 14px; font-weight: 600; }
+
+.snap-card-date {
+    color: #6c757d;
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+/* Хост / Обработано / Добавлено — уезжают вправо в той же строке */
+.snap-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 16px;
+    margin: 0 0 0 auto;
+    font-size: 12px;
+}
+
+.snap-meta > div {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+    min-width: 0;
+}
+
+.snap-meta dt {
+    color: #6c757d;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+}
+
+.snap-meta dd {
+    margin: 0;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+/* Пути — «чипами» в строку с переносом */
+.snap-paths {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 6px;
+}
+
+.snap-paths li { min-width: 0; max-width: 100%; }
+
+.snap-paths code {
+    display: block;
+    font-size: 12px;
+    background: #f1f1f1;
+    padding: 2px 6px;
+    border-radius: 3px;
+    overflow-wrap: anywhere;   /* переносим длинный путь, а не обрезаем */
+    word-break: break-word;
+}
+
+.snap-paths-more > summary {
+    margin: 4px 0 4px;
+    font-size: 12px;
+    color: #3498db;
+    cursor: pointer;
+}
+
+/* Теги видны всегда: бейджи с переносом + постоянная строка добавления */
+.snap-card-tags {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+}
+
+.snap-card-tags .tag-badge {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+}
+
+.snap-card-tags .tag-remove-btn { flex: 0 0 auto; }
+
+/* строка добавления тега сжимается вместе с карточкой (была причина распирания) */
+.snap-card-tags .tag-add-row {
+    flex: 1 1 140px;
+    min-width: 0;
+    margin-top: 0;
+}
+
+.snap-card-tags .tag-input {
+    flex: 1 1 60px;
+    min-width: 0;
+    width: auto;
+}
+
+.snap-card-tags .tag-add-btn { flex: 0 0 auto; }
+
+.snap-card-actions {
+    flex: 0 0 auto;
+    align-self: flex-end;     /* правый нижний угол карточки */
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+/* Компактный вариант — для «последних снепшотов» на дашборде */
+.snap-card--compact { padding: 8px 12px; gap: 4px 12px; }
+.snap-card--compact .snap-card-main { flex: 1 1 320px; gap: 4px; }
+.snap-card--compact .snap-card-id code { font-size: 13px; }
+.snap-card--compact .snap-paths code { font-size: 11px; background: #f6f7f8; }
+.snap-card--compact .snap-card-actions { align-self: center; }
+
+/* Страховка от переполнения для обычных таблиц */
+.table-scroll {
+    overflow-x: auto;
+    max-width: 100%;
+}
+
 /* Tag badges */
 .tag-badge {
     display: inline-flex;
@@ -657,10 +938,6 @@ button:hover,
 
 .tag-add-btn:hover {
     background: #219a52;
-}
-
-.tag-cell {
-    line-height: 1.8;
 }
 
 /* Browse */

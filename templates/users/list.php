@@ -10,6 +10,7 @@
 <p><a href="/users/add" class="btn-snapshots"><?= htmlspecialchars(__('users.add'), ENT_QUOTES, 'UTF-8') ?></a></p>
 
 <h3><?= htmlspecialchars(__('users.php_users'), ENT_QUOTES, 'UTF-8') ?></h3>
+<div class="table-scroll">
 <table class="snapshot-table">
     <thead>
         <tr>
@@ -30,8 +31,10 @@
         <?php endforeach ?>
     </tbody>
 </table>
+</div>
 
 <h3><?= htmlspecialchars(__('users.yaml_users'), ENT_QUOTES, 'UTF-8') ?></h3>
+<div class="table-scroll">
 <table class="snapshot-table">
     <thead>
         <tr>
@@ -62,3 +65,4 @@
         <?php endforeach ?>
     </tbody>
 </table>
+</div>

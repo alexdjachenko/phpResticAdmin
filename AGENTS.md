@@ -149,14 +149,14 @@ src/
     templates/
   layout.php             # Шапка, dropdown репозиториев, навигация, flash, <main>
   login.php              # Форма входа
-  dashboard.php          # Дашборд: последние снепшоты выбранного репозитория
+  dashboard.php          # Дашборд: статистика, задачи и последние снепшоты (карточки)
   repositories/
     list.php             # Лёгкая таблица-список (имя-ссылка, тип, категория)
     add.php              # Форма добавления: имя, тип, путь, пароль, backup_paths, S3, категория
     detail.php           # Страница деталей: инфо + Check/Backup/Snapshots/Edit/Move/Delete
     edit.php             # Форма редактирования с backup_paths и S3
   snapshots/
-    list.php             # Таблица снепшотов + кнопка «Обновить» + блок «загрузка» + AJAX-тегирование
+    list.php             # Карточный список снепшотов + фильтры/сортировка + AJAX-тегирование
     detail.php           # Детали снепшота + Stats/Copy (открывают /tasks/stream)
   browse/
     tree.php             # Дерево файлов/папок + хлебные крошки + Download

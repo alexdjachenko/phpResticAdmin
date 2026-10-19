@@ -50,6 +50,7 @@ $repos = $data['repos'] ?? [];
     </fieldset>
 
     <h3><?= htmlspecialchars(__('users.repos_matrix'), ENT_QUOTES, 'UTF-8') ?></h3>
+    <div class="table-scroll">
     <table class="snapshot-table">
         <thead>
             <tr>
@@ -74,7 +75,8 @@ $repos = $data['repos'] ?? [];
                 </tr>
             <?php endforeach ?>
         </tbody>
-    </table>
+        </table>
+        </div>
 
     <div class="form-group">
         <button type="submit" class="btn-primary"><?= htmlspecialchars(__('form.submit'), ENT_QUOTES, 'UTF-8') ?></button>

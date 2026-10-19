@@ -51,29 +51,35 @@ $pollInterval = (int) (\App\Core\App::configStorage()->loadSettings()['task_poll
     </div>
     <div id="stats-progress" class="snap-progress" data-label="<?= htmlspecialchars((string) ($statsLabel ?? ''), ENT_QUOTES, 'UTF-8') ?>" hidden></div>
     <?php if (in_array($statsState, ['waiting', 'ready_to_process'], true) && !empty($statsLabel)): ?>
-        <button type="button" class="stats-open-task" data-label="<?= htmlspecialchars($statsLabel, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars(__('tasks.full_output'), ENT_QUOTES, 'UTF-8') ?></button>
+        <?php
+        // Обещание контента: задача идёт или вывод готов, но не разобран.
+        // Одна кнопка-индикатор открывает единую модалку (data-task-open).
+        $statsStateText = $statsState === 'ready_to_process' ? __('tasks.proc_processing') : __('tasks.proc_waiting');
+        $statsTitle = __('tasks.op_snapstats') . ' — ' . $repoName;
+        ?>
+        <button type="button" class="stats-open-task btn-snapshots btn-snap-busy"
+                data-task-open
+                data-label="<?= htmlspecialchars((string) $statsLabel, ENT_QUOTES, 'UTF-8') ?>"
+                data-title="<?= htmlspecialchars($statsTitle, ENT_QUOTES, 'UTF-8') ?>">
+            <span class="snap-progress-state"><?= htmlspecialchars($statsStateText, ENT_QUOTES, 'UTF-8') ?></span>
+        </button>
+        <?php if ($statsState === 'ready_to_process'): ?>
         <script>
+        /*
+         * Вывод готов, не разобран: /snapshots/stats/result идемпотентно
+         * выполняет reconcile(); при успехе перезагружаем страницу — она
+         * прочитает уже записанную статистику. Задач здесь не ставится.
+         */
         (function () {
+            var snapId = <?= json_encode((string) ($snap['id'] ?? '')) ?>;
             var label = <?= json_encode((string) $statsLabel) ?>;
-            var poll = <?= (int) $pollInterval ?>;
-            document.querySelectorAll('.stats-open-task').forEach(function (b) {
-                b.addEventListener('click', function () {
-                    if (window.TaskUI && window.TaskUI.open) { window.TaskUI.open(label, b.dataset.label); }
-                });
-            });
-            function tick() {
-                if (document.visibilityState !== 'visible') { return; }
-                fetch('/tasks/status?label=' + encodeURIComponent(label), { headers: { 'Accept': 'application/json' } })
-                    .then(function (r) { return r.json(); })
-                    .then(function (data) {
-                        if (!data || !data.ok) { return; }
-                        if (data.state === 'finished') { window.location.reload(); }
-                    })
-                    .catch(function () {});
-            }
-            setInterval(tick, poll);
+            fetch('/snapshots/stats/result?snap_id=' + encodeURIComponent(snapId) + '&label=' + encodeURIComponent(label), { headers: { 'Accept': 'application/json' } })
+                .then(function (r) { return r.json(); })
+                .then(function (data) { if (data && data.ok) { window.location.reload(); } })
+                .catch(function () {});
         })();
         </script>
+        <?php endif ?>
     <?php else: ?>
     <button type="button" id="btn-stats"
             data-repo-id="<?= htmlspecialchars($repo['id'] ?? '', ENT_QUOTES, 'UTF-8') ?>"

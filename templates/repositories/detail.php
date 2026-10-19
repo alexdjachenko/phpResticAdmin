@@ -123,6 +123,7 @@ $locationValue = $repo[$locationField] ?? $repo['path'] ?? '';
 <?php elseif (!empty($latestSnapshots)): ?>
 <div class="repo-snapshots">
     <h3><?= htmlspecialchars(__('repo.latest_snaps'), ENT_QUOTES, 'UTF-8') ?></h3>
+    <div class="table-scroll">
     <table class="snapshot-table">
         <thead>
             <tr>
@@ -147,8 +148,9 @@ $locationValue = $repo[$locationField] ?? $repo['path'] ?? '';
                 </tr>
             <?php endforeach ?>
         </tbody>
-    </table>
-    <?php if ($hasMoreSnapshots): ?>
+        </table>
+        </div>
+        <?php if ($hasMoreSnapshots): ?>
         <p><a href="/snapshots?repo=<?= htmlspecialchars(urlencode($repo['id'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars(__('repo.view_all_snaps'), ENT_QUOTES, 'UTF-8') ?></a></p>
     <?php endif ?>
 </div>
