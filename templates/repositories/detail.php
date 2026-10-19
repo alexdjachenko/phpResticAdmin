@@ -61,7 +61,7 @@ $locationValue = $repo[$locationField] ?? $repo['path'] ?? '';
             <td><code><?= htmlspecialchars($repo['env']['AWS_ENDPOINT'], ENT_QUOTES, 'UTF-8') ?></code></td>
         </tr>
         <?php endif ?>
-        </table>
+    </table>
 
     <div class="repo-actions">
         <?php if ($isLoggedIn): ?>
@@ -123,31 +123,42 @@ $locationValue = $repo[$locationField] ?? $repo['path'] ?? '';
 <?php elseif (!empty($latestSnapshots)): ?>
 <div class="repo-snapshots">
     <h3><?= htmlspecialchars(__('repo.latest_snaps'), ENT_QUOTES, 'UTF-8') ?></h3>
-    <table class="snapshot-table">
-        <thead>
-            <tr>
-                <th><?= htmlspecialchars(__('snap.id'), ENT_QUOTES, 'UTF-8') ?></th>
-                <th><?= htmlspecialchars(__('snap.date'), ENT_QUOTES, 'UTF-8') ?></th>
-                <th><?= htmlspecialchars(__('snap.paths'), ENT_QUOTES, 'UTF-8') ?></th>
-                <th><?= htmlspecialchars(__('snap.size'), ENT_QUOTES, 'UTF-8') ?></th>
-                <th></th>
-            </tr>
-        </thead>
-        <tbody>
-            <?php foreach ($latestSnapshots as $snap): ?>
-                <?php $processed = $snap['summary']['total_bytes_processed'] ?? null; ?>
-                <tr>
-                    <td><a href="/snapshots/detail?repo=<?= htmlspecialchars(urlencode($repo['id'] ?? ''), ENT_QUOTES, 'UTF-8') ?>&snapshot=<?= htmlspecialchars(urlencode($snap['id'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"><code><?= htmlspecialchars($snap['short_id'] ?? '', ENT_QUOTES, 'UTF-8') ?></code></a></td>
-                    <td><?= htmlspecialchars(\App\Helpers\Format::date($snap['time'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
-                    <td><?= htmlspecialchars(implode(', ', array_map(function(string $p): string { return basename($p); }, $snap['paths'] ?? [])), ENT_QUOTES, 'UTF-8') ?></td>
-                    <td><?= $processed !== null ? htmlspecialchars(\App\Helpers\Format::bytes((int) $processed), ENT_QUOTES, 'UTF-8') : '—' ?></td>
-                    <td>
-                        <a href="/browse?repo=<?= htmlspecialchars(urlencode($repo['id'] ?? ''), ENT_QUOTES, 'UTF-8') ?>&snapshot=<?= htmlspecialchars(urlencode($snap['id'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars(__('snap.browse'), ENT_QUOTES, 'UTF-8') ?></a>
-                    </td>
-                </tr>
-            <?php endforeach ?>
-        </tbody>
-    </table>
+    <div class="snap-list">
+    <?php foreach ($latestSnapshots as $snap): ?>
+        <?php
+        $shortId = (string) ($snap['short_id'] ?? '');
+        $snapId = (string) ($snap['id'] ?? '');
+        $timeIso = (string) ($snap['time'] ?? '');
+        $paths = array_map('strval', is_array($snap['paths'] ?? null) ? $snap['paths'] : []);
+        $processed = $snap['summary']['total_bytes_processed'] ?? null;
+        ?>
+        <article class="snap-card snap-card--compact">
+            <div class="snap-card-main">
+                <header class="snap-card-head">
+                    <a class="snap-card-id" href="/snapshots/detail?repo=<?= htmlspecialchars(urlencode($repo['id'] ?? ''), ENT_QUOTES, 'UTF-8') ?>&snapshot=<?= htmlspecialchars(urlencode($snapId), ENT_QUOTES, 'UTF-8') ?>">
+                        <code><?= htmlspecialchars($shortId, ENT_QUOTES, 'UTF-8') ?></code>
+                    </a>
+                    <time class="snap-card-date" datetime="<?= htmlspecialchars($timeIso, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars(\App\Helpers\Format::date($timeIso), ENT_QUOTES, 'UTF-8') ?></time>
+                    <?php if ($processed !== null): ?>
+                        <dl class="snap-meta">
+                            <div><dt><?= htmlspecialchars(__('snap.size'), ENT_QUOTES, 'UTF-8') ?></dt><dd><?= htmlspecialchars(\App\Helpers\Format::bytes((int) $processed), ENT_QUOTES, 'UTF-8') ?></dd></div>
+                        </dl>
+                    <?php endif ?>
+                </header>
+                <?php if (!empty($paths)): ?>
+                <ul class="snap-paths">
+                    <?php foreach ($paths as $p): ?>
+                        <li><code><?= htmlspecialchars($p, ENT_QUOTES, 'UTF-8') ?></code></li>
+                    <?php endforeach ?>
+                </ul>
+                <?php endif ?>
+            </div>
+            <footer class="snap-card-actions">
+                <a href="/browse?repo=<?= htmlspecialchars(urlencode($repo['id'] ?? ''), ENT_QUOTES, 'UTF-8') ?>&snapshot=<?= htmlspecialchars(urlencode($snapId), ENT_QUOTES, 'UTF-8') ?>" class="btn-browse"><?= htmlspecialchars(__('snap.browse'), ENT_QUOTES, 'UTF-8') ?></a>
+            </footer>
+        </article>
+    <?php endforeach ?>
+    </div>
     <?php if ($hasMoreSnapshots): ?>
         <p><a href="/snapshots?repo=<?= htmlspecialchars(urlencode($repo['id'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars(__('repo.view_all_snaps'), ENT_QUOTES, 'UTF-8') ?></a></p>
     <?php endif ?>

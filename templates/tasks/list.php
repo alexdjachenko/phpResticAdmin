@@ -3,6 +3,7 @@
 <?php if (empty($tasks)): ?>
     <p><?= htmlspecialchars(__('tasks.none'), ENT_QUOTES, 'UTF-8') ?></p>
 <?php else: ?>
+    <div class="table-scroll">
     <table class="snapshot-table">
         <thead>
             <tr>
@@ -34,4 +35,5 @@
             <?php endforeach ?>
         </tbody>
     </table>
+    </div>
 <?php endif ?>

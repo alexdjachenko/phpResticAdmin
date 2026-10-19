@@ -313,6 +313,16 @@
             el.addEventListener('click', close);
         });
 
+        // Единая точка входа в модалку для индикаторов состояния
+        // (ожидание/постобработка): страница рендерит кнопку с data-task-open,
+        // а не собственный поллинг и принудительный reload.
+        document.querySelectorAll('[data-task-open]').forEach(function (el) {
+            el.addEventListener('click', function () {
+                var label = el.dataset.label;
+                if (label) { open(label, el.dataset.title || label); }
+            });
+        });
+
         if (cancelBtn) {
             cancelBtn.addEventListener('click', function () {
                 if (!currentLabel || !window.confirm(t.confirmCancel)) { return; }
